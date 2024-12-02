@@ -1,15 +1,18 @@
+import json
 import logging
 import os
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Generator, Optional
 from unittest.mock import PropertyMock, patch
 
 import pendulum
 import pytest
-from xprocess import ProcessStarter
+import requests
+from xprocess import ProcessStarter, XProcess
 
 from akkudoktoreos.config.config import ConfigEOS, get_config
 from akkudoktoreos.core.logging import get_logger
@@ -48,6 +51,12 @@ def pytest_addoption(parser):
         default=False,
         help="Verify that user config file is non-existent (will also fail if user config file exists before test run).",
     )
+    parser.addoption(
+        "--system-test",
+        action="store_true",
+        default=False,
+        help="System test mode. Tests may access real resources, like prediction providers!",
+    )
 
 
 @pytest.fixture
@@ -62,6 +71,18 @@ def config_mixin(config_eos):
     ) as config_mixin_patch:
         config_mixin_patch.return_value = config_eos
         yield config_mixin_patch
+
+
+@pytest.fixture
+def is_system_test(request):
+    yield bool(request.config.getoption("--system-test"))
+
+
+@pytest.fixture
+def prediction_eos():
+    from akkudoktoreos.prediction.prediction import get_prediction
+
+    return get_prediction()
 
 
 @pytest.fixture
@@ -87,13 +108,33 @@ def devices_mixin(devices_eos):
 # Before activating, make sure that no user config file exists (e.g. ~/.config/net.akkudoktoreos.eos/EOS.config.json)
 @pytest.fixture(autouse=True)
 def cfg_non_existent(request):
-    yield
-    if bool(request.config.getoption("--check-config-side-effect")):
-        from platformdirs import user_config_dir
+    if not bool(request.config.getoption("--check-config-side-effect")):
+        yield
+        return
 
-        user_dir = user_config_dir(ConfigEOS.APP_NAME)
-        assert not Path(user_dir).joinpath(ConfigEOS.CONFIG_FILE_NAME).exists()
-        assert not Path.cwd().joinpath(ConfigEOS.CONFIG_FILE_NAME).exists()
+    # Before test
+    from platformdirs import user_config_dir
+
+    user_dir = user_config_dir(ConfigEOS.APP_NAME)
+    user_config_file = Path(user_dir).joinpath(ConfigEOS.CONFIG_FILE_NAME)
+    cwd_config_file = Path.cwd().joinpath(ConfigEOS.CONFIG_FILE_NAME)
+    assert (
+        not user_config_file.exists()
+    ), f"Config file {user_config_file} exists, please delete before test!"
+    assert (
+        not cwd_config_file.exists()
+    ), f"Config file {cwd_config_file} exists, please delete before test!"
+
+    # Yield to test
+    yield
+
+    # After test
+    assert (
+        not user_config_file.exists()
+    ), f"Config file {user_config_file} created, please check test!"
+    assert (
+        not cwd_config_file.exists()
+    ), f"Config file {cwd_config_file} created, please check test!"
 
 
 @pytest.fixture(autouse=True)
@@ -149,7 +190,7 @@ def config_eos(
     assert config_file.exists()
     assert not config_file_cwd.exists()
     assert config_default_dirs[-1] / "data" == config_eos.general.data_folder_path
-    assert config_default_dirs[-1] / "data/cache" == config_eos.general.data_cache_path
+    assert config_default_dirs[-1] / "data/cache" == config_eos.cache.path()
     assert config_default_dirs[-1] / "data/output" == config_eos.general.data_output_path
     return config_eos
 
@@ -178,23 +219,115 @@ def config_default_dirs():
         )
 
 
+@contextmanager
+def server_base(xprocess: XProcess) -> Generator[dict[str, str], None, None]:
+    """Fixture to start the server with temporary EOS_DIR and default config.
+
+    Args:
+        xprocess (XProcess): The pytest-xprocess fixture to manage the server process.
+
+    Yields:
+        dict[str, str]: A dictionary containing:
+            - "server" (str): URL of the server.
+            - "eos_dir" (str): Path to the temporary EOS_DIR.
+    """
+    server = "http://127.0.0.1:8503"
+    eos_tmp_dir = tempfile.TemporaryDirectory()
+    eos_dir = str(eos_tmp_dir.name)
+
+    class Starter(ProcessStarter):
+        # assure server to be installed
+        try:
+            project_dir = Path(__file__).parent.parent
+            subprocess.run(
+                [sys.executable, "-c", "import", "akkudoktoreos.server.eos"],
+                check=True,
+                env=os.environ,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=project_dir,
+            )
+        except subprocess.CalledProcessError:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-e", str(project_dir)],
+                env=os.environ,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=project_dir,
+            )
+
+        # Set environment for server run
+        env = os.environ.copy()
+        env["EOS_DIR"] = eos_dir
+        env["EOS_CONFIG_DIR"] = eos_dir
+
+        # command to start server process
+        args = [sys.executable, "-m", "akkudoktoreos.server.eos"]
+
+        # will wait for 30 seconds before timing out
+        timeout = 30
+
+        # xprocess will now attempt to clean up upon interruptions
+        terminate_on_interrupt = True
+
+        # checks if our server is ready
+        def startup_check(self):
+            try:
+                result = requests.get(f"{server}/v1/health")
+                if result.status_code == 200:
+                    return True
+            except:
+                pass
+            return False
+
+    # Ensure there is an empty config file in the temporary EOS directory
+    config_file_path = Path(eos_dir).joinpath(ConfigEOS.CONFIG_FILE_NAME)
+    with config_file_path.open(mode="w", encoding="utf-8") as fd:
+        json.dump({}, fd)
+
+    # ensure process is running and return its logfile
+    pid, logfile = xprocess.ensure("eos", Starter)
+    print(f"View xprocess logfile at: {logfile}")
+
+    yield {
+        "server": server,
+        "eos_dir": eos_dir,
+    }
+
+    # clean up whole process tree afterwards
+    xprocess.getinfo("eos").terminate()
+
+    # Remove temporary EOS_DIR
+    eos_tmp_dir.cleanup()
+
+
+@pytest.fixture(scope="class")
+def server_setup_for_class(xprocess) -> Generator[dict[str, str], None, None]:
+    """A fixture to start the server for a test class."""
+    with server_base(xprocess) as result:
+        yield result
+
+
 @pytest.fixture
-def server(xprocess, config_eos, config_default_dirs):
+def server(xprocess, config_eos, config_default_dirs) -> Generator[str, None, None]:
     """Fixture to start the server.
 
     Provides URL of the server.
     """
+    # create url/port info to the server
+    url = "http://127.0.0.1:8503"
 
     class Starter(ProcessStarter):
         # Set environment before any subprocess run, to keep custom config dir
         env = os.environ.copy()
         env["EOS_DIR"] = str(config_default_dirs[-1])
-        project_dir = config_eos.package_root_path
+        project_dir = config_eos.package_root_path.parent.parent
 
         # assure server to be installed
         try:
             subprocess.run(
-                [sys.executable, "-c", "import akkudoktoreos.server.eos"],
+                [sys.executable, "-c", "import", "akkudoktoreos.server.eos"],
                 check=True,
                 env=env,
                 stdout=subprocess.PIPE,
@@ -203,7 +336,7 @@ def server(xprocess, config_eos, config_default_dirs):
             )
         except subprocess.CalledProcessError:
             subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-e", project_dir],
+                [sys.executable, "-m", "pip", "install", "-e", str(project_dir)],
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -212,11 +345,67 @@ def server(xprocess, config_eos, config_default_dirs):
         # command to start server process
         args = [sys.executable, "-m", "akkudoktoreos.server.eos"]
 
-        # startup pattern
-        pattern = "Application startup complete."
-        # search this number of lines for the startup pattern, if not found
-        # a RuntimeError will be raised informing the user
-        max_read_lines = 30
+        # will wait for 30 seconds before timing out
+        timeout = 30
+
+        # xprocess will now attempt to clean up upon interruptions
+        terminate_on_interrupt = True
+
+        # checks if our server is ready
+        def startup_check(self):
+            try:
+                result = requests.get(f"{url}/v1/health")
+                if result.status_code == 200:
+                    return True
+            except:
+                pass
+            return False
+
+    # ensure process is running and return its logfile
+    pid, logfile = xprocess.ensure("eos", Starter)
+    print(f"View xprocess logfile at: {logfile}")
+
+    yield url
+
+    # clean up whole process tree afterwards
+    xprocess.getinfo("eos").terminate()
+
+
+@pytest.fixture
+def eosdash_server(xprocess, config_eos, config_default_dirs) -> Generator[str, None, None]:
+    """Fixture to start the EOSdash server.
+
+    Provides URL of the server.
+    """
+    # create url/port info to the server
+    url = "http://127.0.0.1:8504"
+
+    class Starter(ProcessStarter):
+        # Set environment before any subprocess run, to keep custom config dir
+        env = os.environ.copy()
+        env["EOS_DIR"] = str(config_default_dirs[-1])
+        project_dir = config_eos.package_root_path.parent.parent
+
+        # assure server to be installed
+        try:
+            subprocess.run(
+                [sys.executable, "-c", "import", "akkudoktoreos.server.eosdash"],
+                check=True,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=project_dir,
+            )
+        except subprocess.CalledProcessError:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-e", str(project_dir)],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+        # command to start server process
+        args = [sys.executable, "-m", "akkudoktoreos.server.eosdash"]
 
         # will wait for 30 seconds before timing out
         timeout = 30
@@ -224,16 +413,24 @@ def server(xprocess, config_eos, config_default_dirs):
         # xprocess will now attempt to clean up upon interruptions
         terminate_on_interrupt = True
 
+        # checks if our server is ready
+        def startup_check(self):
+            try:
+                result = requests.get(f"{url}/eosdash/health")
+                if result.status_code == 200:
+                    return True
+            except:
+                pass
+            return False
+
     # ensure process is running and return its logfile
-    pid, logfile = xprocess.ensure("eos", Starter)
+    pid, logfile = xprocess.ensure("eosdash", Starter)
     print(f"View xprocess logfile at: {logfile}")
 
-    # create url/port info to the server
-    url = "http://127.0.0.1:8503"
     yield url
 
     # clean up whole process tree afterwards
-    xprocess.getinfo("eos").terminate()
+    xprocess.getinfo("eosdash").terminate()
 
 
 @pytest.fixture

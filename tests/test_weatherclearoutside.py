@@ -9,9 +9,9 @@ import pvlib
 import pytest
 from bs4 import BeautifulSoup
 
+from akkudoktoreos.core.cache import CacheFileStore
 from akkudoktoreos.core.ems import get_ems
 from akkudoktoreos.prediction.weatherclearoutside import WeatherClearOutside
-from akkudoktoreos.utils.cacheutil import CacheFileStore
 from akkudoktoreos.utils.datetimeutil import compare_datetimes, to_datetime
 
 DIR_TESTDATA = Path(__file__).absolute().parent.joinpath("testdata")

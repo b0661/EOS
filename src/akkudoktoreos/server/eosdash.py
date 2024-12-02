@@ -4,8 +4,10 @@ import sys
 from functools import reduce
 from typing import Any, Union
 
+import psutil
 import uvicorn
 from fasthtml.common import H1, Table, Td, Th, Thead, Titled, Tr, fast_app
+from fasthtml.starlette import JSONResponse
 from pydantic.fields import ComputedFieldInfo, FieldInfo
 from pydantic_core import PydanticUndefined
 
@@ -121,6 +123,12 @@ def get():  # type: ignore
     return Titled("EOS Dashboard", H1("Configuration"), config_table())
 
 
+@app.get("/eosdash/health")
+def get_eosdash_health():  # type: ignore
+    """Health check endpoint to verify that the EOSdash server is alive."""
+    return JSONResponse({"status": "alive"})
+
+
 def run_eosdash(host: str, port: int, log_level: str, access_log: bool, reload: bool) -> None:
     """Run the EOSdash server with the specified configurations.
 
@@ -131,20 +139,45 @@ def run_eosdash(host: str, port: int, log_level: str, access_log: bool, reload: 
     server to the specified host and port, an error message is logged and the
     application exits.
 
-    Parameters:
-    host (str): The hostname to bind the server to.
-    port (int): The port number to bind the server to.
-    log_level (str): The log level for the server. Options include "critical", "error",
-                     "warning", "info", "debug", and "trace".
-    access_log (bool): Whether to enable or disable the access log. Set to True to enable.
-    reload (bool): Whether to enable or disable auto-reload. Set to True for development.
+    Args:
+        host (str): The hostname to bind the server to.
+        port (int): The port number to bind the server to.
+        log_level (str): The log level for the server. Options include "critical", "error",
+                        "warning", "info", "debug", and "trace".
+        access_log (bool): Whether to enable or disable the access log. Set to True to enable.
+        reload (bool): Whether to enable or disable auto-reload. Set to True for development.
 
     Returns:
-    None
+        None
     """
     # Make hostname Windows friendly
     if host == "0.0.0.0" and os.name == "nt":
         host = "localhost"
+
+    # Check if EOSdash process is already running
+    process = None
+    for conn in psutil.net_connections(kind="inet"):
+        if conn.laddr.port == port:
+            process = psutil.Process(conn.pid)  # Get the process info
+            break
+    if process:
+        cmdline = process.cmdline()
+        logger.warning(
+            f"EOSdash port `{port}` already in use, PID: `{process.pid}`, CMD: `{cmdline}`"
+        )
+        return
+
+    # Setup config from args
+    if args:
+        if args.eos_host:
+            config_eos.server.host = args.eos_host
+        if args.eos_port:
+            config_eos.server.port = args.eos_port
+        if args.host:
+            config_eos.server.eosdash_host = args.host
+        if args.port:
+            config_eos.server.eosdash_port = args.port
+
     try:
         uvicorn.run(
             "akkudoktoreos.server.eosdash:app",
@@ -197,13 +230,13 @@ def main() -> None:
         "--eos-host",
         type=str,
         default=str(config_eos.server.host),
-        help="Host for the EOS server (default: value from config)",
+        help="Host of the EOS server (default: value from config)",
     )
     parser.add_argument(
         "--eos-port",
         type=int,
         default=config_eos.server.port,
-        help="Port for the EOS server (default: value from config)",
+        help="Port of the EOS server (default: value from config)",
     )
 
     # Optional arguments for log_level, access_log, and reload
@@ -230,7 +263,9 @@ def main() -> None:
 
     try:
         run_eosdash(args.host, args.port, args.log_level, args.access_log, args.reload)
-    except:
+    except Exception as ex:
+        error_msg = f"Failed to run EOSdash: {ex}"
+        logger.error(error_msg)
         sys.exit(1)
 
 

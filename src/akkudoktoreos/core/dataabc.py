@@ -953,6 +953,44 @@ class DataSequence(DataBase, MutableSequence):
         array = resampled.values
         return array
 
+    def to_dataframe(
+        self,
+        start_datetime: Optional[DateTime] = None,
+        end_datetime: Optional[DateTime] = None,
+    ) -> pd.DataFrame:
+        """Converts the sequence of DataRecord instances into a Pandas DataFrame.
+
+        Args:
+            start_datetime (Optional[datetime]): The lower bound for filtering (inclusive).
+                Defaults to the earliest possible datetime if None.
+            end_datetime (Optional[datetime]): The upper bound for filtering (exclusive).
+                Defaults to the latest possible datetime if None.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the filtered data from all records.
+        """
+        if not self.records:
+            return pd.DataFrame()  # Return empty DataFrame if no records exist
+
+        # Use filter_by_datetime to get filtered records
+        filtered_records = self.filter_by_datetime(start_datetime, end_datetime)
+
+        # Convert filtered records to a dictionary list
+        data = [record.model_dump() for record in filtered_records]
+
+        # Convert to DataFrame
+        df = pd.DataFrame(data)
+        if df.empty:
+            return df
+
+        # Ensure `date_time` column exists and use it for the index
+        if not "date_time" in df.columns:
+            error_msg = f"Cannot create dataframe: no `date_time` column in `{df}`."
+            logger.error(error_msg)
+            raise TypeError(error_msg)
+        df.index = pd.DatetimeIndex(df["date_time"])
+        return df
+
     def sort_by_datetime(self, reverse: bool = False) -> None:
         """Sort the DataRecords in the sequence by their date_time attribute.
 

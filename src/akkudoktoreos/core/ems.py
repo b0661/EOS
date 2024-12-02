@@ -6,6 +6,7 @@ from pendulum import DateTime
 from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 from typing_extensions import Self
 
+from akkudoktoreos.core.cache import CacheUntilUpdateStore
 from akkudoktoreos.core.coreabc import ConfigMixin, PredictionMixin, SingletonMixin
 from akkudoktoreos.core.logging import get_logger
 from akkudoktoreos.core.pydantic import ParametersBaseModel, PydanticBaseModel
@@ -243,6 +244,7 @@ class EnergieManagementSystem(SingletonMixin, ConfigMixin, PredictionMixin, Pyda
             is mostly relevant to prediction providers.
             force_update (bool, optional): If True, forces to update the data even if still cached.
         """
+        CacheUntilUpdateStore().clear()  # Throw away any cached results of the last run.
         self.set_start_hour(start_hour=start_hour)
 
         # Check for run definitions

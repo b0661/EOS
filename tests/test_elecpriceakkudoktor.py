@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 import requests
 
+from akkudoktoreos.core.cache import CacheFileStore
 from akkudoktoreos.core.ems import get_ems
 from akkudoktoreos.core.logging import get_logger
 from akkudoktoreos.prediction.elecpriceakkudoktor import (
@@ -13,7 +14,6 @@ from akkudoktoreos.prediction.elecpriceakkudoktor import (
     AkkudoktorElecPriceValue,
     ElecPriceAkkudoktor,
 )
-from akkudoktoreos.utils.cacheutil import CacheFileStore
 from akkudoktoreos.utils.datetimeutil import to_datetime
 
 DIR_TESTDATA = Path(__file__).absolute().parent.joinpath("testdata")
@@ -173,7 +173,7 @@ def test_request_forecast_status_codes(
         provider._request_forecast()
 
 
-@patch("akkudoktoreos.utils.cacheutil.CacheFileStore")
+@patch("akkudoktoreos.core.cache.CacheFileStore")
 def test_cache_integration(mock_cache, provider):
     """Test caching of 8-day electricity price data."""
     mock_cache_instance = mock_cache.return_value
