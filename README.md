@@ -23,6 +23,7 @@ Linux:
 ```bash
 python -m venv .venv
 .venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -e .
 ```
 
 Windows:
@@ -30,6 +31,7 @@ Windows:
 ```cmd
 python -m venv .venv
  .venv\Scripts\pip install -r requirements.txt
+ .venv\Scripts\pip install -e .
 ```
 
 Finally, start the EOS server:

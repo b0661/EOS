@@ -1112,7 +1112,7 @@ def run_eos(host: str, port: int, log_level: str, access_log: bool, reload: bool
     None
     """
     # Make hostname Windows friendly
-    if host == "0.0.0.0" and os.name == "nt":
+    if host == "127.0.0.1" and os.name == "nt":
         host = "localhost"
 
     # Check if EOS process is already running
