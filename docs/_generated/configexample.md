@@ -3,6 +3,17 @@
 <!-- pyml disable line-length -->
 ```json
    {
+       "adapter": {
+           "provider": "HomeAssistant",
+           "homeassistant": {
+               "host": "127.0.0.1",
+               "port": 8123
+           },
+           "nodered": {
+               "host": "127.0.0.1",
+               "port": 1880
+           }
+       },
        "cache": {
            "subpath": "cache",
            "cleanup_interval": 300.0

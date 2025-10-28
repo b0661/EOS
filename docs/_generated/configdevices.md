@@ -15,7 +15,7 @@
 | max_electric_vehicles | `EOS_DEVICES__MAX_ELECTRIC_VEHICLES` | `Optional[int]` | `rw` | `None` | Maximum number of electric vehicles that can be set |
 | max_home_appliances | `EOS_DEVICES__MAX_HOME_APPLIANCES` | `Optional[int]` | `rw` | `None` | Maximum number of home_appliances that can be set |
 | max_inverters | `EOS_DEVICES__MAX_INVERTERS` | `Optional[int]` | `rw` | `None` | Maximum number of inverters that can be set |
-| measurement_keys | | `Optional[list[str]]` | `ro` | `N/A` | None |
+| measurement_keys | | `Optional[list[str]]` | `ro` | `N/A` | Return the measurement keys for the resource/ device stati that are measurements. |
 :::
 <!-- pyml enable line-length -->
 
@@ -185,7 +185,7 @@
 | battery_id | `Optional[str]` | `rw` | `None` | ID of battery controlled by this inverter. |
 | device_id | `str` | `rw` | `<unknown>` | ID of device |
 | max_power_w | `Optional[float]` | `rw` | `None` | Maximum power [W]. |
-| measurement_keys | `Optional[list[str]]` | `ro` | `N/A` | None |
+| measurement_keys | `Optional[list[str]]` | `ro` | `N/A` | Measurement keys for the inverter stati that are measurements. |
 :::
 <!-- pyml enable line-length -->
 
@@ -242,7 +242,7 @@
 | consumption_wh | `int` | `rw` | `required` | Energy consumption [Wh]. |
 | device_id | `str` | `rw` | `<unknown>` | ID of device |
 | duration_h | `int` | `rw` | `required` | Usage duration in hours [0 ... 24]. |
-| measurement_keys | `Optional[list[str]]` | `ro` | `N/A` | None |
+| measurement_keys | `Optional[list[str]]` | `ro` | `N/A` | Measurement keys for the home appliance stati that are measurements. |
 | time_windows | `Optional[akkudoktoreos.utils.datetimeutil.TimeWindowSequence]` | `rw` | `None` | Sequence of allowed time windows. Defaults to optimization general time window. |
 :::
 <!-- pyml enable line-length -->
@@ -327,12 +327,12 @@
 | levelized_cost_of_storage_kwh | `float` | `rw` | `0.0` | Levelized cost of storage (LCOS), the average lifetime cost of delivering one kWh [€/kWh]. |
 | max_charge_power_w | `Optional[float]` | `rw` | `5000` | Maximum charging power [W]. |
 | max_soc_percentage | `int` | `rw` | `100` | Maximum state of charge (SOC) as percentage of capacity [%]. |
-| measurement_key_power_3_phase_sym_w | `str` | `ro` | `N/A` | None |
-| measurement_key_power_l1_w | `str` | `ro` | `N/A` | None |
-| measurement_key_power_l2_w | `str` | `ro` | `N/A` | None |
-| measurement_key_power_l3_w | `str` | `ro` | `N/A` | None |
-| measurement_key_soc_factor | `str` | `ro` | `N/A` | None |
-| measurement_keys | `Optional[list[str]]` | `ro` | `N/A` | None |
+| measurement_key_power_3_phase_sym_w | `str` | `ro` | `N/A` | Measurement key for the symmetric 3 phase power the battery is charged or discharged with [W]. |
+| measurement_key_power_l1_w | `str` | `ro` | `N/A` | Measurement key for the L1 power the battery is charged or discharged with [W]. |
+| measurement_key_power_l2_w | `str` | `ro` | `N/A` | Measurement key for the L2 power the battery is charged or discharged with [W]. |
+| measurement_key_power_l3_w | `str` | `ro` | `N/A` | Measurement key for the L3 power the battery is charged or discharged with [W]. |
+| measurement_key_soc_factor | `str` | `ro` | `N/A` | Measurement key for the battery state of charge (SoC) as factor of total capacity [0.0 ... 1.0]. |
+| measurement_keys | `Optional[list[str]]` | `ro` | `N/A` | Measurement keys for the battery stati that are measurements. |
 | min_charge_power_w | `Optional[float]` | `rw` | `50` | Minimum charging power [W]. |
 | min_soc_percentage | `int` | `rw` | `0` | Minimum state of charge (SOC) as percentage of capacity [%]. This is the target SoC for charging |
 :::

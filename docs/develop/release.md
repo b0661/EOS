@@ -43,6 +43,7 @@ git checkout -b release/vX.Y.Z
 At least update
 
 - pyproject.toml
+- haaddon/config.yaml
 - src/akkudoktoreos/core/version.py
 - src/akkudoktoreos/data/default.config.json
 - Makefile
