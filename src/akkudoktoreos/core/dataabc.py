@@ -1707,6 +1707,14 @@ class DataImportMixin:
                 }
 
         """
+        # Strip quotes if provided - does not effect unquoted string
+        json_str = json_str.strip()  # strip white space at start and end
+        if (json_str.startswith("'") and json_str.endswith("'")) or (
+            json_str.startswith('"') and json_str.endswith('"')
+        ):
+            json_str = json_str[1:-1]  # strip outer quotes
+        json_str = json_str.strip()  # strip remaining white space at start and end
+
         # Try pandas dataframe with orient="split"
         try:
             import_data = PydanticDateTimeDataFrame.model_validate_json(json_str)
@@ -1736,10 +1744,15 @@ class DataImportMixin:
             logger.debug(f"PydanticDateTimeData import: {error_msg}")
 
         # Use simple dict format
-        import_data = json.loads(json_str)
-        self.import_from_dict(
-            import_data, key_prefix=key_prefix, start_datetime=start_datetime, interval=interval
-        )
+        try:
+            import_data = json.loads(json_str)
+            self.import_from_dict(
+                import_data, key_prefix=key_prefix, start_datetime=start_datetime, interval=interval
+            )
+        except Exception as e:
+            error_msg = f"Invalid JSON string '{json_str}': {e}"
+            logger.debug(error_msg)
+            raise ValueError(error_msg) from e
 
     def import_from_file(
         self,

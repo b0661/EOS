@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List, Optional, Sequence, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, TypeVar, Union
 
 import requests
 from loguru import logger
@@ -25,7 +25,12 @@ from pydantic_core import PydanticUndefined
 from akkudoktoreos.config.config import ConfigEOS
 from akkudoktoreos.core.pydantic import PydanticBaseModel
 from akkudoktoreos.prediction.pvforecast import PVForecastPlaneSetting
-from akkudoktoreos.server.dash.components import ConfigCard
+from akkudoktoreos.server.dash.components import (
+    ConfigCard,
+    make_config_update_list_form,
+    make_config_update_value_form,
+)
+from akkudoktoreos.server.dash.context import request_url_for
 
 T = TypeVar("T")
 
@@ -178,9 +183,9 @@ def resolve_nested_types(field_type: Any, parent_types: list[str]) -> list[tuple
     return resolved_types
 
 
-def configuration(
+def create_config_details(
     model: type[PydanticBaseModel], values: dict, values_prefix: list[str] = []
-) -> list[dict]:
+) -> dict[str, dict]:
     """Generate configuration details based on provided values and model metadata.
 
     Args:
@@ -189,9 +194,9 @@ def configuration(
         values_prefix (list[str]): A list of parent type names that prefixes the model values in the values.
 
     Returns:
-        list[dict]: A sorted list of configuration details, each represented as a dictionary.
+        dict[dict]: A dictionary of configuration details, each represented as a dictionary.
     """
-    configs = []
+    config_details: dict[str, dict] = {}
     inner_types: set[type[PydanticBaseModel]] = set()
 
     for field_name, field_info in list(model.model_fields.items()) + list(
@@ -244,7 +249,7 @@ def configuration(
                         .replace("NoneType", "None")
                         .replace("<class 'float'>", "float")
                     )
-                    configs.append(config)
+                    config_details[str(config["name"])] = config
                     found_basic = True
                 else:
                     new_parent_types = parent_types + nested_parent_types
@@ -258,10 +263,10 @@ def configuration(
                         )
 
         extract_nested_models(field_info, [field_name])
-    return sorted(configs, key=lambda x: x["name"])
+    return config_details
 
 
-def get_configuration(eos_host: str, eos_port: Union[str, int]) -> list[dict]:
+def get_config_details(eos_host: str, eos_port: Union[str, int]) -> dict[str, dict]:
     """Fetch and process configuration data from the specified EOS server.
 
     Args:
@@ -269,7 +274,7 @@ def get_configuration(eos_host: str, eos_port: Union[str, int]) -> list[dict]:
         eos_port (Union[str, int]): The port of the EOS server.
 
     Returns:
-        List[dict]: A list of processed configuration entries.
+        dict[str, dict]: A dict of processed configuration entries.
     """
     server = f"http://{eos_host}:{eos_port}"
 
@@ -284,7 +289,141 @@ def get_configuration(eos_host: str, eos_port: Union[str, int]) -> list[dict]:
         warning_msg = f"Can not retrieve configuration from {server}: {e}, {detail}"
         logger.warning(warning_msg)
 
-    return configuration(ConfigEOS, config)
+    config_details = create_config_details(ConfigEOS, config)
+    return config_details
+
+
+def ConfigHomeAssistantEntityIdMappingCard(
+    config_name: str,
+    config_type: str,
+    read_only: str,
+    value: str,
+    default: str,
+    description: str,
+    deprecated: Optional[Union[str, bool]],
+    update_error: Optional[str],
+    update_value: Optional[str],
+    update_open: Optional[bool],
+    update_form_factory: Optional[Callable[[str, str], Grid]] = None,
+) -> Card:
+    """Creates a styled configuration card for home assistant entity mapping details.
+
+    This function generates a configuration card that is displayed in the UI with
+    various sections such as configuration name, type, description, default value,
+    current value, and error details. It supports both read-only and editable modes.
+
+    Args:
+        config_name (str): The name of the configuration.
+        config_type (str): The type of the configuration.
+        read_only (str): Indicates if the configuration is read-only ("rw" for read-write,
+                         any other value indicates read-only).
+        value (str): The current value of the configuration.
+        default (str): The default value of the configuration.
+        description (str): A description of the configuration.
+        deprecated (Optional[Union[str, bool]]): The deprecated marker of the configuration.
+        update_error (Optional[str]): The error message, if any, during the update process.
+        update_value (Optional[str]): The value to be updated, if different from the current value.
+        update_open (Optional[bool]): A flag indicating whether the update section of the card
+                                      should be initially expanded.
+
+    Returns:
+        Card: A styled Card component containing the configuration details.
+    """
+    config_id = config_name.replace(".", "-")
+    if not update_value:
+        update_value = value
+    if not update_open:
+        update_open = False
+    if deprecated:
+        if isinstance(deprecated, bool):
+            deprecated = "Deprecated"
+    mapping = json.loads(value)
+    if mapping is None:
+        mapping = {}
+
+    # Create cards for all mappings
+    rows = []
+    for key in mapping.keys():
+        rows.append(
+            ConfigCard(
+                config_name + f".{key}",
+                "Optional[str]",
+                read_only,
+                str(mapping[key]),
+                "null",
+                f"Home Assistant entity ID for '{key}'.",
+                deprecated,
+                update_error,
+                str(mapping[key]),
+                update_open,
+            )
+        )
+
+    return Card(
+        Details(
+            Summary(
+                Grid(
+                    Grid(
+                        DivLAligned(
+                            UkIcon(icon="play"),
+                            P(config_name),
+                        ),
+                        DivRAligned(
+                            P(read_only),
+                        ),
+                    ),
+                    P(value),
+                ),
+                cls="list-none",
+            ),
+            Grid(
+                P(description),
+                P(config_type),
+            )
+            if not deprecated
+            else None,
+            Grid(
+                P(deprecated),
+                P("DEPRECATED!"),
+            )
+            if deprecated
+            else None,
+            # Default
+            Grid(
+                DivRAligned(P("default")),
+                P(default),
+            )
+            if False and read_only == "rw" and not deprecated
+            else None,
+            # Set value
+            Grid(
+                DivRAligned(P("update")),
+                Grid(
+                    Form(
+                        Input(value=config_name, type="hidden", id="key"),
+                        Input(value=update_value, type="text", id="value"),
+                        hx_put=request_url_for("/eosdash/configuration"),
+                        hx_target="#page-content",
+                        hx_swap="innerHTML",
+                    ),
+                ),
+            )
+            if False and read_only == "rw" and not deprecated
+            else None,
+            # Last error
+            Grid(
+                DivRAligned(P("update error")),
+                P(update_error),
+            )
+            if update_error
+            else None,
+            # Now come the single element configs
+            *rows,
+            cls="space-y-4 gap-4",
+            open=update_open,
+        ),
+        cls="w-full",
+    )
 
 
 def ConfigPlanesCard(
@@ -341,7 +480,7 @@ def ConfigPlanesCard(
     # Create cards for all planes
     rows = []
     for i in range(0, max_planes):
-        plane_config = configuration(
+        plane_config = create_config_details(
             PVForecastPlaneSetting(),
             eos_planes_config,
             values_prefix=["pvforecast", "planes", str(i)],
@@ -352,7 +491,8 @@ def ConfigPlanesCard(
             plane_value = json.dumps(eos_planes[i])
         else:
             plane_value = json.dumps(None)
-        for config in plane_config:
+        for config_key in sorted(plane_config.keys()):
+            config = plane_config[config_key]
             update_error = config_update_latest.get(config["name"], {}).get("error")  # type: ignore
             update_value = config_update_latest.get(config["name"], {}).get("value")  # type: ignore
             update_open = config_update_latest.get(config["name"], {}).get("open")  # type: ignore
@@ -443,7 +583,7 @@ def ConfigPlanesCard(
                     Form(
                         Input(value=config_name, type="hidden", id="key"),
                         Input(value=planes_update_value, type="text", id="value"),
-                        hx_put="/eosdash/configuration",
+                        hx_put=request_url_for("/eosdash/configuration"),
                         hx_target="#page-content",
                         hx_swap="innerHTML",
                     ),
@@ -468,33 +608,82 @@ def ConfigPlanesCard(
 
 
 def Configuration(
-    eos_host: str, eos_port: Union[str, int], configuration: Optional[list[dict]] = None
+    eos_host: str,
+    eos_port: Union[str, int],
+    data: Optional[dict] = None,
 ) -> Div:
     """Create a visual representation of the configuration.
 
     Args:
         eos_host (str): The hostname of the EOS server.
         eos_port (Union[str, int]): The port of the EOS server.
-        configuration (Optional[list[dict]]): Optional configuration. If not provided it will be
-            retrievd from EOS.
+        data (Optional[dict], optional): Incoming data to trigger config actions. Defaults to None.
 
     Returns:
         rows:  Rows of configuration details.
     """
-    if not configuration:
-        configuration = get_configuration(eos_host, eos_port)
+    if data and data.get("key", None):
+        # This data contains a new value for key
+        key = data["key"]
+        value_json_str: str = data.get("value", "")
+        try:
+            value = json.loads(value_json_str)
+        except:
+            if value_json_str in ("None", "none", "Null", "null"):
+                value = None
+            else:
+                value = value_json_str
+
+        error = None
+        config = None
+        try:
+            server = f"http://{eos_host}:{eos_port}"
+            path = key.replace(".", "/")
+            response = requests.put(f"{server}/v1/config/{path}", json=value, timeout=10)
+            response.raise_for_status()
+            config = response.json()
+        except requests.exceptions.HTTPError as err:
+            try:
+                # Try to get 'detail' from the JSON response
+                detail = response.json().get(
+                    "detail", f"No error details for value '{value}' '{response.text}'"
+                )
+            except ValueError:
+                # Response is not JSON
+                detail = f"No error details for value '{value}' '{response.text}'"
+            error = f"Can not set {key} on {server}: {err}, {detail}"
+        # Mark all updates as closed
+        for k in config_update_latest:
+            config_update_latest[k]["open"] = False
+        # Remember this update as latest one
+        config_update_latest[key] = {
+            "error": error,
+            "result": config,
+            "value": value_json_str,
+            "open": True,
+        }
+
+    # (Re-)read configuration details to be shure we display actual data
+    config_details = get_config_details(eos_host, eos_port)
+
     rows = []
     last_category = ""
     # find some special configuration values
-    max_planes = 0
-    for config in configuration:
-        if config["name"] == "pvforecast.max_planes":
-            try:
-                max_planes = int(config["value"])
-            except:
-                max_planes = 0
+    try:
+        max_planes = int(config_details["pvforecast.max_planes"]["value"])
+    except:
+        max_planes = 0
+    logger.debug(f"max_planes: {max_planes}")
+    try:
+        homeassistant_entity_ids = json.loads(
+            config_details["adapter.homeassistant.entity_ids"]["value"]
+        )
+    except:
+        homeassistant_entity_ids = []
+    logger.debug(f"homeassistant_entity_ids: {homeassistant_entity_ids}")
     # build visual representation
-    for config in configuration:
+    for config_key in sorted(config_details.keys()):
+        config = config_details[config_key]
         category = config["name"].split(".")[0]
         if category != last_category:
             rows.append(H3(category))
@@ -512,6 +701,9 @@ def Configuration(
             error_msg = "update_error or update_value or update_open of wrong type."
             logger.error(error_msg)
             raise TypeError(error_msg)
+        if config["read-only"] != "rw":
+            # Do not display read only values
+            continue
         if (
             config["type"]
             == "Optional[list[akkudoktoreos.prediction.pvforecast.PVForecastPlaneSetting]]"
@@ -532,6 +724,77 @@ def Configuration(
                     update_open,
                 )
             )
+        elif (
+            config["type"]
+            == "<class 'akkudoktoreos.adapter.homeassistant.HomeAssistantEntityIdMapping'>"
+            and not config["deprecated"]
+        ):
+            # Special configuration for Home Assistant Entity Id mapping
+            rows.append(
+                ConfigHomeAssistantEntityIdMappingCard(
+                    config["name"],
+                    config["type"],
+                    config["read-only"],
+                    config["value"],
+                    config["default"],
+                    config["description"],
+                    config["deprecated"],
+                    update_error,
+                    update_value,
+                    update_open,
+                )
+            )
+        elif config["name"].startswith("adapter.homeassistant.entity_id_"):
+            # Special configuration for Home Assistant Entity Id mapping
+            rows.append(
+                ConfigCard(
+                    config["name"],
+                    config["type"],
+                    config["read-only"],
+                    config["value"],
+                    config["default"],
+                    config["description"],
+                    config["deprecated"],
+                    update_error,
+                    update_value,
+                    update_open,
+                    make_config_update_list_form(homeassistant_entity_ids),
+                )
+            )
+        elif config["name"].startswith("adapter.provider"):
+            # Special configuration for adapter provider setting
+            rows.append(
+                ConfigCard(
+                    config["name"],
+                    config["type"],
+                    config["read-only"],
+                    config["value"],
+                    config["default"],
+                    config["description"],
+                    config["deprecated"],
+                    update_error,
+                    update_value,
+                    update_open,
+                    make_config_update_list_form(["HomeAssistant", "NodeRED"]),
+                )
+            )
+        elif config["name"].startswith("ems.mode"):
+            # Special configuration for ems mode setting
+            rows.append(
+                ConfigCard(
+                    config["name"],
+                    config["type"],
+                    config["read-only"],
+                    config["value"],
+                    config["default"],
+                    config["description"],
+                    config["deprecated"],
+                    update_error,
+                    update_value,
+                    update_open,
+                    make_config_update_value_form(["OPTIMIZATION", "PREDICTION", "None"]),
+                )
+            )
         else:
             rows.append(
                 ConfigCard(
@@ -548,58 +811,3 @@ def Configuration(
                 )
             )
     return Div(*rows, cls="space-y-4")
-
-
-def ConfigKeyUpdate(eos_host: str, eos_port: Union[str, int], key: str, value: str) -> P:
-    """Update configuration key and create a visual representation of the configuration.
-
-    Args:
-        eos_host (str): The hostname of the EOS server.
-        eos_port (Union[str, int]): The port of the EOS server.
-        key (str): configuration key in dot notation
-        value (str): configuration value as json string
-
-    Returns:
-        rows:  Rows of configuration details.
-    """
-    server = f"http://{eos_host}:{eos_port}"
-    path = key.replace(".", "/")
-    try:
-        data = json.loads(value)
-    except:
-        if value in ("None", "none", "Null", "null"):
-            data = None
-        else:
-            data = value
-
-    error = None
-    config = None
-    try:
-        response = requests.put(f"{server}/v1/config/{path}", json=data, timeout=10)
-        response.raise_for_status()
-        config = response.json()
-    except requests.exceptions.HTTPError as err:
-        try:
-            # Try to get 'detail' from the JSON response
-            detail = response.json().get(
-                "detail", f"No error details for data '{data}' '{response.text}'"
-            )
-        except ValueError:
-            # Response is not JSON
-            detail = f"No error details for data '{data}' '{response.text}'"
-        error = f"Can not set {key} on {server}: {err}, {detail}"
-    # Mark all updates as closed
-    for k in config_update_latest:
-        config_update_latest[k]["open"] = False
-    # Remember this update as latest one
-    config_update_latest[key] = {
-        "error": error,
-        "result": config,
-        "value": value,
-        "open": True,
-    }
-    if error or config is None:
-        # Reread configuration to be shure we display actual data
-        return Configuration(eos_host, eos_port)
-    # Use configuration already provided
-    return Configuration(eos_host, eos_port, configuration(ConfigEOS, config))
