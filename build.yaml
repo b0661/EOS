@@ -1,0 +1,7 @@
+# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-config
+build_from:
+  # Debian based images only
+  amd64: "ghcr.io/home-assistant/amd64-base-debian:trixie"
+  aarch64: "ghcr.io/home-assistant/aarch64-base-debian:trixie"
+args:
+  PYTHON_VERSION: "3.13"
