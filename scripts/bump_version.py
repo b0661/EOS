@@ -2,6 +2,7 @@
 
 This script updates version information in:
 - pyproject.toml
+- haaddon/config.yaml
 - src/akkudoktoreos/core/version.py
 - src/akkudoktoreos/data/default.config.json
 - Makefile
@@ -49,6 +50,7 @@ DEFAULT_FILES = [
     "src/akkudoktoreos/core/version.py",
     "src/akkudoktoreos/data/default.config.json",
     "Makefile",
+    "haaddon/config.yaml"
 ]
 
 
