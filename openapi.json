@@ -3,7 +3,7 @@
   "info": {
     "title": "Akkudoktor-EOS",
     "description": "This project provides a comprehensive solution for simulating and optimizing an energy system based on renewable energy sources. With a focus on photovoltaic (PV) systems, battery storage (batteries), load management (consumer requirements), heat pumps, electric vehicles, and consideration of electricity price data, this system enables forecasting and optimization of energy flow and costs over a specified period.",
-    "version": "v0.2.0.dev27350002"
+    "version": "v0.2.0.dev69316922"
   },
   "paths": {
     "/v1/admin/cache/clear": {
@@ -176,6 +176,9 @@
     },
     "/v1/health": {
       "get": {
+        "tags": [
+          "health"
+        ],
         "summary": "Fastapi Health Get",
         "description": "Health check endpoint to verify that the EOS server is alive.",
         "operationId": "fastapi_health_get_v1_health_get",
@@ -2020,6 +2023,92 @@
   },
   "components": {
     "schemas": {
+      "AdapterCommonSettings-Input": {
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "HomeAssistant",
+                    "NodeRED"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "Adapter provider id(s) of provider(s) to be used [HomeAssistant, NodeRED, None].",
+            "examples": [
+              [
+                "HomeAssistant"
+              ],
+              [
+                "HomeAssistant",
+                "NodeRED"
+              ]
+            ]
+          },
+          "homeassistant": {
+            "$ref": "#/components/schemas/HomeAssistantAdapterCommonSettings-Input",
+            "description": "Home Assistant adapter settings."
+          },
+          "nodered": {
+            "$ref": "#/components/schemas/NodeREDAdapterCommonSettings",
+            "description": "NodeRED adapter settings."
+          }
+        },
+        "type": "object",
+        "title": "AdapterCommonSettings",
+        "description": "Adapter Configuration."
+      },
+      "AdapterCommonSettings-Output": {
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "HomeAssistant",
+                    "NodeRED"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "Adapter provider id(s) of provider(s) to be used [HomeAssistant, NodeRED, None].",
+            "examples": [
+              [
+                "HomeAssistant"
+              ],
+              [
+                "HomeAssistant",
+                "NodeRED"
+              ]
+            ]
+          },
+          "homeassistant": {
+            "$ref": "#/components/schemas/HomeAssistantAdapterCommonSettings-Output",
+            "description": "Home Assistant adapter settings."
+          },
+          "nodered": {
+            "$ref": "#/components/schemas/NodeREDAdapterCommonSettings",
+            "description": "NodeRED adapter settings."
+          }
+        },
+        "type": "object",
+        "title": "AdapterCommonSettings",
+        "description": "Adapter Configuration."
+      },
       "BatteriesCommonSettings-Input": {
         "properties": {
           "device_id": {
@@ -2123,6 +2212,19 @@
             ],
             "title": "Charge Rates",
             "description": "Charge rates as factor of maximum charging power [0.00 ... 1.00]. None triggers fallback to default charge-rates.",
+            "default": [
+              0.0,
+              0.1,
+              0.2,
+              0.3,
+              0.4,
+              0.5,
+              0.6,
+              0.7,
+              0.8,
+              0.9,
+              1.0
+            ],
             "examples": [
               [
                 0.0,
@@ -2264,6 +2366,19 @@
             ],
             "title": "Charge Rates",
             "description": "Charge rates as factor of maximum charging power [0.00 ... 1.00]. None triggers fallback to default charge-rates.",
+            "default": [
+              0.0,
+              0.1,
+              0.2,
+              0.3,
+              0.4,
+              0.5,
+              0.6,
+              0.7,
+              0.8,
+              0.9,
+              1.0
+            ],
             "examples": [
               [
                 0.0,
@@ -2340,7 +2455,7 @@
               }
             ],
             "title": "Measurement Keys",
-            "description": "Measurement keys for the battery stati that are measurements.\n\nBattery SoC, power.",
+            "description": "Measurement keys for the battery stati that are measurements.",
             "readOnly": true
           }
         },
@@ -2406,13 +2521,14 @@
           "general": {
             "$ref": "#/components/schemas/GeneralSettings-Output",
             "default": {
-              "version": "0.2.0.dev27350002",
+              "version": "0.2.0.dev69316922",
               "data_output_subpath": "output",
               "latitude": 52.52,
               "longitude": 13.405,
               "timezone": "Europe/Berlin",
               "config_folder_path": "/home/user/.config/net.akkudoktoreos.net",
-              "config_file_path": "/home/user/.config/net.akkudoktoreos.net/EOS.config.json"
+              "config_file_path": "/home/user/.config/net.akkudoktoreos.net/EOS.config.json",
+              "home_assistant_addon": false
             }
           },
           "cache": {
@@ -2447,7 +2563,7 @@
             }
           },
           "optimization": {
-            "$ref": "#/components/schemas/OptimizationCommonSettings",
+            "$ref": "#/components/schemas/OptimizationCommonSettings-Output",
             "default": {
               "horizon_hours": 24,
               "interval": 3600,
@@ -2455,7 +2571,8 @@
               "genetic": {
                 "generations": 400,
                 "individuals": 300
-              }
+              },
+              "keys": []
             }
           },
           "prediction": {
@@ -2517,6 +2634,20 @@
           "utils": {
             "$ref": "#/components/schemas/UtilsCommonSettings",
             "default": {}
+          },
+          "adapter": {
+            "$ref": "#/components/schemas/AdapterCommonSettings-Output",
+            "default": {
+              "homeassistant": {
+                "entity_ids": [],
+                "measurement_entity_ids": {},
+                "optimization_solution_entity_ids": {}
+              },
+              "nodered": {
+                "host": "127.0.0.1",
+                "port": 1880
+              }
+            }
           }
         },
         "additionalProperties": false,
@@ -4084,15 +4215,7 @@
             "type": "string",
             "title": "Version",
             "description": "Configuration file version. Used to check compatibility.",
-<<<<<<< HEAD
-<<<<<<< HEAD
-            "default": "0.2.0+dev.4dbc2d"
-=======
-            "default": "0.2.0.dev809aa7"
->>>>>>> 2c9a0b3 (fix: development version scheme)
-=======
-            "default": "0.2.0.dev27350002"
->>>>>>> 4dc7eea (fix: version+++)
+            "default": "0.2.0.dev69316922"
           },
           "data_folder_path": {
             "anyOf": [
@@ -4137,7 +4260,7 @@
               }
             ],
             "title": "Latitude",
-            "description": "Latitude in decimal degrees, between -90 and 90, north is positive (ISO 19115) (\u00b0)",
+            "description": "Latitude in decimal degrees between -90 and 90. North is positive (ISO 19115) (\u00b0)",
             "default": 52.52
           },
           "longitude": {
@@ -4152,13 +4275,13 @@
               }
             ],
             "title": "Longitude",
-            "description": "Longitude in decimal degrees, within -180 to 180 (\u00b0)",
+            "description": "Longitude in decimal degrees within -180 to 180 (\u00b0)",
             "default": 13.405
           }
         },
         "type": "object",
         "title": "GeneralSettings",
-        "description": "Settings for common configuration.\n\nGeneral configuration to set directories of cache and output files and system location (latitude\nand longitude).\nValidators ensure each parameter is within a specified range. A computed property, `timezone`,\ndetermines the time zone based on latitude and longitude.\n\nAttributes:\n    latitude (Optional[float]): Latitude in degrees, must be between -90 and 90.\n    longitude (Optional[float]): Longitude in degrees, must be between -180 and 180.\n\nProperties:\n    timezone (Optional[str]): Computed time zone string based on the specified latitude\n        and longitude."
+        "description": "General settings."
       },
       "GeneralSettings-Output": {
         "properties": {
@@ -4166,15 +4289,7 @@
             "type": "string",
             "title": "Version",
             "description": "Configuration file version. Used to check compatibility.",
-<<<<<<< HEAD
-<<<<<<< HEAD
-            "default": "0.2.0+dev.4dbc2d"
-=======
-            "default": "0.2.0.dev809aa7"
->>>>>>> 2c9a0b3 (fix: development version scheme)
-=======
-            "default": "0.2.0.dev27350002"
->>>>>>> 4dc7eea (fix: version+++)
+            "default": "0.2.0.dev69316922"
           },
           "data_folder_path": {
             "anyOf": [
@@ -4219,7 +4334,7 @@
               }
             ],
             "title": "Latitude",
-            "description": "Latitude in decimal degrees, between -90 and 90, north is positive (ISO 19115) (\u00b0)",
+            "description": "Latitude in decimal degrees between -90 and 90. North is positive (ISO 19115) (\u00b0)",
             "default": 52.52
           },
           "longitude": {
@@ -4234,7 +4349,7 @@
               }
             ],
             "title": "Longitude",
-            "description": "Longitude in decimal degrees, within -180 to 180 (\u00b0)",
+            "description": "Longitude in decimal degrees within -180 to 180 (\u00b0)",
             "default": 13.405
           },
           "timezone": {
@@ -4247,7 +4362,7 @@
               }
             ],
             "title": "Timezone",
-            "description": "Compute timezone based on latitude and longitude.",
+            "description": "Computed timezone based on latitude and longitude.",
             "readOnly": true
           },
           "data_output_path": {
@@ -4261,7 +4376,7 @@
               }
             ],
             "title": "Data Output Path",
-            "description": "Compute data_output_path based on data_folder_path.",
+            "description": "Computed data_output_path based on data_folder_path.",
             "readOnly": true
           },
           "config_folder_path": {
@@ -4291,6 +4406,12 @@
             "title": "Config File Path",
             "description": "Path to EOS configuration file.",
             "readOnly": true
+          },
+          "home_assistant_addon": {
+            "type": "boolean",
+            "title": "Home Assistant Addon",
+            "description": "EOS is running as home assistant add-on.",
+            "readOnly": true
           }
         },
         "type": "object",
@@ -4298,10 +4419,11 @@
           "timezone",
           "data_output_path",
           "config_folder_path",
-          "config_file_path"
+          "config_file_path",
+          "home_assistant_addon"
         ],
         "title": "GeneralSettings",
-        "description": "Settings for common configuration.\n\nGeneral configuration to set directories of cache and output files and system location (latitude\nand longitude).\nValidators ensure each parameter is within a specified range. A computed property, `timezone`,\ndetermines the time zone based on latitude and longitude.\n\nAttributes:\n    latitude (Optional[float]): Latitude in degrees, must be between -90 and 90.\n    longitude (Optional[float]): Longitude in degrees, must be between -180 and 180.\n\nProperties:\n    timezone (Optional[str]): Computed time zone string based on the specified latitude\n        and longitude."
+        "description": "General settings."
       },
       "GeneticCommonSettings": {
         "properties": {
@@ -5026,6 +5148,247 @@
         "title": "HomeApplianceParameters",
         "description": "Home Appliance Device Simulation Configuration."
       },
+      "HomeAssistantAdapterCommonSettings-Input": {
+        "properties": {
+          "entity_id_pv_production_emr_kwh": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id Pv Production Emr Kwh",
+            "description": "Entity ID(s) of PV production energy meter reading [kWh]",
+            "examples": [
+              [
+                "sensor.pv_energy_total_kwh"
+              ],
+              [
+                "sensor.pv_emr1_kwh",
+                "sensor.pv_emr2_kwh"
+              ]
+            ]
+          },
+          "entity_id_battery_soc_factor": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id Battery Soc Factor",
+            "description": "Entity ID(s) of battery SoC factor [0.0..1.0]",
+            "examples": [
+              [
+                "sensor.battery_soc_factor"
+              ],
+              [
+                "sensor.bat1_soc_factor",
+                "sensor.bat2_soc_factor"
+              ]
+            ]
+          },
+          "entity_id_ev_soc_factor": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id Ev Soc Factor",
+            "description": "Entity ID(s) of electric vehicle battery SoC factor [0.0..1.0]",
+            "examples": [
+              [
+                "sensor.ev_soc_factor"
+              ],
+              [
+                "sensor.ev1_soc_factor",
+                "sensor.ev2_soc_factor"
+              ]
+            ]
+          },
+          "measurement_entity_ids": {
+            "$ref": "#/components/schemas/HomeAssistantEntityIdMapping",
+            "description": "Mapping of EOS measurement keys to Home Assistant entity IDs.",
+            "examples": [
+              {
+                "battery_soc": "sensor.battery_state_of_charge",
+                "grid_export": "sensor.grid_export_kwh",
+                "grid_import": "sensor.grid_import_kwh",
+                "pv_production": "sensor.pv_energy_total_kwh"
+              }
+            ]
+          },
+          "optimization_solution_entity_ids": {
+            "$ref": "#/components/schemas/HomeAssistantEntityIdMapping",
+            "description": "Mapping of EOS optimization solution to Home Assistant entity IDs.\nThe given IDs are prepended by 'sensor.eos_' to build the entity_id.\nE.g. 'my_op_mode' becomes the entity_id 'sensor.eos__my_op_mode'.",
+            "examples": [
+              {
+                "battery_operation_mode_factor": "battery_operation_mode_factor",
+                "battery_operation_mode_id": "battery_operation_mode_id"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "HomeAssistantAdapterCommonSettings",
+        "description": "Common settings for the home assistant adapter."
+      },
+      "HomeAssistantAdapterCommonSettings-Output": {
+        "properties": {
+          "entity_id_pv_production_emr_kwh": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id Pv Production Emr Kwh",
+            "description": "Entity ID(s) of PV production energy meter reading [kWh]",
+            "examples": [
+              [
+                "sensor.pv_energy_total_kwh"
+              ],
+              [
+                "sensor.pv_emr1_kwh",
+                "sensor.pv_emr2_kwh"
+              ]
+            ]
+          },
+          "entity_id_battery_soc_factor": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id Battery Soc Factor",
+            "description": "Entity ID(s) of battery SoC factor [0.0..1.0]",
+            "examples": [
+              [
+                "sensor.battery_soc_factor"
+              ],
+              [
+                "sensor.bat1_soc_factor",
+                "sensor.bat2_soc_factor"
+              ]
+            ]
+          },
+          "entity_id_ev_soc_factor": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id Ev Soc Factor",
+            "description": "Entity ID(s) of electric vehicle battery SoC factor [0.0..1.0]",
+            "examples": [
+              [
+                "sensor.ev_soc_factor"
+              ],
+              [
+                "sensor.ev1_soc_factor",
+                "sensor.ev2_soc_factor"
+              ]
+            ]
+          },
+          "measurement_entity_ids": {
+            "$ref": "#/components/schemas/HomeAssistantEntityIdMapping",
+            "description": "Mapping of EOS measurement keys to Home Assistant entity IDs.",
+            "examples": [
+              {
+                "battery_soc": "sensor.battery_state_of_charge",
+                "grid_export": "sensor.grid_export_kwh",
+                "grid_import": "sensor.grid_import_kwh",
+                "pv_production": "sensor.pv_energy_total_kwh"
+              }
+            ]
+          },
+          "optimization_solution_entity_ids": {
+            "$ref": "#/components/schemas/HomeAssistantEntityIdMapping",
+            "description": "Mapping of EOS optimization solution to Home Assistant entity IDs.\nThe given IDs are prepended by 'sensor.eos_' to build the entity_id.\nE.g. 'my_op_mode' becomes the entity_id 'sensor.eos__my_op_mode'.",
+            "examples": [
+              {
+                "battery_operation_mode_factor": "battery_operation_mode_factor",
+                "battery_operation_mode_id": "battery_operation_mode_id"
+              }
+            ]
+          },
+          "entity_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Entity Ids",
+            "description": "Entity IDs available at Home Assistant.",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_ids"
+        ],
+        "title": "HomeAssistantAdapterCommonSettings",
+        "description": "Common settings for the home assistant adapter."
+      },
+      "HomeAssistantEntityIdMapping": {
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": "object",
+        "title": "HomeAssistantEntityIdMapping",
+        "description": "Mapping of entity names to Home Assistant entity IDs",
+        "examples": [
+          {
+            "light": "light.living_room",
+            "sensor": "sensor.temperature",
+            "switch": "switch.kitchen"
+          },
+          {
+            "battery_soc": "sensor.battery_state_of_charge",
+            "grid_import": "sensor.grid_import_kwh",
+            "pv_production": "sensor.pv_energy_total_kwh"
+          }
+        ]
+      },
       "InverterCommonSettings-Input": {
         "properties": {
           "device_id": {
@@ -5401,7 +5764,7 @@
         },
         "type": "object",
         "title": "LoadVrmCommonSettings",
-        "description": "Common settings for VRM API."
+        "description": "Common settings for load forecast VRM API."
       },
       "LoggingCommonSettings-Input": {
         "properties": {
@@ -5700,6 +6063,46 @@
         "title": "MeasurementCommonSettings",
         "description": "Measurement Configuration."
       },
+      "NodeREDAdapterCommonSettings": {
+        "properties": {
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host",
+            "description": "Node-RED server IP address. Defaults to 127.0.0.1.",
+            "default": "127.0.0.1",
+            "examples": [
+              "127.0.0.1",
+              "localhost"
+            ]
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port",
+            "description": "Node-RED server IP port number. Defaults to 1880.",
+            "default": 1880,
+            "examples": [
+              1880
+            ]
+          }
+        },
+        "type": "object",
+        "title": "NodeREDAdapterCommonSettings",
+        "description": "Common settings for the NodeRED adapter.\n\nThe Node-RED adapter sends to HTTP IN nodes.\n\nThis is the example flow:\n\n[HTTP In \\\\<URL\\\\>] -> [Function (parse payload)] -> [Debug] -> [HTTP Response]\n\nThere are two URLs that are used:\n\n- GET /eos/data_aquisition\n  The GET is issued before the optimization.\n- POST /eos/control_dispatch\n  The POST is issued after the optimization."
+      },
       "OMBCInstruction": {
         "properties": {
           "id": {
@@ -5815,7 +6218,7 @@
         "title": "OMBCStatus",
         "description": "Reports the current operational status of an Operation Mode Based Control system.\n\nThis model provides real-time status information about an OMBC-controlled device,\nincluding which operation mode is currently active, how it is configured,\nand information about recent mode transitions. It enables monitoring of the\ndevice's operational state and tracking mode transition history."
       },
-      "OptimizationCommonSettings": {
+      "OptimizationCommonSettings-Input": {
         "properties": {
           "horizon_hours": {
             "anyOf": [
@@ -5890,6 +6293,96 @@
           }
         },
         "type": "object",
+        "title": "OptimizationCommonSettings",
+        "description": "General Optimization Configuration."
+      },
+      "OptimizationCommonSettings-Output": {
+        "properties": {
+          "horizon_hours": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon Hours",
+            "description": "The general time window within which the energy optimization goal shall be achieved [h]. Defaults to 24 hours.",
+            "default": 24,
+            "examples": [
+              24
+            ]
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3600.0,
+                "minimum": 900.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval",
+            "description": "The optimization interval [sec].",
+            "default": 3600,
+            "examples": [
+              3600,
+              900
+            ]
+          },
+          "algorithm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Algorithm",
+            "description": "The optimization algorithm.",
+            "default": "GENETIC",
+            "examples": [
+              "GENETIC"
+            ]
+          },
+          "genetic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeneticCommonSettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Genetic optimization algorithm configuration.",
+            "examples": [
+              {
+                "individuals": 400,
+                "penalties": {
+                  "ev_soc_miss": 10
+                }
+              }
+            ]
+          },
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Keys",
+            "description": "The keys of the solution.",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "keys"
+        ],
         "title": "OptimizationCommonSettings",
         "description": "General Optimization Configuration."
       },
@@ -7043,7 +7536,7 @@
         },
         "type": "object",
         "title": "PVForecastVrmCommonSettings",
-        "description": "Common settings for VRM API."
+        "description": "Common settings for PV forecast VRM API."
       },
       "PowerMeasurement-Input": {
         "properties": {
@@ -7160,7 +7653,7 @@
         },
         "type": "object",
         "title": "PredictionCommonSettings",
-        "description": "General Prediction Configuration.\n\nThis class provides configuration for prediction settings, allowing users to specify\nparameters such as the forecast duration (in hours).\nValidators ensure each parameter is within a specified range.\n\nAttributes:\n    hours (Optional[int]): Number of hours into the future for predictions.\n        Must be non-negative.\n    historic_hours (Optional[int]): Number of hours into the past for historical data.\n        Must be non-negative.\n\nValidators:\n    validate_hours (int): Ensures `hours` is a non-negative integer.\n    validate_historic_hours (int): Ensures `historic_hours` is a non-negative integer."
+        "description": "General Prediction Configuration."
       },
       "PydanticDateTimeData": {
         "additionalProperties": {
@@ -7191,7 +7684,7 @@
         },
         "type": "object",
         "title": "PydanticDateTimeData",
-        "description": "Pydantic model for time series data with consistent value lengths.\n\nThis model validates a dictionary where:\n- Keys are strings representing data series names\n- Values are lists of numeric or string values\n- Special keys 'start_datetime' and 'interval' can contain string values\nfor time series indexing\n- All value lists must have the same length\n\nExample:\n    .. code-block:: python\n\n        {\n            \"start_datetime\": \"2024-01-01 00:00:00\",  # optional\n            \"interval\": \"1 Hour\",                     # optional\n            \"loadforecast_power_w\": [20.5, 21.0, 22.1],\n            \"load_min\": [18.5, 19.0, 20.1]\n        }"
+        "description": "Pydantic model for time series data with consistent value lengths.\n\nThis model validates a dictionary where:\n- Keys are strings representing data series names\n- Values are lists of numeric or string values\n- Special keys 'start_datetime' and 'interval' can contain string values\nfor time series indexing\n- All value lists must have the same length\n\nExample:\n    .. code-block:: python\n\n        {\n            \"start_datetime\": \"2024-01-01 00:00:00\",  # optional\n            \"interval\": \"1 hour\",                     # optional\n            \"loadforecast_power_w\": [20.5, 21.0, 22.1],\n            \"load_min\": [18.5, 19.0, 20.1]\n        }"
       },
       "PydanticDateTimeDataFrame": {
         "properties": {
@@ -7437,7 +7930,7 @@
           "optimization": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/OptimizationCommonSettings"
+                "$ref": "#/components/schemas/OptimizationCommonSettings-Input"
               },
               {
                 "type": "null"
@@ -7532,6 +8025,17 @@
               }
             ],
             "description": "Utilities Settings"
+          },
+          "adapter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdapterCommonSettings-Input"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Adapter Settings"
           }
         },
         "additionalProperties": false,
