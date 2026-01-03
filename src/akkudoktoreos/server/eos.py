@@ -205,12 +205,14 @@ if config_eos.server.startup_eosdash:
 def save_eos_state() -> None:
     """Save EOS state."""
     resource_registry_eos.save()
+    measurement_eos.save()
     cache_save()  # keep last
 
 
 def load_eos_state() -> None:
     """Load EOS state."""
     cache_load()  # keep first
+    measurement_eos.load()
     resource_registry_eos.load()
 
 

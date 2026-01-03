@@ -225,6 +225,40 @@ class Measurement(SingletonMixin, DataImportMixin, DataSequence):
 
         return load_total_kwh_array
 
+    def save(self) -> None:
+        """Save the measurements to file."""
+        if not self.config.general.data_folder_path:
+            raise ValueError("Data folder path unknown.")
+        measurement_file_path = self.config.general.data_folder_path / "measurement.json"
+        try:
+            measurement_file_path.write_text(
+                self.model_dump_json(indent=4),
+                encoding="utf-8",
+                newline="\n",
+            )
+        except Exception as e:
+            logger.exception("Cannot save measurements")
+
+    def load(self) -> None:
+        """Load measurements from file and update the current singleton instance."""
+        if not self.config.general.data_folder_path:
+            raise ValueError("Data folder path unknown.")
+        measurement_file_path = self.config.general.data_folder_path / "measurement.json"
+        if not measurement_file_path.exists():
+            return
+
+        try:
+            # Validate into a temporary instance
+            loaded = self.__class__.model_validate_json(
+                measurement_file_path.read_text(encoding="utf-8")
+            )
+
+            # Explicitly add data records to the existing singleton
+            for record in loaded.records:
+                self.insert_by_datetime(record)
+        except Exception as e:
+            logger.exception("Cannot load measurements")
+
 
 def get_measurement() -> Measurement:
     """Gets the EOS measurement data."""
