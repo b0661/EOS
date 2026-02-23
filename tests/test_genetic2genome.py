@@ -265,6 +265,72 @@ class TestGenomeAssemblerRandomGenome:
         assembler.dispatch(genome, reg)
 
 
+class TestGenomeAssemblerRepair:
+    """repair_genome() collects repaired slices from devices into a new genome."""
+
+    class MockDeviceWithRepair(SimpleBattery):
+        """Battery-like device that proposes a repaired genome slice."""
+
+        def __init__(self, device_id: str, prediction_hours: int, repair_slice: np.ndarray | None):
+            super().__init__(device_id, prediction_hours)
+            self._repair_slice = repair_slice
+            self.repair_called = False
+
+        def repair_genome(self):
+            self.repair_called = True
+            if self._repair_slice is None:
+                return None
+            from akkudoktoreos.devices.genetic2.base import GenomeRepairResult
+            return GenomeRepairResult(repaired_slice=self._repair_slice, changed=True)
+
+    def test_repair_applies_only_changed_slices(self):
+        reg = DeviceRegistry()
+        device1 = self.MockDeviceWithRepair(
+            "bat1", prediction_hours=24, repair_slice=np.full(24, 2)
+        )
+        device2 = self.MockDeviceWithRepair(
+            "bat2", prediction_hours=24, repair_slice=None
+        )
+        reg.register(device1)
+        reg.register(device2)
+
+        assembler = GenomeAssembler(reg)
+
+        # Original genome must match total_size
+        genome = np.arange(48, dtype=float)
+
+        # Repair genome
+        repaired = assembler.repair_genome(genome)
+
+        # bat1 should be replaced with 2s, bat2 unchanged
+        np.testing.assert_array_equal(
+            repaired[:24], np.full(24, 2)
+        )
+        np.testing.assert_array_equal(
+            repaired[24:], genome[24:]
+        )
+
+    def test_repair_genome_no_changes_returns_copy(self):
+        reg = DeviceRegistry()
+        device = self.MockDeviceWithRepair("bat1", prediction_hours=3, repair_slice=None)
+        reg.register(device)
+        assembler = GenomeAssembler(reg)
+
+        genome = np.array([0.0, 1.0, 2.0])
+        repaired = assembler.repair_genome(genome)
+
+        # Should produce a new array but identical content
+        assert np.all(repaired == genome)
+        assert repaired is not genome  # must be a copy
+
+    def test_repair_genome_empty_assembler(self):
+        reg = DeviceRegistry()
+        assembler = GenomeAssembler(reg)
+        genome = np.array([], dtype=float)
+        repaired = assembler.repair_genome(genome)
+        assert repaired.shape == (0,)
+
+
 class TestGenomeAssemblerDescribe:
     """describe() produces human-readable layout output."""
 

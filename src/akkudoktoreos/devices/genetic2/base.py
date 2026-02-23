@@ -69,6 +69,38 @@ class GenomeSlice:
             )
 
 
+@dataclass(slots=True)
+class GenomeRepairResult:
+    """Proposal for a repaired genome slice after simulation.
+
+    Produced by ``EnergyDevice.repair_genome()`` *after* a simulation run.
+    The simulation that just completed was executed using the originally
+    applied genome slice. The repaired slice returned here was **not**
+    used during that run.
+
+    This object represents a suggestion from the device to the genetic
+    engine to replace its previously applied genome segment for subsequent
+    optimization steps (e.g. before fitness evaluation persistence,
+    elitism, or next-generation construction).
+
+    The genetic engine remains the sole owner of the full genome and
+    decides whether and how to integrate this proposal.
+
+    Attributes:
+        repaired_slice (np.ndarray):
+            A corrected version of the genome slice previously provided
+            via ``apply_genome()``. Must have the same shape and semantics
+            as the original slice.
+
+        changed (bool):
+            Indicates whether the device actually modified the slice.
+            If ``False``, the engine may ignore this result.
+    """
+
+    repaired_slice: np.ndarray
+    changed: bool = True
+
+
 class EnergyDevice(ABC):
     """Base class for all simulation devices.
 
@@ -118,6 +150,26 @@ class EnergyDevice(ABC):
             genome_slice (np.ndarray): Array of length ``genome_requirements().size``.
                 Will be empty if ``genome_requirements()`` returns None.
         """
+
+    def repair_genome(self) -> GenomeRepairResult | None:
+        """Propose a repaired genome slice after simulation.
+
+        Called once after a simulation run.
+
+        The device may inspect its internal state and determine that
+        the applied genome slice was infeasible (e.g. violated SoC limits).
+        It can then return a corrected slice.
+
+        Returns:
+            GenomeRepairResult containing:
+                - repaired_slice: np.ndarray
+                - changed: bool
+
+            or None if:
+                - device has no genome
+                - no repair is necessary
+        """
+        return None
 
     @abstractmethod
     def request(self, hour: int) -> ResourceRequest:

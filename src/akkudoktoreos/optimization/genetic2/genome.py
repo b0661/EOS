@@ -13,7 +13,11 @@ This means:
 
 import numpy as np
 
-from akkudoktoreos.devices.genetic2.base import EnergyDevice, GenomeSlice
+from akkudoktoreos.devices.genetic2.base import (
+    EnergyDevice,
+    GenomeRepairResult,
+    GenomeSlice,
+)
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
 
 
@@ -44,6 +48,9 @@ class GenomeAssembler:
     """
 
     def __init__(self, registry: DeviceRegistry) -> None:
+        # Save registry for future use (repair, inspection)
+        self._registry = registry
+
         # Map device_id -> (start_index, end_index) in the flat genome
         self._slices: dict[str, tuple[int, int]] = {}
         # Ordered list of GenomeSlice declarations (for bounds and validation)
@@ -192,6 +199,28 @@ class GenomeAssembler:
             else:
                 genome[start:end] = rng.uniform(req.low, req.high, size=req.size)
         return genome
+
+    def repair_genome(self, genome: np.ndarray) -> np.ndarray:
+        """Assemble a repaired genome from device proposals after a simulation run.
+
+        Each device may return a repaired slice via `EnergyDevice.repair_genome()`.
+        Only slices marked as `changed=True` are replaced; the rest of the genome
+        remains the same.
+
+        The repaired genome is *not applied automatically* — it is a proposal
+        for future runs or optimizer iterations.
+
+        Returns:
+            np.ndarray: New genome array with proposed repairs applied.
+        """
+        new_genome = genome.copy()
+        for device_id in self._genome_devices:
+            device = self._registry.get(device_id)
+            result: GenomeRepairResult | None = device.repair_genome()
+            if result is None or not result.changed:
+                continue
+            self.set_slice(device_id, new_genome, result.repaired_slice)
+        return new_genome
 
     def describe(self) -> str:
         """Return a human-readable description of the genome layout.
