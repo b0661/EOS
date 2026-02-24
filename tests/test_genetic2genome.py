@@ -2,82 +2,109 @@
 
 Covers: GenomeAssembler construction, dispatch, bounds, get_slice, set_slice,
 random_genome, describe, and error handling.
+
+Changes from previous version:
+- GenomeAssembler(registry) -> GenomeAssembler(registry, num_steps=N, step_interval=td)
+- dispatch() calls store_genome(), not apply_genome()
+  → tests check bat.get_stored_genome() instead of bat.last_genome_slice
+- genome_requirements(num_steps, step_interval) now takes arguments
 """
+
+from datetime import timedelta
 
 import numpy as np
 import pytest
-from fixtures.genetic2fixtures import SimpleBattery, SimplePV
+from fixtures.genetic2fixtures import (
+    STEP_INTERVAL,
+    SimpleBattery,
+    SimplePV,
+    make_assembler,
+)
 
 from akkudoktoreos.devices.genetic2.base import GenomeSlice
 from akkudoktoreos.optimization.genetic2.genome import GenomeAssembler
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
 
+# ---------------------------------------------------------------------------
+# Construction
+# ---------------------------------------------------------------------------
 
 class TestGenomeAssemblerConstruction:
-    """GenomeAssembler correctly maps device requirements to slices."""
+    """GenomeAssembler correctly maps device requirements to genome slices."""
 
     def test_total_size_single_device(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=24))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=24))
+        assembler = make_assembler(reg, n=24)
         assert assembler.total_size == 24
 
     def test_total_size_two_batteries(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=24))
-        reg.register(SimpleBattery("bat2", prediction_hours=24))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=24))
+        reg.register(SimpleBattery("bat2", num_steps=24))
+        assembler = make_assembler(reg, n=24)
         assert assembler.total_size == 48
 
     def test_pv_does_not_contribute_to_genome(self):
         """Devices returning None from genome_requirements are skipped."""
         reg = DeviceRegistry()
         reg.register(SimplePV("pv1", np.zeros(24)))
-        reg.register(SimpleBattery("bat1", prediction_hours=24))
-        assembler = GenomeAssembler(reg)
-        assert assembler.total_size == 24  # only battery
+        reg.register(SimpleBattery("bat1", num_steps=24))
+        assembler = make_assembler(reg, n=24)
+        assert assembler.total_size == 24  # only the battery
 
     def test_empty_registry_total_size_zero(self):
         reg = DeviceRegistry()
-        assembler = GenomeAssembler(reg)
+        assembler = make_assembler(reg, n=24)
         assert assembler.total_size == 0
 
     def test_only_pv_total_size_zero(self):
         reg = DeviceRegistry()
         reg.register(SimplePV("pv1", np.zeros(24)))
-        assembler = GenomeAssembler(reg)
+        assembler = make_assembler(reg, n=24)
         assert assembler.total_size == 0
 
     def test_slices_are_non_overlapping(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=12))
-        reg.register(SimpleBattery("bat2", prediction_hours=12))
-        assembler = GenomeAssembler(reg)
-
-        slice1 = assembler._slices["bat1"]
-        slice2 = assembler._slices["bat2"]
-
-        # bat1 must end where bat2 starts
-        assert slice1 == (0, 12)
-        assert slice2 == (12, 24)
+        reg.register(SimpleBattery("bat1", num_steps=12))
+        reg.register(SimpleBattery("bat2", num_steps=12))
+        assembler = make_assembler(reg, n=12)
+        assert assembler._slices["bat1"] == (0, 12)
+        assert assembler._slices["bat2"] == (12, 24)
 
     def test_registration_order_determines_slice_order(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat_a", prediction_hours=10))
-        reg.register(SimpleBattery("bat_b", prediction_hours=5))
-        assembler = GenomeAssembler(reg)
-
+        reg.register(SimpleBattery("bat_a", num_steps=10))
+        reg.register(SimpleBattery("bat_b", num_steps=5))
+        assembler = make_assembler(reg, n=10)
         assert assembler._slices["bat_a"] == (0, 10)
-        assert assembler._slices["bat_b"] == (10, 15)
+        assert assembler._slices["bat_b"] == (10, 20)
 
+    def test_num_steps_propagated_to_genome_size(self):
+        """GenomeSlice.size equals num_steps passed to the assembler."""
+        reg = DeviceRegistry()
+        reg.register(SimpleBattery("bat1", num_steps=96))
+        assembler = make_assembler(reg, n=96)
+        assert assembler.total_size == 96
+
+    def test_step_interval_stored_on_assembler(self):
+        reg = DeviceRegistry()
+        interval = timedelta(minutes=15)
+        assembler = GenomeAssembler(DeviceRegistry(), num_steps=96, step_interval=interval)
+        assert assembler._step_interval == interval
+
+
+# ---------------------------------------------------------------------------
+# Bounds
+# ---------------------------------------------------------------------------
 
 class TestGenomeAssemblerBounds:
     """bounds() returns correct lower and upper bound arrays."""
 
     def test_bounds_length_equals_total_size(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=24))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=24))
+        assembler = make_assembler(reg, n=24)
         lows, highs = assembler.bounds()
         assert len(lows) == 24
         assert len(highs) == 24
@@ -85,130 +112,143 @@ class TestGenomeAssemblerBounds:
     def test_bounds_values_from_genome_slice(self):
         """SimpleBattery declares low=0, high=2."""
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=6))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=6))
+        assembler = make_assembler(reg, n=6)
         lows, highs = assembler.bounds()
         assert all(l == 0.0 for l in lows)
         assert all(h == 2.0 for h in highs)
 
     def test_bounds_concatenated_for_multiple_devices(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=3))
-        reg.register(SimpleBattery("bat2", prediction_hours=3))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=3))
+        reg.register(SimpleBattery("bat2", num_steps=3))
+        assembler = make_assembler(reg, n=3)
         lows, highs = assembler.bounds()
         assert len(lows) == 6
         assert len(highs) == 6
 
     def test_empty_assembler_bounds_empty(self):
-        reg = DeviceRegistry()
-        assembler = GenomeAssembler(reg)
+        assembler = make_assembler(DeviceRegistry(), n=24)
         lows, highs = assembler.bounds()
         assert lows == []
         assert highs == []
 
 
+# ---------------------------------------------------------------------------
+# Dispatch — now calls store_genome(), not apply_genome()
+# ---------------------------------------------------------------------------
+
 class TestGenomeAssemblerDispatch:
-    """dispatch() routes genome slices to correct devices."""
+    """dispatch() writes slices into devices via store_genome()."""
 
-    def test_dispatch_single_battery_receives_its_slice(self):
+    def test_dispatch_single_battery_stores_its_slice(self):
         reg = DeviceRegistry()
-        bat = SimpleBattery("bat1", prediction_hours=4)
+        bat = SimpleBattery("bat1", num_steps=4)
         reg.register(bat)
-        assembler = GenomeAssembler(reg)
+        assembler = make_assembler(reg, n=4)
 
-        genome = np.array([0, 1, 2, 1], dtype=float)
+        genome = np.array([0.0, 1.0, 2.0, 1.0])
         assembler.dispatch(genome, reg)
 
-        assert bat.last_genome_slice is not None
-        np.testing.assert_array_equal(bat.last_genome_slice, [0, 1, 2, 1])
+        stored = bat.get_stored_genome()
+        np.testing.assert_array_equal(stored, [0.0, 1.0, 2.0, 1.0])
 
     def test_dispatch_two_batteries_independent_slices(self):
         reg = DeviceRegistry()
-        bat1 = SimpleBattery("bat1", prediction_hours=3)
-        bat2 = SimpleBattery("bat2", prediction_hours=3)
+        bat1 = SimpleBattery("bat1", num_steps=3)
+        bat2 = SimpleBattery("bat2", num_steps=3)
         reg.register(bat1)
         reg.register(bat2)
-        assembler = GenomeAssembler(reg)
+        assembler = make_assembler(reg, n=3)
 
-        genome = np.array([2, 1, 0, 0, 2, 1], dtype=float)
+        genome = np.array([2.0, 1.0, 0.0, 0.0, 2.0, 1.0])
         assembler.dispatch(genome, reg)
 
-        np.testing.assert_array_equal(bat1.last_genome_slice, [2, 1, 0])
-        np.testing.assert_array_equal(bat2.last_genome_slice, [0, 2, 1])
+        np.testing.assert_array_equal(bat1.get_stored_genome(), [2.0, 1.0, 0.0])
+        np.testing.assert_array_equal(bat2.get_stored_genome(), [0.0, 2.0, 1.0])
 
-    def test_pv_apply_genome_not_called_with_slice(self):
-        """PV has no genome slice — apply_genome receives empty call only if at all."""
+    def test_dispatch_stores_defensive_copy(self):
+        """Mutating the genome after dispatch must not alter stored slice."""
+        reg = DeviceRegistry()
+        bat = SimpleBattery("bat1", num_steps=3)
+        reg.register(bat)
+        assembler = make_assembler(reg, n=3)
+
+        genome = np.array([0.0, 1.0, 2.0])
+        assembler.dispatch(genome, reg)
+        genome[:] = 99.0  # mutate original
+
+        stored = bat.get_stored_genome()
+        assert np.all(stored != 99.0), "store_genome must copy, not reference"
+
+    def test_pv_has_no_stored_genome_after_dispatch(self):
+        """PV returns None from genome_requirements — dispatch skips it."""
         reg = DeviceRegistry()
         pv = SimplePV("pv1", np.zeros(4))
-        bat = SimpleBattery("bat1", prediction_hours=4)
+        bat = SimpleBattery("bat1", num_steps=4)
         reg.register(pv)
         reg.register(bat)
-        assembler = GenomeAssembler(reg)
+        assembler = make_assembler(reg, n=4)
 
-        genome = np.array([0, 1, 2, 0], dtype=float)
-        assembler.dispatch(genome, reg)
+        assembler.dispatch(np.array([0.0, 1.0, 2.0, 0.0]), reg)
 
-        # Battery got its slice; PV has no recorded genome slice
-        assert bat.last_genome_slice is not None
+        # Battery has its slice; PV has no genome (empty array by default)
+        assert len(bat.get_stored_genome()) == 4
+        assert len(pv.get_stored_genome()) == 0
 
     def test_dispatch_wrong_genome_length_raises(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=24))
-        assembler = GenomeAssembler(reg)
-
+        reg.register(SimpleBattery("bat1", num_steps=24))
+        assembler = make_assembler(reg, n=24)
         with pytest.raises(ValueError, match="24"):
             assembler.dispatch(np.zeros(10), reg)
 
     def test_dispatch_out_of_bounds_value_raises(self):
+        """SimpleBattery declares high=2.0; value of 5 is out of bounds."""
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=4))
-        assembler = GenomeAssembler(reg)
-
-        # SimpleBattery declares high=2.0; value of 5 is out of bounds
-        genome = np.array([0.0, 1.0, 5.0, 2.0])
+        reg.register(SimpleBattery("bat1", num_steps=4))
+        assembler = make_assembler(reg, n=4)
         with pytest.raises(ValueError, match="bat1"):
-            assembler.dispatch(genome, reg)
+            assembler.dispatch(np.array([0.0, 1.0, 5.0, 2.0]), reg)
 
     def test_dispatch_empty_assembler_empty_genome(self):
-        reg = DeviceRegistry()
-        assembler = GenomeAssembler(reg)
-        assembler.dispatch(np.array([]), reg)  # should not raise
+        assembler = make_assembler(DeviceRegistry(), n=24)
+        assembler.dispatch(np.array([]), DeviceRegistry())  # must not raise
 
+
+# ---------------------------------------------------------------------------
+# Slice access
+# ---------------------------------------------------------------------------
 
 class TestGenomeAssemblerSliceAccess:
-    """get_slice() and set_slice() for targeted genome inspection."""
+    """get_slice() and set_slice() for targeted genome inspection and repair."""
 
     def test_get_slice_returns_correct_view(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=3))
-        reg.register(SimpleBattery("bat2", prediction_hours=3))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=3))
+        reg.register(SimpleBattery("bat2", num_steps=3))
+        assembler = make_assembler(reg, n=3)
 
         genome = np.array([1.0, 2.0, 0.0, 0.0, 1.0, 2.0])
-        slice_bat1 = assembler.get_slice("bat1", genome)
-        slice_bat2 = assembler.get_slice("bat2", genome)
-
-        np.testing.assert_array_equal(slice_bat1, [1.0, 2.0, 0.0])
-        np.testing.assert_array_equal(slice_bat2, [0.0, 1.0, 2.0])
+        np.testing.assert_array_equal(assembler.get_slice("bat1", genome), [1.0, 2.0, 0.0])
+        np.testing.assert_array_equal(assembler.get_slice("bat2", genome), [0.0, 1.0, 2.0])
 
     def test_get_slice_unknown_device_raises(self):
-        reg = DeviceRegistry()
-        assembler = GenomeAssembler(reg)
+        assembler = make_assembler(DeviceRegistry(), n=24)
         with pytest.raises(KeyError, match="nonexistent"):
             assembler.get_slice("nonexistent", np.zeros(10))
 
     def test_get_slice_pv_raises_no_genome(self):
         reg = DeviceRegistry()
         reg.register(SimplePV("pv1", np.zeros(4)))
-        assembler = GenomeAssembler(reg)
+        assembler = make_assembler(reg, n=4)
         with pytest.raises(KeyError):
             assembler.get_slice("pv1", np.zeros(10))
 
     def test_set_slice_modifies_genome_in_place(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=3))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=3))
+        assembler = make_assembler(reg, n=3)
 
         genome = np.zeros(3)
         assembler.set_slice("bat1", genome, np.array([1.0, 2.0, 0.0]))
@@ -216,149 +256,84 @@ class TestGenomeAssemblerSliceAccess:
 
     def test_set_slice_out_of_bounds_raises(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=3))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=3))
+        assembler = make_assembler(reg, n=3)
         genome = np.zeros(3)
         with pytest.raises(ValueError):
             assembler.set_slice("bat1", genome, np.array([5.0, 5.0, 5.0]))
 
 
+# ---------------------------------------------------------------------------
+# Random genome
+# ---------------------------------------------------------------------------
+
 class TestGenomeAssemblerRandomGenome:
-    """random_genome() generates valid genomes within bounds."""
+    """random_genome() generates valid genomes within declared bounds."""
 
     def test_random_genome_correct_length(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=24))
-        assembler = GenomeAssembler(reg)
-        genome = assembler.random_genome(np.random.default_rng(42))
-        assert len(genome) == 24
+        reg.register(SimpleBattery("bat1", num_steps=24))
+        assembler = make_assembler(reg, n=24)
+        assert len(assembler.random_genome(np.random.default_rng(42))) == 24
 
     def test_random_genome_within_bounds(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=100))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=100))
+        assembler = make_assembler(reg, n=100)
         genome = assembler.random_genome(np.random.default_rng(0))
         assert np.all(genome >= 0)
         assert np.all(genome <= 2)
 
     def test_random_genome_reproducible_with_seed(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=24))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=24))
+        assembler = make_assembler(reg, n=24)
         g1 = assembler.random_genome(np.random.default_rng(42))
         g2 = assembler.random_genome(np.random.default_rng(42))
         np.testing.assert_array_equal(g1, g2)
 
     def test_random_genome_empty_assembler(self):
-        reg = DeviceRegistry()
-        assembler = GenomeAssembler(reg)
-        genome = assembler.random_genome()
-        assert len(genome) == 0
+        assembler = make_assembler(DeviceRegistry(), n=24)
+        assert len(assembler.random_genome()) == 0
 
-    def test_random_genome_dispatches_without_error(self):
+    def test_random_genome_is_dispatchable(self):
+        """A random genome must always satisfy declared bounds → dispatch OK."""
         reg = DeviceRegistry()
-        bat = SimpleBattery("bat1", prediction_hours=24)
+        bat = SimpleBattery("bat1", num_steps=24)
         reg.register(bat)
-        assembler = GenomeAssembler(reg)
+        assembler = make_assembler(reg, n=24)
         genome = assembler.random_genome(np.random.default_rng(1))
-        # A random genome must always be dispatchable
-        assembler.dispatch(genome, reg)
+        assembler.dispatch(genome, reg)  # must not raise
 
 
-class TestGenomeAssemblerRepair:
-    """repair_genome() collects repaired slices from devices into a new genome."""
-
-    class MockDeviceWithRepair(SimpleBattery):
-        """Battery-like device that proposes a repaired genome slice."""
-
-        def __init__(self, device_id: str, prediction_hours: int, repair_slice: np.ndarray | None):
-            super().__init__(device_id, prediction_hours)
-            self._repair_slice = repair_slice
-            self.repair_called = False
-
-        def repair_genome(self):
-            self.repair_called = True
-            if self._repair_slice is None:
-                return None
-            from akkudoktoreos.devices.genetic2.base import GenomeRepairResult
-            return GenomeRepairResult(repaired_slice=self._repair_slice, changed=True)
-
-    def test_repair_applies_only_changed_slices(self):
-        reg = DeviceRegistry()
-        device1 = self.MockDeviceWithRepair(
-            "bat1", prediction_hours=24, repair_slice=np.full(24, 2)
-        )
-        device2 = self.MockDeviceWithRepair(
-            "bat2", prediction_hours=24, repair_slice=None
-        )
-        reg.register(device1)
-        reg.register(device2)
-
-        assembler = GenomeAssembler(reg)
-
-        # Original genome must match total_size
-        genome = np.arange(48, dtype=float)
-
-        # Repair genome
-        repaired = assembler.repair_genome(genome)
-
-        # bat1 should be replaced with 2s, bat2 unchanged
-        np.testing.assert_array_equal(
-            repaired[:24], np.full(24, 2)
-        )
-        np.testing.assert_array_equal(
-            repaired[24:], genome[24:]
-        )
-
-    def test_repair_genome_no_changes_returns_copy(self):
-        reg = DeviceRegistry()
-        device = self.MockDeviceWithRepair("bat1", prediction_hours=3, repair_slice=None)
-        reg.register(device)
-        assembler = GenomeAssembler(reg)
-
-        genome = np.array([0.0, 1.0, 2.0])
-        repaired = assembler.repair_genome(genome)
-
-        # Should produce a new array but identical content
-        assert np.all(repaired == genome)
-        assert repaired is not genome  # must be a copy
-
-    def test_repair_genome_empty_assembler(self):
-        reg = DeviceRegistry()
-        assembler = GenomeAssembler(reg)
-        genome = np.array([], dtype=float)
-        repaired = assembler.repair_genome(genome)
-        assert repaired.shape == (0,)
-
+# ---------------------------------------------------------------------------
+# Describe
+# ---------------------------------------------------------------------------
 
 class TestGenomeAssemblerDescribe:
-    """describe() produces human-readable layout output."""
+    """describe() produces a human-readable genome layout."""
 
     def test_describe_contains_device_id(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("battery_main", prediction_hours=24))
-        assembler = GenomeAssembler(reg)
-        desc = assembler.describe()
-        assert "battery_main" in desc
+        reg.register(SimpleBattery("battery_main", num_steps=24))
+        assembler = make_assembler(reg, n=24)
+        assert "battery_main" in assembler.describe()
 
     def test_describe_contains_total_size(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=24))
-        assembler = GenomeAssembler(reg)
-        desc = assembler.describe()
-        assert "total_size=24" in desc
+        reg.register(SimpleBattery("bat1", num_steps=24))
+        assembler = make_assembler(reg, n=24)
+        assert "total_size=24" in assembler.describe()
 
     def test_describe_contains_slice_indices(self):
         reg = DeviceRegistry()
-        reg.register(SimpleBattery("bat1", prediction_hours=12))
-        reg.register(SimpleBattery("bat2", prediction_hours=12))
-        assembler = GenomeAssembler(reg)
+        reg.register(SimpleBattery("bat1", num_steps=12))
+        reg.register(SimpleBattery("bat2", num_steps=12))
+        assembler = make_assembler(reg, n=12)
         desc = assembler.describe()
         assert "0:" in desc
         assert "12:" in desc
 
     def test_describe_empty_assembler(self):
-        reg = DeviceRegistry()
-        assembler = GenomeAssembler(reg)
-        desc = assembler.describe()
-        assert "no devices" in desc.lower()
+        assembler = make_assembler(DeviceRegistry(), n=24)
+        assert "no devices" in assembler.describe().lower()

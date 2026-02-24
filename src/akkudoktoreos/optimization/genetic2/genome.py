@@ -11,13 +11,11 @@ This means:
 - Adding a new device automatically extends the genome — no optimizer changes needed.
 """
 
+from datetime import timedelta
+
 import numpy as np
 
-from akkudoktoreos.devices.genetic2.base import (
-    EnergyDevice,
-    GenomeRepairResult,
-    GenomeSlice,
-)
+from akkudoktoreos.devices.genetic2.base import EnergyDevice, GenomeSlice
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
 
 
@@ -47,20 +45,29 @@ class GenomeAssembler:
         >>> assembler.dispatch(genome, registry)  # devices receive their slices
     """
 
-    def __init__(self, registry: DeviceRegistry) -> None:
-        # Save registry for future use (repair, inspection)
-        self._registry = registry
-
+    def __init__(
+        self,
+        registry: DeviceRegistry,
+        num_steps: int = 24,
+        step_interval: "timedelta | None" = None,
+    ) -> None:
         # Map device_id -> (start_index, end_index) in the flat genome
         self._slices: dict[str, tuple[int, int]] = {}
         # Ordered list of GenomeSlice declarations (for bounds and validation)
         self._requirements: list[GenomeSlice] = []
         # Devices that have genome requirements (in registration order)
         self._genome_devices: list[str] = []
+        self._num_steps = num_steps
+        from datetime import timedelta as _td
+
+        self._step_interval = step_interval or _td(hours=1)
 
         offset = 0
         for device in registry.all_of_type(EnergyDevice):
-            req = device.genome_requirements()
+            req = device.genome_requirements(
+                num_steps=self._num_steps,
+                step_interval=self._step_interval,
+            )
             if req is None:
                 continue
             if req.size <= 0:
@@ -79,9 +86,11 @@ class GenomeAssembler:
     def dispatch(self, genome: np.ndarray, registry: DeviceRegistry) -> None:
         """Slice the genome and send each slice to its device.
 
-        Called once per simulation run before any ``simulate_hour()`` call.
+        Called once per simulation run before ``EnergySimulationEngine.simulate()``.
         Each device receives exactly the slice it declared in
-        ``genome_requirements()``.
+        ``genome_requirements()``, stored via ``device.store_genome()``.
+        The engine subsequently calls ``device.apply_genome(stored_slice, step_times)``
+        to trigger schedule decoding together with the step-time schedule.
 
         Args:
             genome (np.ndarray): Flat genome array of length ``total_size``.
@@ -108,7 +117,7 @@ class GenomeAssembler:
             req = self._requirement_for(device_id)
             req.validate(genome_slice)
 
-            device.apply_genome(genome_slice)
+            device.store_genome(genome_slice)
 
     def get_slice(self, device_id: str, genome: np.ndarray) -> np.ndarray:
         """Extract a specific device's slice from a genome array.
@@ -199,28 +208,6 @@ class GenomeAssembler:
             else:
                 genome[start:end] = rng.uniform(req.low, req.high, size=req.size)
         return genome
-
-    def repair_genome(self, genome: np.ndarray) -> np.ndarray:
-        """Assemble a repaired genome from device proposals after a simulation run.
-
-        Each device may return a repaired slice via `EnergyDevice.repair_genome()`.
-        Only slices marked as `changed=True` are replaced; the rest of the genome
-        remains the same.
-
-        The repaired genome is *not applied automatically* — it is a proposal
-        for future runs or optimizer iterations.
-
-        Returns:
-            np.ndarray: New genome array with proposed repairs applied.
-        """
-        new_genome = genome.copy()
-        for device_id in self._genome_devices:
-            device = self._registry.get(device_id)
-            result: GenomeRepairResult | None = device.repair_genome()
-            if result is None or not result.changed:
-                continue
-            self.set_slice(device_id, new_genome, result.repaired_slice)
-        return new_genome
 
     def describe(self) -> str:
         """Return a human-readable description of the genome layout.

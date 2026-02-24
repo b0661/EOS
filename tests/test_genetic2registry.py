@@ -2,11 +2,14 @@
 
 Covers: DeviceRegistry registration, retrieval, type filtering,
 reset_all, and error handling.
+
+Changes from previous version:
+- SimpleBattery() constructor: prediction_hours -> num_steps
 """
 
 import numpy as np
 import pytest
-from fixtures.genetic2fixtures import FixedLoad, SimpleBattery, SimplePV
+from fixtures.geneti2fixtures import FixedLoad, SimpleBattery, SimplePV
 
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
 
@@ -93,8 +96,7 @@ class TestDeviceRegistryRetrieval:
         reg.register(SimpleBattery("bat1"))
         reg.register(SimpleBattery("bat2"))
         reg.register(SimplePV("pv1", np.zeros(24)))
-        ids = reg.device_ids()
-        assert set(ids) == {"bat1", "bat2", "pv1"}
+        assert set(reg.device_ids()) == {"bat1", "bat2", "pv1"}
 
     def test_device_ids_preserves_registration_order(self):
         reg = DeviceRegistry()
@@ -127,12 +129,11 @@ class TestDeviceRegistryTypeFiltering:
     def test_all_of_type_empty_if_none_match(self):
         reg = DeviceRegistry()
         reg.register(SimpleBattery("bat1"))
-        result = list(reg.all_of_type(SimplePV))
-        assert result == []
+        assert list(reg.all_of_type(SimplePV)) == []
 
     def test_all_of_type_includes_subclasses(self):
-        """all_of_type(StorageDevice) should yield SimpleBattery instances."""
-        from akkudoktoreos.devices.genetic2.base import StorageDevice
+        """all_of_type(StorageDevice) yields SimpleBattery instances."""
+        from akkudoktoreos.devices.base import StorageDevice
         reg = DeviceRegistry()
         reg.register(SimpleBattery("bat1"))
         reg.register(SimplePV("pv1", np.zeros(24)))
@@ -144,19 +145,17 @@ class TestDeviceRegistryTypeFiltering:
         reg = DeviceRegistry()
         reg.register(SimpleBattery("bat1"))
         reg.register(SimplePV("pv1", np.zeros(24)))
-        all_devs = list(reg.all_devices())
-        assert len(all_devs) == 2
+        assert len(list(reg.all_devices())) == 2
 
 
 class TestDeviceRegistryReset:
-    """reset_all() resets every device."""
+    """reset_all() resets every device's physical state."""
 
     def test_reset_all_restores_battery_soc(self):
         reg = DeviceRegistry()
         bat = SimpleBattery("bat1", initial_soc_pct=20.0)
         reg.register(bat)
 
-        # Manually deplete SoC
         bat._soc_wh = 0.0
         assert bat.current_soc_percentage() == pytest.approx(0.0)
 
@@ -176,3 +175,17 @@ class TestDeviceRegistryReset:
 
         assert bat1.current_soc_percentage() == pytest.approx(30.0)
         assert bat2.current_soc_percentage() == pytest.approx(80.0)
+
+    def test_reset_does_not_clear_stored_genome(self):
+        """store_genome() must survive reset() so the schedule can be re-decoded."""
+        from datetime import timedelta
+        reg = DeviceRegistry()
+        bat = SimpleBattery("bat1", num_steps=4)
+        reg.register(bat)
+
+        raw = np.array([2.0, 2.0, 1.0, 0.0])
+        bat.store_genome(raw)
+        reg.reset_all()
+
+        # Stored genome must still be retrievable after reset
+        np.testing.assert_array_equal(bat.get_stored_genome(), raw)
