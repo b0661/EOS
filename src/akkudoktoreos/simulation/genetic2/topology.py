@@ -87,7 +87,7 @@ class TopologyValidator:
         # ------------------------------------------------------------------
         # Per-device and per-port validation
         # ------------------------------------------------------------------
-        for device in devices.all_devices():
+        for device in devices:
             seen_port_ids: set[str] = set()
 
             for port in device.ports:

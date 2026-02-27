@@ -186,7 +186,7 @@ class EnergySimulationEngine:
         self._objective_index: dict[str, int] = {}
         self._num_objectives: int = 0
 
-        TopologyValidator.validate(registry, buses)
+        TopologyValidator.validate(registry.all_devices(), buses)
 
     def setup_run(self, inputs: EnergySimulationInput) -> None:
         """Configure the engine for a new optimization run.
