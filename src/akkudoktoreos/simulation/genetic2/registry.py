@@ -6,7 +6,7 @@ Devices are registered once and retrieved by ID or type throughout the simulatio
 
 from typing import Iterator, Type, TypeVar
 
-from akkudoktoreos.devices.genetic2.base import EnergyDevice
+from akkudoktoreos.devices.devicesabc import EnergyDevice
 
 T = TypeVar("T")
 
@@ -138,14 +138,6 @@ class DeviceRegistry:
             EnergyDevice: Each registered device.
         """
         yield from self._devices.values()
-
-    def reset_all(self) -> None:
-        """Reset all registered devices to their initial state.
-
-        Called by the engine before each simulation run.
-        """
-        for device in self._devices.values():
-            device.reset()
 
     def device_ids(self) -> list[str]:
         """Return all registered device IDs in registration order.

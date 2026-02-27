@@ -341,8 +341,8 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
             operation["genetic_dc_charge_factor"].append(dc_charge_hour)
             operation["genetic_discharge_allowed_factor"].append(discharge_allowed_hour)
             for mode in BatteryOperationMode:
-                mode_key = f"battery1_{mode.lower()}_op_mode"
-                factor_key = f"battery1_{mode.lower()}_op_factor"
+                mode_key = f"battery1_{str(mode).lower()}_op_mode"
+                factor_key = f"battery1_{str(mode).lower()}_op_factor"
                 if mode_key not in operation.keys():
                     operation[mode_key] = []
                     operation[factor_key] = []
@@ -372,8 +372,8 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
                 # operation modes
                 operation_mode = BatteryOperationMode.IDLE
                 for mode in BatteryOperationMode:
-                    mode_key = f"{self.eauto_obj.device_id}_{mode.lower()}_op_mode"
-                    factor_key = f"{self.eauto_obj.device_id}_{mode.lower()}_op_factor"
+                    mode_key = f"{self.eauto_obj.device_id}_{str(mode).lower()}_op_mode"
+                    factor_key = f"{self.eauto_obj.device_id}_{str(mode).lower()}_op_factor"
                     if mode == operation_mode:
                         solution[mode_key] = [1.0] * n_points
                         solution[factor_key] = [1.0] * n_points
@@ -397,8 +397,8 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
                         rate, 0.0, False
                     )
                     for mode in BatteryOperationMode:
-                        mode_key = f"{self.eauto_obj.device_id}_{mode.lower()}_op_mode"
-                        factor_key = f"{self.eauto_obj.device_id}_{mode.lower()}_op_factor"
+                        mode_key = f"{self.eauto_obj.device_id}_{str(mode).lower()}_op_mode"
+                        factor_key = f"{self.eauto_obj.device_id}_{str(mode).lower()}_op_factor"
                         if mode_key not in operation.keys():
                             operation[mode_key] = []
                             operation[factor_key] = []
@@ -553,7 +553,7 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
         )
 
         # Add battery instructions (fill rate based control)
-        last_operation_mode: Optional[str] = None
+        last_operation_mode: Optional[BatteryOperationMode] = None
         last_operation_mode_factor: Optional[float] = None
         resource_id = "battery1"
         # ac_charge, dc_charge, discharge_allowed start at hour 0 of start day

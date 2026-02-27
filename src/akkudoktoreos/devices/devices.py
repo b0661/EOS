@@ -1,4 +1,30 @@
-"""General configuration settings for simulated devices for optimization."""
+"""General configuration settings for simulated devices.
+
+Concepts
+--------
+1. **Pydantic Config Models (mutable, user-facing)**
+   - Read, validate, and document user-provided configuration.
+   - Each device type has a corresponding Config model.
+   - Multiple devices of the same type are represented as a list in DeviceConfig.
+
+2. **Immutable Domain Specs (frozen, GA-usable)**
+   - Created via `to_domain()` methods on Config models.
+   - Immutable and hashable for caching and GA memoization.
+   - Carry `device_id` for mapping within the simulation engine.
+
+3. **Top-level DeviceConfig**
+   - Aggregates all device configs.
+   - Provides `to_domain()` to return a dict of all devices keyed by `device_id`.
+   - Supports validation and type safety for multiple devices.
+
+Usage
+-----
+1. Create or load DeviceConfig (e.g., from YAML/JSON).
+2. Pydantic validates all fields and constraints.
+3. Call `to_domain()` to produce immutable specs.
+4. Use the specs for device instantiation in the EnergySimulationEngine
+   and for GA optimization.
+"""
 
 import json
 import re
@@ -19,6 +45,18 @@ from akkudoktoreos.utils.datetimeutil import DateTime, to_datetime
 
 # Default charge rates for battery
 BATTERY_DEFAULT_CHARGE_RATES: list[float] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+
+class DevicesBaseSettings(SettingsBaseModel):
+    """Base devices setting."""
+
+    device_id: str = Field(
+        default="<unknown>",
+        json_schema_extra={
+            "description": "ID of device",
+            "examples": ["battery1", "ev1", "inverter1", "dishwasher"],
+        },
+    )
 
 
 class BatteriesCommonSettings(DevicesBaseSettings):

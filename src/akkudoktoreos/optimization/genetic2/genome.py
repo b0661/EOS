@@ -1,252 +1,202 @@
-"""Genome assembly and dispatch for the optimizer.
+"""Genome definitions for the genetic optimisation framework.
 
-The GenomeAssembler is the contract between the optimizer and the devices.
-Devices declare their genome needs via ``genome_requirements()``; the assembler
-assigns non-overlapping slices and handles dispatch back to devices before
-each simulation run.
+This module defines immutable metadata structures describing how a device
+maps into the global optimiser genome vector, and the assembler that
+builds the global layout from per-device requirements.
 
-This means:
-- The optimizer only sees a flat array of numbers.
-- Devices only see their own slice.
-- Adding a new device automatically extends the genome — no optimizer changes needed.
+``GenomeSlice``
+    Describes where a device's genes live inside the global genome and
+    what bounds apply. Contains no actual gene values.
+
+``AssembledGenome``
+    The immutable result of assembly: total genome size, per-device slice
+    definitions keyed by ``device_id``, and global bound vectors.
+
+``GenomeAssembler``
+    Runs exactly once during optimiser setup:
+
+    1. Collects genome requirements from all devices via
+       ``device.genome_requirements()``.
+    2. Assigns non-overlapping index ranges in device registration order.
+    3. Builds global lower/upper bound vectors (default ``-inf`` / ``+inf``
+       where a device declares no bound).
+    4. Exposes helpers to extract per-device slices from a global genome
+       batch of shape ``(population_size, horizon)``.
+
+Slices are keyed by ``device_id`` (``str``) throughout, consistent with
+``DeviceRegistry`` and ``BatchSimulationState``, and avoiding the need
+for ``EnergyDevice`` instances to be hashable.
 """
 
-from datetime import timedelta
+from __future__ import annotations
+
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from akkudoktoreos.devices.genetic2.base import EnergyDevice, GenomeSlice
-from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
+if TYPE_CHECKING:
+    from akkudoktoreos.devices.devicesabc import EnergyDevice
+
+
+@dataclass(frozen=True, slots=True)
+class GenomeSlice:
+    """Immutable descriptor for one device's segment of the global genome.
+
+    A ``GenomeSlice`` carries only structural metadata — it never holds
+    actual gene values.
+
+    Attributes:
+        start: Inclusive start index inside the global genome vector.
+        size: Number of genes assigned to this device.
+        lower_bound: Per-gene lower bounds, shape ``(size,)``, or ``None``
+            if no lower bound constraint applies.
+        upper_bound: Per-gene upper bounds, shape ``(size,)``, or ``None``
+            if no upper bound constraint applies.
+    """
+
+    start: int
+    size: int
+    lower_bound: np.ndarray | None = None
+    upper_bound: np.ndarray | None = None
+
+    @property
+    def end(self) -> int:
+        """Exclusive end index of this slice (``start + size``)."""
+        return self.start + self.size
+
+    def extract(self, genome: np.ndarray) -> np.ndarray:
+        """Extract this device's genes from a genome array.
+
+        Supports both a flat global genome vector and a population batch:
+
+        - 1-D input ``(total_genome_size,)`` → returns ``(size,)``
+        - 2-D input ``(population_size, total_genome_size)`` → returns
+          ``(population_size, size)``
+
+        Args:
+            genome: Global genome array, either 1-D or 2-D.
+
+        Returns:
+            View into ``genome`` corresponding to this slice.
+        """
+        if genome.ndim == 1:
+            return genome[self.start : self.end]
+        return genome[:, self.start : self.end]
+
+
+@dataclass(frozen=True, slots=True)
+class AssembledGenome:
+    """Immutable result of genome assembly.
+
+    Produced once by ``GenomeAssembler.assemble()`` and reused for the
+    entire optimisation run.
+
+    Attributes:
+        total_size: Total number of genes in the global genome vector.
+        slices: Mapping of ``device_id`` to the assigned ``GenomeSlice``.
+            Devices that returned ``None`` or size-zero requirements from
+            ``genome_requirements()`` are absent from this mapping.
+        lower_bounds: Global lower bound vector, shape ``(total_size,)``.
+            Genes with no declared bound are set to ``-inf``.
+        upper_bounds: Global upper bound vector, shape ``(total_size,)``.
+            Genes with no declared bound are set to ``+inf``.
+    """
+
+    total_size: int
+    slices: dict[str, GenomeSlice]
+    lower_bounds: np.ndarray
+    upper_bounds: np.ndarray
 
 
 class GenomeAssembler:
-    """Builds, validates, and dispatches optimizer genomes from device requirements.
+    """Assembles per-device genome requirements into a single global genome.
 
-    At construction, the assembler queries every registered device for its
-    genome requirements and assigns contiguous, non-overlapping slices.
-    The total genome is the concatenation of all device slices in device
-    registration order.
-
-    This class is load-bearing — a slicing bug here corrupts every device's
-    schedule simultaneously and is very hard to diagnose. The design therefore
-    prioritizes validation and clear error messages over performance.
-
-    Args:
-        registry (DeviceRegistry): Registry of all devices participating
-            in optimization. Devices with ``genome_requirements() == None``
-            are registered but get no genome slice.
-
-    Example:
-        >>> assembler = GenomeAssembler(registry)
-        >>> print(assembler.total_size)
-        96
-        >>> lows, highs = assembler.bounds()
-        >>> genome = np.random.randint(lows, highs)
-        >>> assembler.dispatch(genome, registry)  # devices receive their slices
+    Instantiate once and call ``assemble()`` during optimiser setup.
+    The resulting ``AssembledGenome`` is immutable and safe to reuse
+    across all generations of the same run.
     """
 
-    def __init__(
-        self,
-        registry: DeviceRegistry,
-        num_steps: int = 24,
-        step_interval: "timedelta | None" = None,
-    ) -> None:
-        # Map device_id -> (start_index, end_index) in the flat genome
-        self._slices: dict[str, tuple[int, int]] = {}
-        # Ordered list of GenomeSlice declarations (for bounds and validation)
-        self._requirements: list[GenomeSlice] = []
-        # Devices that have genome requirements (in registration order)
-        self._genome_devices: list[str] = []
-        self._num_steps = num_steps
-        from datetime import timedelta as _td
+    def assemble(self, devices: Iterable[EnergyDevice]) -> AssembledGenome:
+        """Assemble genome slices for all participating devices.
 
-        self._step_interval = step_interval or _td(hours=1)
+        Iterates over ``devices`` in order, calls ``genome_requirements()``
+        on each, and assigns non-overlapping index ranges. Devices that
+        return ``None`` or a zero-size slice are skipped and will be absent
+        from ``AssembledGenome.slices``.
 
-        offset = 0
-        for device in registry.all_of_type(EnergyDevice):
-            req = device.genome_requirements(
-                num_steps=self._num_steps,
-                step_interval=self._step_interval,
-            )
-            if req is None:
+        Args:
+            devices: Devices participating in the optimisation. Iterated
+                in registration order, which determines gene ordering in
+                the global genome.
+
+        Returns:
+            Immutable ``AssembledGenome`` describing the full genome layout.
+        """
+        slices: dict[str, GenomeSlice] = {}
+        cursor = 0
+
+        for device in devices:
+            requirement = device.genome_requirements()
+
+            if requirement is None or requirement.size == 0:
                 continue
-            if req.size <= 0:
-                raise ValueError(
-                    f"Device '{device.device_id}': genome_requirements().size "
-                    f"must be > 0, got {req.size}."
-                )
-            self._slices[device.device_id] = (offset, offset + req.size)
-            self._requirements.append(req)
-            self._genome_devices.append(device.device_id)
-            offset += req.size
 
-        self.total_size: int = offset
-        """Total number of genome slots across all devices."""
-
-    def dispatch(self, genome: np.ndarray, registry: DeviceRegistry) -> None:
-        """Slice the genome and send each slice to its device.
-
-        Called once per simulation run before ``EnergySimulationEngine.simulate()``.
-        Each device receives exactly the slice it declared in
-        ``genome_requirements()``, stored via ``device.store_genome()``.
-        The engine subsequently calls ``device.apply_genome(stored_slice, step_times)``
-        to trigger schedule decoding together with the step-time schedule.
-
-        Args:
-            genome (np.ndarray): Flat genome array of length ``total_size``.
-            registry (DeviceRegistry): Registry containing all devices.
-                Must be the same registry used to construct this assembler.
-
-        Raises:
-            ValueError: If genome length does not match ``total_size``.
-            ValueError: If any slice violates the device's declared bounds.
-            KeyError: If a device that declared requirements is no longer
-                in the registry.
-        """
-        if len(genome) != self.total_size:
-            raise ValueError(
-                f"Genome length {len(genome)} does not match expected "
-                f"{self.total_size} (sum of all device requirements)."
+            slices[device.device_id] = GenomeSlice(
+                start=cursor,
+                size=requirement.size,
+                lower_bound=requirement.lower_bound,
+                upper_bound=requirement.upper_bound,
             )
+            cursor += requirement.size
 
-        for device_id, (start, end) in self._slices.items():
-            device = registry.get(device_id)
-            genome_slice = genome[start:end]
+        total_size = cursor
 
-            # Validate slice against declared bounds before dispatching
-            req = self._requirement_for(device_id)
-            req.validate(genome_slice)
+        # Build global bound vectors; default to unconstrained.
+        lower_bounds = np.full(total_size, -np.inf)
+        upper_bounds = np.full(total_size, np.inf)
 
-            device.store_genome(genome_slice)
+        for slc in slices.values():
+            if slc.lower_bound is not None:
+                lower_bounds[slc.start : slc.end] = slc.lower_bound
+            if slc.upper_bound is not None:
+                upper_bounds[slc.start : slc.end] = slc.upper_bound
 
-    def get_slice(self, device_id: str, genome: np.ndarray) -> np.ndarray:
-        """Extract a specific device's slice from a genome array.
+        return AssembledGenome(
+            total_size=total_size,
+            slices=slices,
+            lower_bounds=lower_bounds,
+            upper_bounds=upper_bounds,
+        )
 
-        Useful for inspecting or mutating a single device's genome portion
-        without dispatching the full genome.
+    @staticmethod
+    def extract_device_genome(
+        genome: np.ndarray,
+        device_id: str,
+        assembled: AssembledGenome,
+    ) -> np.ndarray:
+        """Extract a device's genome slice from a global genome array.
 
-        Args:
-            device_id (str): Device whose slice to extract.
-            genome (np.ndarray): Full genome array.
-
-        Returns:
-            np.ndarray: View into genome for this device's slice.
-
-        Raises:
-            KeyError: If device has no genome slice (not registered or no requirements).
-            ValueError: If genome is too short.
-        """
-        if device_id not in self._slices:
-            raise KeyError(
-                f"Device '{device_id}' has no genome slice. "
-                "Either it is not registered or genome_requirements() returned None."
-            )
-        start, end = self._slices[device_id]
-        if len(genome) < end:
-            raise ValueError(
-                f"Genome length {len(genome)} is too short to contain "
-                f"slice [{start}:{end}] for device '{device_id}'."
-            )
-        return genome[start:end]
-
-    def set_slice(self, device_id: str, genome: np.ndarray, values: np.ndarray) -> None:
-        """Write values into a specific device's slice of the genome.
+        Supports both flat and population-batch genomes — see
+        ``GenomeSlice.extract`` for shape details.
 
         Args:
-            device_id (str): Target device.
-            genome (np.ndarray): Full genome array to modify in place.
-            values (np.ndarray): Values to write. Must match slice length.
-
-        Raises:
-            KeyError: If device has no genome slice.
-            ValueError: If values length or bounds are incorrect.
-        """
-        if device_id not in self._slices:
-            raise KeyError(f"Device '{device_id}' has no genome slice.")
-        req = self._requirement_for(device_id)
-        req.validate(values)
-        start, end = self._slices[device_id]
-        genome[start:end] = values
-
-    def bounds(self) -> tuple[list[float], list[float]]:
-        """Return lower and upper bounds for the full genome.
-
-        Used by the optimizer to set up mutation and initialization operators.
-        Bounds are repeated once per genome slot, so length equals ``total_size``.
+            genome: Global genome array, shape ``(total_size,)`` or
+                ``(population_size, total_size)``.
+            device_id: ``device_id`` of the device whose genes to extract.
+            assembled: Assembly result from ``GenomeAssembler.assemble()``.
 
         Returns:
-            tuple[list[float], list[float]]: (lower_bounds, upper_bounds).
-                Both lists have length ``total_size``.
+            The device's gene array. Returns an empty array of shape
+            ``(0,)`` or ``(population_size, 0)`` if the device has no
+            slice in the assembled genome.
         """
-        lows: list[float] = []
-        highs: list[float] = []
-        for req in self._requirements:
-            lows.extend([req.low] * req.size)
-            highs.extend([req.high] * req.size)
-        return lows, highs
+        slc = assembled.slices.get(device_id)
 
-    def random_genome(self, rng: np.random.Generator | None = None) -> np.ndarray:
-        """Generate a random valid genome respecting all device bounds.
+        if slc is None:
+            if genome.ndim == 1:
+                return np.empty(0, dtype=float)
+            return np.empty((genome.shape[0], 0), dtype=float)
 
-        Useful for initializing optimizer populations.
-
-        Args:
-            rng (np.random.Generator | None): Optional random generator for
-                reproducibility. Uses ``np.random.default_rng()`` if None.
-
-        Returns:
-            np.ndarray: Random genome of length ``total_size``.
-        """
-        if rng is None:
-            rng = np.random.default_rng()
-        lows, highs = self.bounds()
-        genome = np.zeros(self.total_size)
-        for req in self._requirements:
-            start, end = self._slices[req.device_id]
-            if req.dtype == int:
-                genome[start:end] = rng.integers(int(req.low), int(req.high) + 1, size=req.size)
-            else:
-                genome[start:end] = rng.uniform(req.low, req.high, size=req.size)
-        return genome
-
-    def describe(self) -> str:
-        """Return a human-readable description of the genome layout.
-
-        Useful for debugging genome structure and verifying device slice
-        assignments are correct.
-
-        Returns:
-            str: Multi-line description of each device's genome slice.
-        """
-        if not self._requirements:
-            return "GenomeAssembler: no devices with genome requirements."
-        lines = [f"GenomeAssembler: total_size={self.total_size}"]
-        for req in self._requirements:
-            start, end = self._slices[req.device_id]
-            lines.append(
-                f"  [{start:4d}:{end:4d}] {req.device_id} "
-                f"(size={req.size}, dtype={req.dtype.__name__}, "
-                f"range=[{req.low}, {req.high}])"
-                + (f"\n           {req.description}" if req.description else "")
-            )
-        return "\n".join(lines)
-
-    def _requirement_for(self, device_id: str) -> GenomeSlice:
-        """Look up the GenomeSlice declaration for a device.
-
-        Args:
-            device_id (str): Device ID to look up.
-
-        Returns:
-            GenomeSlice: The declaration for this device.
-
-        Raises:
-            KeyError: If no requirement is found.
-        """
-        for req in self._requirements:
-            if req.device_id == device_id:
-                return req
-        raise KeyError(f"No genome requirement found for device '{device_id}'.")
-
-    def __repr__(self) -> str:
-        return f"GenomeAssembler(total_size={self.total_size}, devices={self._genome_devices})"
+        return slc.extract(genome)
