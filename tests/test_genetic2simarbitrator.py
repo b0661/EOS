@@ -56,9 +56,10 @@ Covers:
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import numpy as np
 import pytest
-from dataclasses import FrozenInstanceError
 
 from akkudoktoreos.simulation.genetic2.arbitrator import (
     ArbitrationPriority,
@@ -69,7 +70,6 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
     PortRequest,
     VectorizedBusArbitrator,
 )
-
 
 # ============================================================
 # Helpers

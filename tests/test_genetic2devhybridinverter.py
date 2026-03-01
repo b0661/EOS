@@ -149,7 +149,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from pendulum import Duration
 
 from akkudoktoreos.core.emplan import OMBCInstruction

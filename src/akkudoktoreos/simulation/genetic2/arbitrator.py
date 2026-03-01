@@ -64,7 +64,6 @@ from typing import Sequence
 
 import numpy as np
 
-
 # ============================================================
 # Arbitration Enums
 # ============================================================
@@ -78,9 +77,9 @@ class ArbitrationPriority(IntEnum):
     """
 
     CRITICAL = 0  # Life-safety or contractual must-run loads
-    HIGH = 1      # Must-charge windows, heating demand
-    NORMAL = 2    # Standard battery cycling
-    LOW = 3       # Opportunistic charging, deferrable loads
+    HIGH = 1  # Must-charge windows, heating demand
+    NORMAL = 2  # Standard battery cycling
+    LOW = 3  # Opportunistic charging, deferrable loads
 
 
 # ============================================================
@@ -114,8 +113,8 @@ class PortRequest:
     """
 
     port_index: int
-    energy_wh: np.ndarray        # shape: (population_size, horizon)
-    min_energy_wh: np.ndarray    # shape: (population_size, horizon)
+    energy_wh: np.ndarray  # shape: (population_size, horizon)
+    min_energy_wh: np.ndarray  # shape: (population_size, horizon)
     is_slack: bool = False
 
 
@@ -142,7 +141,7 @@ class PortGrant:
     """
 
     port_index: int
-    granted_wh: np.ndarray       # shape: (population_size, horizon)
+    granted_wh: np.ndarray  # shape: (population_size, horizon)
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,37 +276,32 @@ class VectorizedBusArbitrator:
         # ----------------------------------------------------
 
         for bus in range(self._topology.num_buses):
-            bus_mask = bus_indices == bus        # (num_ports,) bool
+            bus_mask = bus_indices == bus  # (num_ports,) bool
             if not np.any(bus_mask):
                 continue
 
             # Identify slack and non-slack port positions within bus_mask.
             # bus_mask selects the relevant rows from the flat port arrays.
-            bus_is_slack = is_slack[bus_mask]    # (n_bus_ports,) bool
+            bus_is_slack = is_slack[bus_mask]  # (n_bus_ports,) bool
             has_slack = np.any(bus_is_slack)
 
-            bus_energy = energy[bus_mask]        # (n_bus_ports, pop, horizon)
+            bus_energy = energy[bus_mask]  # (n_bus_ports, pop, horizon)
             bus_min = min_energy[bus_mask]
 
             # ---- Phase 1: non-slack proportional settlement ----
 
             # Boolean masks over all bus ports — same shape as bus_energy.
-            producers = bus_energy < 0           # (n_bus_ports, pop, horizon)
+            producers = bus_energy < 0  # (n_bus_ports, pop, horizon)
 
             # Non-slack consumers only participate in phase 1.
-            non_slack_rows = ~bus_is_slack       # (n_bus_ports,) bool
-            non_slack_consumers = (
-                (bus_energy > 0)
-                & non_slack_rows[:, np.newaxis, np.newaxis]
-            )
+            non_slack_rows = ~bus_is_slack  # (n_bus_ports,) bool
+            non_slack_consumers = (bus_energy > 0) & non_slack_rows[:, np.newaxis, np.newaxis]
 
             # Total supply from all producers on this bus → (pop, horizon)
             total_supply = -np.sum(np.where(producers, bus_energy, 0.0), axis=0)
 
             # Total non-slack demand → (pop, horizon)
-            total_non_slack_demand = np.sum(
-                np.where(non_slack_consumers, bus_energy, 0.0), axis=0
-            )
+            total_non_slack_demand = np.sum(np.where(non_slack_consumers, bus_energy, 0.0), axis=0)
 
             # Supply ratio for non-slack consumers.
             # Default to 1.0 where demand is zero (no over-grant risk).
@@ -323,9 +317,7 @@ class VectorizedBusArbitrator:
             ratio = supply_ratio[np.newaxis]
 
             # Non-slack consumer grants — proportionally scaled.
-            non_slack_consumer_grant = np.where(
-                non_slack_consumers, bus_energy * ratio, 0.0
-            )
+            non_slack_consumer_grant = np.where(non_slack_consumers, bus_energy * ratio, 0.0)
 
             # Apply min_energy floor to non-slack consumers only.
             non_slack_consumer_grant = np.where(
@@ -371,8 +363,8 @@ class VectorizedBusArbitrator:
                 # vectorised with no Python loop over individuals.
 
                 slack_idx = np.where(bus_is_slack)[0][0]
-                slack_max_absorb = bus_energy[slack_idx]    # (pop, horizon), ≥ 0
-                slack_max_inject = -bus_min[slack_idx]      # (pop, horizon), ≥ 0  (sign flip)
+                slack_max_absorb = bus_energy[slack_idx]  # (pop, horizon), ≥ 0
+                slack_max_inject = -bus_min[slack_idx]  # (pop, horizon), ≥ 0  (sign flip)
 
                 # Raw deficit: how much local producers are short of non-slack demand.
                 deficit = np.maximum(0.0, total_non_slack_demand - total_supply)
@@ -381,7 +373,7 @@ class VectorizedBusArbitrator:
                 slack_injection = np.minimum(deficit, slack_max_inject)  # (pop, horizon) ≥ 0
 
                 # Effective supply seen by non-slack consumers.
-                effective_supply = total_supply + slack_injection        # (pop, horizon)
+                effective_supply = total_supply + slack_injection  # (pop, horizon)
 
                 # Re-run proportional settlement with effective supply.
                 eff_ratio = np.divide(
@@ -412,7 +404,7 @@ class VectorizedBusArbitrator:
                 slack_absorb = np.minimum(surplus, slack_max_absorb)
 
                 # Net slack grant: absorb is positive, injection is negative.
-                slack_grant = slack_absorb - slack_injection             # (pop, horizon)
+                slack_grant = slack_absorb - slack_injection  # (pop, horizon)
 
                 # Update bus_granted with the corrected non-slack and slack grants.
                 bus_granted = np.where(
@@ -434,7 +426,7 @@ class VectorizedBusArbitrator:
         for idx, owner in enumerate(port_owner):
             port_grant = PortGrant(
                 port_index=port_indices[idx],
-                granted_wh=granted[idx],   # (population_size, horizon)
+                granted_wh=granted[idx],  # (population_size, horizon)
             )
             device_map.setdefault(owner, []).append(port_grant)
 

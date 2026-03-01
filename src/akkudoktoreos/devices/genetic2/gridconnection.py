@@ -71,7 +71,6 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
 from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.utils.datetimeutil import DateTime
 
-
 # ============================================================
 # Immutable parameter dataclass
 # ============================================================
@@ -85,7 +84,7 @@ class GridConnectionParam:
     inside the genetic algorithm. Carries no mutable state or simulation
     logic.
 
-    Attributes
+    Attributes:
     ----------
     device_id :
         Unique identifier for this device instance.
@@ -164,7 +163,7 @@ class GridConnectionBatchState:
     Created fresh each generation by ``create_batch_state``.
     Never shared between devices or between generations.
 
-    Attributes
+    Attributes:
     ----------
     granted_wh :
         Net AC energy granted by the arbitrator per individual per step
@@ -179,7 +178,7 @@ class GridConnectionBatchState:
         Ordered ``DateTime`` timestamps, length == horizon.
     """
 
-    granted_wh: np.ndarray          # (population_size, horizon)  float64
+    granted_wh: np.ndarray  # (population_size, horizon)  float64
     population_size: int
     horizon: int
     step_times: tuple[DateTime, ...]
@@ -331,9 +330,7 @@ class GridConnectionDevice(EnergyDevice):
             to zeros and ``step_times`` forwarded from the last
             ``setup_run`` call.
         """
-        assert self._step_times is not None, (
-            "Call setup_run() before create_batch_state()."
-        )
+        assert self._step_times is not None, "Call setup_run() before create_batch_state()."
         return GridConnectionBatchState(
             granted_wh=np.zeros((population_size, horizon), dtype=np.float64),
             population_size=population_size,
@@ -381,9 +378,7 @@ class GridConnectionDevice(EnergyDevice):
             ``DeviceRequest`` covering the full grid connection window
             for the entire population batch.
         """
-        assert self._step_interval is not None, (
-            "Call setup_run() before build_device_request()."
-        )
+        assert self._step_interval is not None, "Call setup_run() before build_device_request()."
         p = self.param
         step_h = self._step_interval / 3600.0
         pop = state.population_size
@@ -465,11 +460,9 @@ class GridConnectionDevice(EnergyDevice):
             where ``num_objectives`` is 1 normally or 2 when
             ``include_peak_power_objective`` is ``True``.
         """
-        assert self._step_interval is not None, (
-            "Call setup_run() before compute_cost()."
-        )
+        assert self._step_interval is not None, "Call setup_run() before compute_cost()."
         p = self.param
-        granted = state.granted_wh          # (pop, horizon)
+        granted = state.granted_wh  # (pop, horizon)
         step_h = self._step_interval / 3600.0
         horizon = state.horizon
 
@@ -486,25 +479,22 @@ class GridConnectionDevice(EnergyDevice):
         )
 
         # Separate import (>0) and export (>0 in magnitude) energy.
-        import_wh = np.maximum(0.0, granted)        # (pop, horizon)
-        export_wh = np.maximum(0.0, -granted)       # (pop, horizon)
+        import_wh = np.maximum(0.0, granted)  # (pop, horizon)
+        export_wh = np.maximum(0.0, -granted)  # (pop, horizon)
 
         # Broadcast (horizon,) price over population axis → (pop, horizon),
         # then sum over horizon to get per-individual net cost.
         energy_cost = (
-            (import_wh / 1000.0) * import_price
-            - (export_wh / 1000.0) * export_price
-        ).sum(axis=1)                               # (pop,)
+            (import_wh / 1000.0) * import_price - (export_wh / 1000.0) * export_price
+        ).sum(axis=1)  # (pop,)
 
         if not p.include_peak_power_objective:
-            return energy_cost[:, np.newaxis]       # (pop, 1)
+            return energy_cost[:, np.newaxis]  # (pop, 1)
 
         # Peak import power [kW]: max import-only power across the horizon.
-        peak_import_kw = (
-            np.maximum(0.0, granted).max(axis=1) / step_h / 1000.0
-        )                                           # (pop,)
+        peak_import_kw = np.maximum(0.0, granted).max(axis=1) / step_h / 1000.0  # (pop,)
 
-        return np.column_stack([energy_cost, peak_import_kw])   # (pop, 2)
+        return np.column_stack([energy_cost, peak_import_kw])  # (pop, 2)
 
     # ------------------------------------------------------------------
     # Instruction Extraction
