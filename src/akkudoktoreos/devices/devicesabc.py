@@ -19,7 +19,6 @@ because they are tightly coupled by the device identity contract:
 
 Design principles for parameter dataclasses
 -------------------------------------------
-
 - Fully immutable (``frozen=True`` dataclasses).
 - Fully hashable — safe for GA caching.
 - No mutable containers — tuples only, never lists or sets.
@@ -47,7 +46,7 @@ Each concrete ``EnergyDevice`` follows this lifecycle within the engine::
     6. apply_device_grant()   │
     7. compute_cost()        ─┘
 
-See ``EnergySimulationEngine`` in ``simulation/genetic2/engine.py`` for how the engine
+See ``EnergySimulationEngine`` in ``simulation_engine.py`` for how the engine
 orchestrates these steps across all devices.
 """
 
@@ -60,8 +59,10 @@ from typing import Any
 
 import numpy as np
 
+from akkudoktoreos.core.emplan import EnergyManagementInstruction
 from akkudoktoreos.optimization.genetic2.genome import GenomeSlice
 from akkudoktoreos.simulation.genetic2.arbitrator import DeviceGrant, DeviceRequest
+from akkudoktoreos.utils.datetimeutil import DateTime
 
 # ============================================================
 # Operation Mode Enums
@@ -458,16 +459,22 @@ class EnergyDevice(ABC):
     # Structure Phase
     # ==========================================================
 
-    def setup_run(self, step_times: tuple[float, ...], step_interval: float) -> None:
+    def setup_run(self, step_times: tuple[DateTime, ...], step_interval: float) -> None:
         """Configure the device for a new simulation run.
 
         Called once before ``genome_requirements`` at the start of each
         optimisation run. Implementations should store any derived quantities
         needed during batch evaluation (e.g. horizon length, step interval).
 
+        The ``step_times`` are ``DateTime`` objects so that devices can use
+        them directly as S2 ``execution_time`` values in
+        ``extract_instructions`` without conversion. They are also passed
+        into ``SingleStateBatchState.step_times`` so every lifecycle method
+        (including ``compute_cost``) can access them for time-of-use logic.
+
         Args:
-            step_times: Ordered tuple of simulation timestamps defining the
-                horizon. Length equals the genome horizon.
+            step_times: Ordered tuple of ``DateTime`` timestamps defining
+                the simulation horizon. Length equals the genome horizon.
             step_interval: Fixed time delta between consecutive steps [s].
         """
         raise NotImplementedError
@@ -613,6 +620,52 @@ class EnergyDevice(ABC):
         """
         raise NotImplementedError
 
+    # ==========================================================
+    # Instruction Extraction
+    # ==========================================================
+
+    def extract_instructions(
+        self,
+        state: Any,
+        individual_index: int,
+    ) -> list[EnergyManagementInstruction]:
+        """Extract S2 control instructions for one individual from the batch state.
+
+        Called after the full simulation pipeline has completed for a
+        population of size 1 containing the best individual. The state
+        reflects the repaired, arbitrated result for that individual.
+
+        Implementations slice row ``individual_index`` from the batch
+        state arrays and convert the per-step values into a list of
+        ``EnergyManagementInstruction`` objects — one per time step or
+        per mode change, depending on the device's S2 control type.
+
+        ``state.step_times`` provides the ordered ``DateTime`` timestamps
+        to use as ``execution_time`` fields on each instruction. No
+        conversion from float is needed.
+
+        Args:
+            state: Device batch state produced by ``create_batch_state``
+                and populated by the full simulation pipeline
+                (``apply_genome_batch`` → arbitration → ``apply_device_grant``).
+            individual_index: Row index into the batch. Pass ``0`` when the
+                state was produced from a single-individual population (the
+                normal case when called from
+                ``GeneticOptimizer.extract_best_instructions``).
+
+        Returns:
+            Ordered list of ``EnergyManagementInstruction`` objects covering
+            the full simulation horizon for this individual. May be one
+            instruction per step (e.g. PPBC ``PPBCScheduleInstruction``)
+            or a compressed list of one instruction per mode change (e.g.
+            OMBC ``OMBCInstruction``), at the device's discretion.
+
+        Raises:
+            NotImplementedError: Must be implemented by every concrete
+                device subclass.
+        """
+        raise NotImplementedError
+
 
 # ============================================================
 # Single-State Convenience Base
@@ -657,6 +710,7 @@ class SingleStateEnergyDevice(EnergyDevice):
 
     def __init__(self) -> None:
         super().__init__()
+        self._step_times: tuple[DateTime, ...] | None = None
         self._num_steps: int | None = None
         self._step_interval: float | None = None
 
@@ -664,13 +718,17 @@ class SingleStateEnergyDevice(EnergyDevice):
     # Structure Phase
     # ------------------------------------------------------------------
 
-    def setup_run(self, step_times: tuple[float, ...], step_interval: float) -> None:
-        """Store horizon length and step interval for use during batch simulation.
+    def setup_run(self, step_times: tuple[DateTime, ...], step_interval: float) -> None:
+        """Store horizon length, step interval, and step times for batch simulation.
 
         Args:
-            step_times: Ordered simulation timestamps.
+            step_times: Ordered ``DateTime`` timestamps. Stored as
+                ``_step_times`` and forwarded into every
+                ``SingleStateBatchState`` so all lifecycle methods can use
+                them (time-of-use pricing, S2 instruction construction, etc.).
             step_interval: Fixed time delta between steps [s].
         """
+        self._step_times = step_times
         self._num_steps = len(step_times)
         self._step_interval = step_interval
 
@@ -710,14 +768,19 @@ class SingleStateEnergyDevice(EnergyDevice):
             horizon: Number of simulation time steps.
 
         Returns:
-            ``SingleStateBatchState`` with a zeroed schedule and all
-            individual states set to ``initial_state()``.
+            ``SingleStateBatchState`` with a zeroed schedule, all
+            individual states set to ``initial_state()``, and
+            ``step_times`` populated from ``_step_times`` so that every
+            lifecycle method (``compute_cost``, ``extract_instructions``)
+            can access the simulation timestamps without any conversion.
         """
+        assert self._step_times is not None, "Call setup_run() before create_batch_state()."
         return SingleStateBatchState(
             schedule=np.zeros((population_size, horizon)),
             state=np.full(population_size, self.initial_state()),
             population_size=population_size,
             horizon=horizon,
+            step_times=self._step_times,
         )
 
     def apply_genome_batch(
@@ -757,16 +820,22 @@ class SingleStateEnergyDevice(EnergyDevice):
         Args:
             state: Device batch state. Modified in-place.
         """
-        assert self._step_interval is not None, "Call setup_run() before simulation."
+        step_interval = self._step_interval
+        if step_interval is None:
+            raise RuntimeError("Call setup_run() before simulation.")
 
         state.state[:] = self.initial_state()
 
-        for i in range(state.horizon):
-            state.schedule[:, i] = self.repair_batch(i, state.schedule[:, i], state.state)
-            state.state[:] = self.state_transition_batch(
-                state.state,
-                state.schedule[:, i],
-                self._step_interval,
+        horizon = state.horizon
+        schedule = state.schedule
+        internal_state = state.state
+
+        for i in range(horizon):
+            schedule[:, i] = self.repair_batch(i, schedule[:, i], internal_state)
+            internal_state[:] = self.state_transition_batch(
+                internal_state,
+                schedule[:, i],
+                step_interval,
             )
 
     # ------------------------------------------------------------------
@@ -793,7 +862,7 @@ class SingleStateEnergyDevice(EnergyDevice):
                 without needing to access the full state object.
 
         Returns:
-            Feasible power array of shape ``(population_size,)`` [W].
+            Feasible power array of shape ``(populati   on_size,)`` [W].
         """
         lower, upper = self.power_bounds()
         return np.clip(requested_power, lower, upper)
@@ -888,9 +957,15 @@ class SingleStateBatchState:
             final state at the end of the horizon.
         population_size: Number of individuals in this batch.
         horizon: Number of simulation time steps.
+        step_times: Ordered ``DateTime`` timestamps for each simulation
+            step. Length equals ``horizon``. Available to all lifecycle
+            methods — ``compute_cost`` can use them for time-of-use
+            pricing; ``extract_instructions`` uses them as S2
+            ``execution_time`` values.
     """
 
     schedule: np.ndarray  # (population_size, horizon)
     state: np.ndarray  # (population_size,)
     population_size: int
     horizon: int
+    step_times: tuple[DateTime, ...]  # length == horizon

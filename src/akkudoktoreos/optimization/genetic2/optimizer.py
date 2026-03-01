@@ -65,6 +65,7 @@ from typing import Any
 
 import numpy as np
 
+from akkudoktoreos.core.emplan import EnergyManagementInstruction
 from akkudoktoreos.optimization.genetic2.genome import AssembledGenome
 from akkudoktoreos.simulation.genetic2.engine import (
     EnergySimulationEngine,
@@ -296,6 +297,71 @@ class GeneticOptimizer:
             history=history,
             assembled=assembled,
         )
+
+    # ------------------------------------------------------------------
+    # Instruction extraction
+    # ------------------------------------------------------------------
+
+    def extract_best_instructions(
+        self,
+        result: OptimizationResult,
+        inputs: EnergySimulationInput,
+    ) -> dict[str, list[EnergyManagementInstruction]]:
+        """Run the engine once for the best individual and extract S2 instructions.
+
+        Re-evaluates the engine with a population of size 1 containing
+        ``result.best_genome``, then calls ``device.extract_instructions(state, 0)``
+        on every registered device. This avoids storing batch state across
+        generations and keeps the GA loop clean.
+
+        The engine must be in ``CREATED`` or ``STRUCTURE_FROZEN`` state
+        before calling this method — i.e. call this after ``optimize()``,
+        not during it. The engine is left in ``STRUCTURE_FROZEN`` state
+        after the call.
+
+        Args:
+            result: The ``OptimizationResult`` returned by ``optimize()``.
+                Provides ``best_genome`` and the ``assembled`` descriptor.
+            inputs: The same ``EnergySimulationInput`` used during
+                optimisation. Needed to call ``setup_run`` so the engine
+                reconstructs ``step_times`` in each device.
+
+        Returns:
+            ``dict[device_id, list[EnergyManagementInstruction]]`` — one
+            entry per registered device (including non-genome devices that
+            still have meaningful instructions, e.g. a fixed-schedule load).
+            Devices for which ``extract_instructions`` raises
+            ``NotImplementedError`` are silently omitted.
+        """
+        # Re-run the engine for a population of 1 using the best genome.
+        self._engine.setup_run(inputs)
+        self._engine.genome_requirements()  # transitions to STRUCTURE_FROZEN
+
+        # Build a single-individual genome dict from the flat best genome.
+        genome_dict: dict[str, np.ndarray] = {
+            device_id: result.best_genome[slc.start : slc.end].reshape(1, -1)
+            for device_id, slc in result.assembled.slices.items()
+        }
+
+        eval_result = self._engine.evaluate_population(genome_dict)
+        # eval_result.fitness shape: (1, num_objectives) — not used here.
+
+        # Retrieve the batch states the engine created for this single-individual run.
+        # The engine exposes them via the registry after evaluate_population.
+        batch_state = self._engine.last_batch_state  # see engine change below
+
+        instructions: dict[str, list[EnergyManagementInstruction]] = {}
+        for device in self._engine._registry.all_devices():
+            device_state = batch_state.device_states.get(device.device_id)
+            if device_state is None:
+                continue
+            try:
+                instrs = device.extract_instructions(device_state, individual_index=0)
+                instructions[device.device_id] = instrs
+            except NotImplementedError:
+                pass  # Device has not implemented extract_instructions yet — skip.
+
+        return instructions
 
     # ------------------------------------------------------------------
     # Genome assembly helpers

@@ -92,6 +92,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from akkudoktoreos.core.emplan import EnergyManagementInstruction, OMBCInstruction
 from akkudoktoreos.devices.devicesabc import (
     EnergyBus,
     EnergyCarrier,
@@ -120,6 +121,7 @@ from akkudoktoreos.simulation.genetic2.engine import (
     EnergySimulationInput,
 )
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
+from akkudoktoreos.utils.datetimeutil import to_datetime
 
 # ============================================================
 # Concrete minimal devices (same pattern as engine tests)
@@ -259,7 +261,7 @@ def make_engine(devices: list, horizon: int) -> EnergySimulationEngine:
 
 def make_inputs(horizon: int) -> EnergySimulationInput:
     return EnergySimulationInput(
-        step_times=tuple(float(i) for i in range(horizon)),
+        step_times=tuple(to_datetime(i * 3600) for i in range(horizon)),
         step_interval=STEP_INTERVAL,
     )
 
@@ -806,6 +808,121 @@ class TestGeneticOptimizerOptimize:
 
 
 # ============================================================
+# TestExtractBestInstructions
+# ============================================================
+
+class InstructionScheduleDevice(ScheduleDevice):
+    """ScheduleDevice that implements extract_instructions via OMBC.
+
+    Returns one OMBCInstruction per time step, using ``state.step_times``
+    for execution_time and the per-step power as the operation_mode_factor
+    (normalised to [0, 1] from [-limit, limit]).
+
+    This is deliberately simple — real devices would choose an S2 control
+    type appropriate to their physics. The important thing under test is that
+    ``state.step_times`` are available and correctly aligned with the schedule.
+    """
+
+    def extract_instructions(self, state, individual_index: int):
+        from akkudoktoreos.devices.devicesabc import SingleStateBatchState
+        s: SingleStateBatchState = state
+        schedule_row = s.schedule[individual_index]   # (horizon,) [W]
+        instructions = []
+        for power_w, dt in zip(schedule_row, s.step_times):
+            # Normalise power to [0, 1] — factor=0 means min power, 1 means max power
+            factor = float(np.clip((power_w + self._limit) / (2 * self._limit), 0.0, 1.0))
+            instructions.append(OMBCInstruction(
+                resource_id=self.device_id,
+                execution_time=dt,
+                operation_mode_id="power_mode",
+                operation_mode_factor=factor,
+            ))
+        return instructions
+
+
+class TestExtractBestInstructions:
+    """Tests for GeneticOptimizer.extract_best_instructions().
+
+    Covers:
+        - Returns dict keyed by device_id
+        - Only devices with extract_instructions implemented appear
+        - Instruction list length equals horizon
+        - execution_time of each instruction matches the corresponding step_time
+        - OMBCInstruction fields are valid (factor in [0, 1])
+        - SinkDevice (no genome, no extract_instructions) is absent from result
+        - Returns empty dict when no device implements extract_instructions
+    """
+
+    HORIZON = 4
+
+    @pytest.fixture()
+    def engine_and_inputs(self):
+        dev = InstructionScheduleDevice("s0", 0, limit=100.0)
+        sink = SinkDevice("c0", 1)
+        engine = make_engine([dev, sink], self.HORIZON)
+        inputs = make_inputs(self.HORIZON)
+        return engine, dev, inputs
+
+    @pytest.fixture()
+    def result_and_optimizer(self, engine_and_inputs):
+        engine, dev, inputs = engine_and_inputs
+        opt = make_optimizer(engine, pop=4, gens=3, seed=42)
+        result = opt.optimize(inputs)
+        return result, opt, inputs
+
+    def test_returns_dict(self, result_and_optimizer):
+        result, opt, inputs = result_and_optimizer
+        instructions = opt.extract_best_instructions(result, inputs)
+        assert isinstance(instructions, dict)
+
+    def test_keyed_by_device_id_of_implementing_device(self, result_and_optimizer):
+        result, opt, inputs = result_and_optimizer
+        instructions = opt.extract_best_instructions(result, inputs)
+        assert "s0" in instructions
+
+    def test_sink_device_absent_not_implemented(self, result_and_optimizer):
+        """SinkDevice raises NotImplementedError — it must be silently omitted."""
+        result, opt, inputs = result_and_optimizer
+        instructions = opt.extract_best_instructions(result, inputs)
+        assert "c0" not in instructions
+
+    def test_instruction_count_equals_horizon(self, result_and_optimizer):
+        result, opt, inputs = result_and_optimizer
+        instructions = opt.extract_best_instructions(result, inputs)
+        assert len(instructions["s0"]) == self.HORIZON
+
+    def test_execution_times_match_step_times(self, result_and_optimizer):
+        """Each instruction's execution_time must equal the corresponding step_time."""
+        result, opt, inputs = result_and_optimizer
+        instructions = opt.extract_best_instructions(result, inputs)
+        for instr, expected_dt in zip(instructions["s0"], inputs.step_times):
+            assert instr.execution_time == expected_dt
+
+    def test_instructions_are_ombc_type(self, result_and_optimizer):
+        result, opt, inputs = result_and_optimizer
+        instructions = opt.extract_best_instructions(result, inputs)
+        for instr in instructions["s0"]:
+            assert isinstance(instr, OMBCInstruction)
+
+    def test_operation_mode_factor_within_bounds(self, result_and_optimizer):
+        result, opt, inputs = result_and_optimizer
+        instructions = opt.extract_best_instructions(result, inputs)
+        for instr in instructions["s0"]:
+            assert 0.0 <= instr.operation_mode_factor <= 1.0
+
+    def test_empty_dict_when_no_device_implements(self):
+        """If no device implements extract_instructions, result is an empty dict."""
+        dev = ScheduleDevice("s0", 0, limit=100.0)   # base class raises NotImplementedError
+        sink = SinkDevice("c0", 1)
+        engine = make_engine([dev, sink], self.HORIZON)
+        inputs = make_inputs(self.HORIZON)
+        opt = make_optimizer(engine, pop=4, gens=2, seed=0)
+        result = opt.optimize(inputs)
+        instructions = opt.extract_best_instructions(result, inputs)
+        assert instructions == {}
+
+
+# ============================================================
 # TestRollingHorizonOptimizerInit
 # ============================================================
 
@@ -813,7 +930,7 @@ class TestRollingHorizonOptimizerInit:
     def _make_rho(self, window: int, roll: int) -> RollingHorizonOptimizer:
         dev = ScheduleDevice("s0", 0, limit=100.0)
         sink = SinkDevice("c0", 1)
-        all_times = tuple(float(i) for i in range(8))
+        all_times = tuple(to_datetime(i * 3600) for i in range(8))
         engine = make_engine([dev, sink], horizon=window)
         return RollingHorizonOptimizer(
             engine=engine,
@@ -861,7 +978,7 @@ class TestRollingHorizonOptimizerOptimize:
         total_steps = total_steps or self.TOTAL_STEPS
         window = window or self.WINDOW
         roll = roll or self.ROLL
-        all_times = tuple(float(i) for i in range(total_steps))
+        all_times = tuple(to_datetime(i * 3600) for i in range(total_steps))
 
         dev = ScheduleDevice("s0", 0, limit=100.0)
         sink = SinkDevice("c0", 1)

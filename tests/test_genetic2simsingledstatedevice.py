@@ -42,6 +42,7 @@ from akkudoktoreos.devices.devicesabc import (
     SingleStateEnergyDevice,
 )
 from akkudoktoreos.optimization.genetic2.genome import GenomeSlice
+from akkudoktoreos.utils.datetimeutil import to_datetime
 
 # ============================================================
 # Concrete stub devices
@@ -134,7 +135,7 @@ class CapacityLimitedDevice(AccumulatorDevice):
 # ============================================================
 
 STEP_INTERVAL = 3600.0   # 1 hour in seconds
-STEP_TIMES = tuple(float(i) for i in range(24))   # 24-step horizon
+STEP_TIMES = tuple(to_datetime(i * 3600) for i in range(24))  # 24-step horizon, hourly
 
 
 @pytest.fixture()
@@ -167,9 +168,12 @@ class TestSetupRun:
     def test_stores_step_interval(self, device):
         assert device._step_interval == STEP_INTERVAL
 
+    def test_stores_step_times(self, device):
+        assert device._step_times == STEP_TIMES
+
     def test_can_be_reconfigured_with_different_horizon(self):
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(float(i) for i in range(48)), STEP_INTERVAL)
+        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(48)), STEP_INTERVAL)
         assert dev._num_steps == 48
 
 
@@ -220,7 +224,7 @@ class TestGenomeRequirements:
 
     def test_genome_requirements_reflects_new_horizon_after_reconfigure(self):
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(float(i) for i in range(48)), STEP_INTERVAL)
+        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(48)), STEP_INTERVAL)
         req = dev.genome_requirements()
         assert req.size == 48
 
@@ -247,6 +251,12 @@ class TestCreateBatchState:
 
     def test_horizon_stored(self, batch_state):
         assert batch_state.horizon == len(STEP_TIMES)
+
+    def test_step_times_stored(self, batch_state):
+        assert batch_state.step_times == STEP_TIMES
+
+    def test_step_times_length_matches_horizon(self, batch_state):
+        assert len(batch_state.step_times) == batch_state.horizon
 
 
 # ============================================================
@@ -332,7 +342,7 @@ class TestSimulateBatch:
         pop_size, horizon = 1, 5
         step_interval = 3600.0
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(float(i) for i in range(horizon)), step_interval)
+        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(horizon)), step_interval)
         state = dev.create_batch_state(pop_size, horizon)
 
         power = 100.0  # W
@@ -347,7 +357,7 @@ class TestSimulateBatch:
         """Different individuals must not affect each other's state."""
         pop_size, horizon = 3, 4
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(float(i) for i in range(horizon)), STEP_INTERVAL)
+        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(horizon)), STEP_INTERVAL)
         state = dev.create_batch_state(pop_size, horizon)
 
         # Three different constant power schedules
@@ -366,7 +376,7 @@ class TestSimulateBatch:
         """Infeasible values must be repaired before feeding into state_transition."""
         pop_size, horizon = 1, 2
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(float(i) for i in range(horizon)), STEP_INTERVAL)
+        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(horizon)), STEP_INTERVAL)
         state = dev.create_batch_state(pop_size, horizon)
 
         # Request 999 W (above 200 W bound) for both steps
@@ -380,7 +390,7 @@ class TestSimulateBatch:
         """Non-uniform power schedule must accumulate step by step."""
         pop_size, horizon = 1, 4
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(float(i) for i in range(horizon)), STEP_INTERVAL)
+        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(horizon)), STEP_INTERVAL)
         state = dev.create_batch_state(pop_size, horizon)
 
         # Powers: 100, -50, 100, -50 → net = 100 Wh
@@ -472,7 +482,7 @@ class TestStateDependentRepair:
         """Each individual's repair must use its own current state."""
         dev = CapacityLimitedDevice()
         horizon = 2
-        dev.setup_run(tuple(float(i) for i in range(horizon)), STEP_INTERVAL)
+        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(horizon)), STEP_INTERVAL)
         state = dev.create_batch_state(2, horizon)
 
         # ind 0: state=0    → 500 W headroom → gets full 200 W (static upper)

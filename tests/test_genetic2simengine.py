@@ -91,6 +91,7 @@ from akkudoktoreos.simulation.genetic2.engine import (
 )
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
 from akkudoktoreos.simulation.genetic2.topology import TopologyValidationError
+from akkudoktoreos.utils.datetimeutil import to_datetime
 
 # ============================================================
 # Concrete test devices
@@ -239,7 +240,7 @@ class ScheduleDevice(SingleStateEnergyDevice):
 
 STEP_INTERVAL = 3600.0
 HORIZON = 4
-STEP_TIMES = tuple(float(i) for i in range(HORIZON))
+STEP_TIMES = tuple(to_datetime(i * 3600) for i in range(HORIZON))
 
 AC_BUS = EnergyBus(bus_id="bus_ac", carrier=EnergyCarrier.AC)
 
@@ -355,7 +356,7 @@ class TestEngineLifecycle:
         """Engine can be reconfigured from STRUCTURE_FROZEN for a new run."""
         setup_engine(engine)
         new_inputs = EnergySimulationInput(
-            step_times=tuple(float(i) for i in range(8)),
+            step_times=tuple(to_datetime(i * 3600) for i in range(8)),
             step_interval=1800.0,
         )
         engine.setup_run(new_inputs)
