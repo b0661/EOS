@@ -32,7 +32,7 @@ A typical usage sequence is::
     engine = EnergySimulationEngine(registry, buses, arbitrator)
 
     # Once per optimization run:
-    engine.setup_run(inputs)
+    engine.setup_run(context)
     genome_reqs = engine.genome_requirements()
 
     # Once per generation:
@@ -82,6 +82,7 @@ import numpy as np
 
 from akkudoktoreos.devices.devicesabc import EnergyBus
 from akkudoktoreos.optimization.genetic2.genome import GenomeSlice
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.simulation.genetic2.arbitrator import VectorizedBusArbitrator
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
 from akkudoktoreos.simulation.genetic2.state import BatchSimulationState
@@ -102,25 +103,6 @@ class EngineState(Enum):
     CREATED = auto()
     RUN_CONFIGURED = auto()
     STRUCTURE_FROZEN = auto()
-
-
-@dataclass(frozen=True)
-class EnergySimulationInput:
-    """Immutable input configuration for a simulation run.
-
-    Attributes:
-        step_times: Ordered sequence of ``DateTime`` timestamps defining
-            the simulation horizon. Length determines the genome horizon
-            size. Passed directly to ``device.setup_run()`` and forwarded
-            into ``SingleStateBatchState.step_times`` so that every
-            simulation lifecycle method has access to real timestamps —
-            useful for time-of-use pricing in ``compute_cost`` and for
-            building S2 ``execution_time`` fields in ``extract_instructions``.
-        step_interval: Fixed time delta between consecutive steps, in seconds.
-    """
-
-    step_times: tuple[DateTime, ...]
-    step_interval: float
 
 
 @dataclass
@@ -175,7 +157,7 @@ class EnergySimulationEngine:
         self._buses = list(buses)
         self._arbitrator = arbitrator
         self._state = EngineState.CREATED
-        self._inputs: EnergySimulationInput | None = None
+        self._context: SimulationContext | None = None
         self._genome_reqs: dict[str, GenomeSlice] | None = None
         self._objective_index: dict[str, int] = {}
         self._num_objectives: int = 0
@@ -187,7 +169,7 @@ class EnergySimulationEngine:
     # Setup Phase
     # ------------------------------------------------------------------
 
-    def setup_run(self, inputs: EnergySimulationInput) -> None:
+    def setup_run(self, context: SimulationContext) -> None:
         """Configure the engine for a new optimisation run.
 
         Calls ``setup_run`` on every registered device and builds the global
@@ -195,10 +177,10 @@ class EnergySimulationEngine:
         objective name contribute to the same fitness column.
 
         Can be called again from ``STRUCTURE_FROZEN`` to start a new run with
-        different inputs without re-instantiating the engine.
+        different context without re-instantiating the engine.
 
         Args:
-            inputs: Immutable simulation input configuration.
+            context: Immutable simulation context configuration.
 
         Raises:
             RuntimeError: If called from ``RUN_CONFIGURED`` state.
@@ -210,7 +192,7 @@ class EnergySimulationEngine:
             )
 
         for device in self._registry.all_devices():
-            device.setup_run(inputs.step_times, inputs.step_interval)
+            device.setup_run(context)
 
         seen: dict[str, int] = {}
         for device in self._registry.all_devices():
@@ -220,7 +202,7 @@ class EnergySimulationEngine:
 
         self._objective_index = seen
         self._num_objectives = len(seen)
-        self._inputs = inputs
+        self._context = context
         self._state = EngineState.RUN_CONFIGURED
 
     def genome_requirements(self) -> dict[str, GenomeSlice]:
@@ -298,7 +280,7 @@ class EnergySimulationEngine:
             )
 
         pop_size: int = next(iter(genome_population.values())).shape[0]
-        horizon: int = len(self._inputs.step_times)
+        horizon: int = len(self._context.step_times)
 
         total_cost = np.zeros((pop_size, self._num_objectives))
         repaired_genomes: dict[str, np.ndarray] = {}

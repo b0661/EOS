@@ -42,6 +42,7 @@ from akkudoktoreos.devices.devicesabc import (
     SingleStateEnergyDevice,
 )
 from akkudoktoreos.optimization.genetic2.genome import GenomeSlice
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.utils.datetimeutil import to_datetime
 
 # ============================================================
@@ -131,24 +132,45 @@ class CapacityLimitedDevice(AccumulatorDevice):
 
 
 # ============================================================
-# Fixtures
+# FakeContext and helpers
 # ============================================================
 
 STEP_INTERVAL = 3600.0   # 1 hour in seconds
 STEP_TIMES = tuple(to_datetime(i * 3600) for i in range(24))  # 24-step horizon, hourly
 
 
+def make_step_times(n: int) -> tuple:
+    return tuple(to_datetime(i * 3600) for i in range(n))
+
+
+class FakeContext:
+    """Minimal SimulationContext stand-in for unit tests."""
+
+    def __init__(self, step_times: tuple, step_interval: float) -> None:
+        self.step_times = step_times
+        self.step_interval = step_interval
+        self.horizon = len(step_times)
+
+
+def make_context(n: int = 24, step_interval: float = STEP_INTERVAL) -> FakeContext:
+    return FakeContext(make_step_times(n), step_interval)
+
+
+# ============================================================
+# Fixtures
+# ============================================================
+
 @pytest.fixture()
 def device() -> AccumulatorDevice:
     dev = AccumulatorDevice()
-    dev.setup_run(STEP_TIMES, STEP_INTERVAL)
+    dev.setup_run(make_context(24))
     return dev
 
 
 @pytest.fixture()
 def cap_device() -> CapacityLimitedDevice:
     dev = CapacityLimitedDevice()
-    dev.setup_run(STEP_TIMES, STEP_INTERVAL)
+    dev.setup_run(make_context(24))
     return dev
 
 
@@ -173,7 +195,7 @@ class TestSetupRun:
 
     def test_can_be_reconfigured_with_different_horizon(self):
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(48)), STEP_INTERVAL)
+        dev.setup_run(make_context(48))
         assert dev._num_steps == 48
 
 
@@ -224,7 +246,7 @@ class TestGenomeRequirements:
 
     def test_genome_requirements_reflects_new_horizon_after_reconfigure(self):
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(48)), STEP_INTERVAL)
+        dev.setup_run(make_context(48))
         req = dev.genome_requirements()
         assert req.size == 48
 
@@ -340,9 +362,8 @@ class TestSimulateBatch:
     def test_state_evolves_step_by_step_correctly(self, device):
         """Verify state at each step matches analytical accumulation."""
         pop_size, horizon = 1, 5
-        step_interval = 3600.0
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(horizon)), step_interval)
+        dev.setup_run(make_context(horizon))
         state = dev.create_batch_state(pop_size, horizon)
 
         power = 100.0  # W
@@ -357,7 +378,7 @@ class TestSimulateBatch:
         """Different individuals must not affect each other's state."""
         pop_size, horizon = 3, 4
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(horizon)), STEP_INTERVAL)
+        dev.setup_run(make_context(horizon))
         state = dev.create_batch_state(pop_size, horizon)
 
         # Three different constant power schedules
@@ -376,7 +397,7 @@ class TestSimulateBatch:
         """Infeasible values must be repaired before feeding into state_transition."""
         pop_size, horizon = 1, 2
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(horizon)), STEP_INTERVAL)
+        dev.setup_run(make_context(horizon))
         state = dev.create_batch_state(pop_size, horizon)
 
         # Request 999 W (above 200 W bound) for both steps
@@ -390,7 +411,7 @@ class TestSimulateBatch:
         """Non-uniform power schedule must accumulate step by step."""
         pop_size, horizon = 1, 4
         dev = AccumulatorDevice()
-        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(horizon)), STEP_INTERVAL)
+        dev.setup_run(make_context(horizon))
         state = dev.create_batch_state(pop_size, horizon)
 
         # Powers: 100, -50, 100, -50 → net = 100 Wh
@@ -441,7 +462,7 @@ class TestStateDependentRepair:
         """When state is near capacity, charge power must be reduced."""
         pop_size, horizon = 1, 1
         dev = CapacityLimitedDevice()
-        dev.setup_run((0.0,), STEP_INTERVAL)
+        dev.setup_run(make_context(1))
         state = dev.create_batch_state(pop_size, horizon)
 
         # Manually set state to 900 Wh (100 Wh below capacity)
@@ -456,7 +477,7 @@ class TestStateDependentRepair:
     def test_charge_power_not_clamped_when_headroom_is_ample(self, cap_device):
         """When state is well below capacity, charge power passes through."""
         dev = CapacityLimitedDevice()
-        dev.setup_run((0.0,), STEP_INTERVAL)
+        dev.setup_run(make_context(1))
         state = dev.create_batch_state(1, 1)
 
         state.state[:] = 0.0
@@ -468,7 +489,7 @@ class TestStateDependentRepair:
         """State must never exceed capacity when state-dependent repair is active."""
         pop_size, horizon = 3, 24
         dev = CapacityLimitedDevice()
-        dev.setup_run(STEP_TIMES, STEP_INTERVAL)
+        dev.setup_run(make_context(24))
         state = dev.create_batch_state(pop_size, horizon)
 
         # Request maximum charge power every step for all individuals
@@ -482,7 +503,7 @@ class TestStateDependentRepair:
         """Each individual's repair must use its own current state."""
         dev = CapacityLimitedDevice()
         horizon = 2
-        dev.setup_run(tuple(to_datetime(i * 3600) for i in range(horizon)), STEP_INTERVAL)
+        dev.setup_run(make_context(horizon))
         state = dev.create_batch_state(2, horizon)
 
         # ind 0: state=0    → 500 W headroom → gets full 200 W (static upper)

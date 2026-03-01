@@ -391,13 +391,13 @@ CREATED  →(setup_run)→  RUN_CONFIGURED  →(genome_requirements)→  STRUCTU
                                 └─────────────(setup_run)────────────────┘
 ```
 
-`setup_run()` can be called again from `STRUCTURE_FROZEN` to start a new run with different inputs (e.g. a different time horizon or price forecast) without re-instantiating the engine.
+`setup_run()` can be called again from `STRUCTURE_FROZEN` to start a new run with different context (e.g. a different time horizon or price forecast) without re-instantiating the engine.
 
-#### `EnergySimulationInput`
+#### `SimulationContext`
 
 ```python
 @dataclass(frozen=True)
-class EnergySimulationInput:
+class SimulationContext:
     step_times: tuple[DateTime, ...]   # Ordered timestamps, length = horizon
     step_interval: float               # Seconds between steps
 ```
@@ -468,7 +468,7 @@ optimizer = GeneticOptimizer(
     random_seed=42,
 )
 
-result = optimizer.optimize(inputs)   # inputs: EnergySimulationInput
+result = optimizer.optimize(context)   # context: SimulationContext
 ```
 
 `optimize()` calls `engine.setup_run()` and `engine.genome_requirements()` internally. The engine is left in `STRUCTURE_FROZEN` state after the call.
@@ -512,7 +512,7 @@ battery_schedule = result.best_genome[slc.start:slc.end]   # (horizon,)
 def extract_best_instructions(
     self,
     result: OptimizationResult,
-    inputs: EnergySimulationInput,
+    context: SimulationContext,
 ) -> dict[str, list[EnergyManagementInstruction]]:
 ```
 
@@ -524,8 +524,8 @@ The engine is left in `STRUCTURE_FROZEN` state after the call. This method must 
 
 ```python
 # After optimisation:
-result = optimizer.optimize(inputs)
-instructions = optimizer.extract_best_instructions(result, inputs)
+result = optimizer.optimize(context)
+instructions = optimizer.extract_best_instructions(result, context)
 
 # One list of instructions per device that implemented extract_instructions:
 battery_instructions = instructions["bat_0"]   # list[EnergyManagementInstruction]
@@ -574,7 +574,7 @@ schedule = rho.optimize()
 ## Data Flow
 
 ```
-EnergySimulationInput
+SimulationContext
         │
         ▼
 GeneticOptimizer.optimize()
@@ -616,7 +616,7 @@ GeneticOptimizer.optimize()
         └─► OptimizationResult
 
 # After optimize() — called separately, not inside the GA loop:
-optimizer.extract_best_instructions(result, inputs)
+optimizer.extract_best_instructions(result, context)
         │
         ├─► engine.setup_run()                  (re-configure for best genome)
         ├─► engine.genome_requirements()
@@ -791,7 +791,8 @@ class MyBattery(SingleStateEnergyDevice):
 ```python
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
 from akkudoktoreos.simulation.genetic2.arbitrator import BusTopology, VectorizedBusArbitrator
-from akkudoktoreos.simulation.genetic2.engine import EnergySimulationEngine, EnergySimulationInput
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
+from akkudoktoreos.simulation.genetic2.engine import EnergySimulationEngine
 from akkudoktoreos.optimization.genetic2.optimizer import GeneticOptimizer
 from akkudoktoreos.devices.devicesabc import EnergyBus, EnergyCarrier
 import numpy as np
@@ -826,7 +827,7 @@ from akkudoktoreos.utils.datetimeutil import to_datetime
 import datetime
 
 start = datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
-inputs = EnergySimulationInput(
+context = SimulationContext(
     step_times=tuple(to_datetime(start + datetime.timedelta(hours=i)) for i in range(horizon)),
     step_interval=3600.0,
 )
@@ -841,7 +842,7 @@ optimizer = GeneticOptimizer(
     random_seed=42,
 )
 
-result = optimizer.optimize(inputs)
+result = optimizer.optimize(context)
 
 # 7. Extract results
 print(f"Best fitness: {result.best_scalar_fitness:.2f}")
@@ -854,7 +855,7 @@ battery_schedule = result.best_genome[
 print(f"Battery schedule [W]: {battery_schedule}")
 
 # 8. Extract S2 instructions for the best individual
-instructions = optimizer.extract_best_instructions(result, inputs)
+instructions = optimizer.extract_best_instructions(result, context)
 # instructions["bat_0"]: list[EnergyManagementInstruction], one per step
 for instr in instructions["bat_0"]:
     print(f"{instr.execution_time}  factor={instr.operation_mode_factor:.2f}")

@@ -83,9 +83,9 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
     PortRequest,
     VectorizedBusArbitrator,
 )
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.simulation.genetic2.engine import (
     EnergySimulationEngine,
-    EnergySimulationInput,
     EngineState,
     EvaluationResult,
 )
@@ -276,8 +276,8 @@ def make_genome(device: ScheduleDevice, pop_size: int, value: float = 50.0) -> d
 
 def setup_engine(engine: EnergySimulationEngine) -> None:
     """Run engine through to STRUCTURE_FROZEN."""
-    inputs = EnergySimulationInput(step_times=STEP_TIMES, step_interval=STEP_INTERVAL)
-    engine.setup_run(inputs)
+    context = SimulationContext(step_times=STEP_TIMES, step_interval=STEP_INTERVAL)
+    engine.setup_run(context)
     engine.genome_requirements()
 
 
@@ -315,21 +315,21 @@ class TestEngineLifecycle:
         return make_engine([sched, sink])
 
     def test_setup_run_transitions_to_run_configured(self, engine):
-        inputs = EnergySimulationInput(STEP_TIMES, STEP_INTERVAL)
-        engine.setup_run(inputs)
+        context = SimulationContext(STEP_TIMES, STEP_INTERVAL)
+        engine.setup_run(context)
         assert engine._state == EngineState.RUN_CONFIGURED
 
     def test_genome_requirements_transitions_to_structure_frozen(self, engine):
-        inputs = EnergySimulationInput(STEP_TIMES, STEP_INTERVAL)
-        engine.setup_run(inputs)
+        context = SimulationContext(STEP_TIMES, STEP_INTERVAL)
+        engine.setup_run(context)
         engine.genome_requirements()
         assert engine._state == EngineState.STRUCTURE_FROZEN
 
     def test_setup_run_raises_in_run_configured_state(self, engine):
-        inputs = EnergySimulationInput(STEP_TIMES, STEP_INTERVAL)
-        engine.setup_run(inputs)
+        context = SimulationContext(STEP_TIMES, STEP_INTERVAL)
+        engine.setup_run(context)
         with pytest.raises(RuntimeError, match="RUN_CONFIGURED"):
-            engine.setup_run(inputs)
+            engine.setup_run(context)
 
     def test_genome_requirements_raises_before_setup_run(self, engine):
         with pytest.raises(RuntimeError):
@@ -341,8 +341,8 @@ class TestEngineLifecycle:
             engine.genome_requirements()
 
     def test_evaluate_population_raises_before_genome_requirements(self, engine):
-        inputs = EnergySimulationInput(STEP_TIMES, STEP_INTERVAL)
-        engine.setup_run(inputs)
+        context = SimulationContext(STEP_TIMES, STEP_INTERVAL)
+        engine.setup_run(context)
         genome = {"s0": np.zeros((2, HORIZON))}
         with pytest.raises(RuntimeError):
             engine.evaluate_population(genome)
@@ -355,11 +355,11 @@ class TestEngineLifecycle:
     def test_setup_run_from_structure_frozen_allows_re_run(self, engine):
         """Engine can be reconfigured from STRUCTURE_FROZEN for a new run."""
         setup_engine(engine)
-        new_inputs = EnergySimulationInput(
+        new_context = SimulationContext(
             step_times=tuple(to_datetime(i * 3600) for i in range(8)),
             step_interval=1800.0,
         )
-        engine.setup_run(new_inputs)
+        engine.setup_run(new_context)
         assert engine._state == EngineState.RUN_CONFIGURED
 
 
@@ -379,14 +379,14 @@ class TestObjectiveNames:
         sched = ScheduleDevice("s0", 0, "cost", bus_id="bus_ac")
         sink = ConstantCostDevice("c0", 1, "cost", 1.0, bus_id="bus_ac")
         engine = make_engine([sched, sink])
-        engine.setup_run(EnergySimulationInput(STEP_TIMES, STEP_INTERVAL))
+        engine.setup_run(SimulationContext(STEP_TIMES, STEP_INTERVAL))
         assert engine.objective_names == ["cost"]
 
     def test_two_different_objectives_both_appear(self):
         sched = ScheduleDevice("s0", 0, "energy_cost", bus_id="bus_ac")
         sink = ConstantCostDevice("c0", 1, "peak_power", 1.0, bus_id="bus_ac")
         engine = make_engine([sched, sink])
-        engine.setup_run(EnergySimulationInput(STEP_TIMES, STEP_INTERVAL))
+        engine.setup_run(SimulationContext(STEP_TIMES, STEP_INTERVAL))
         names = engine.objective_names
         assert "energy_cost" in names
         assert "peak_power" in names
@@ -396,7 +396,7 @@ class TestObjectiveNames:
         sched = ScheduleDevice("s0", 0, "cost", bus_id="bus_ac")
         sink = ConstantCostDevice("c0", 1, "cost", 1.0, bus_id="bus_ac")
         engine = make_engine([sched, sink])
-        engine.setup_run(EnergySimulationInput(STEP_TIMES, STEP_INTERVAL))
+        engine.setup_run(SimulationContext(STEP_TIMES, STEP_INTERVAL))
         assert engine.objective_names.count("cost") == 1
 
     def test_objective_order_follows_device_registration_order(self):
@@ -404,7 +404,7 @@ class TestObjectiveNames:
         sched = ScheduleDevice("s0", 0, "energy_cost", bus_id="bus_ac")
         sink = ConstantCostDevice("c0", 1, "peak_power", 1.0, bus_id="bus_ac")
         engine = make_engine([sched, sink])
-        engine.setup_run(EnergySimulationInput(STEP_TIMES, STEP_INTERVAL))
+        engine.setup_run(SimulationContext(STEP_TIMES, STEP_INTERVAL))
         assert engine.objective_names[0] == "energy_cost"
         assert engine.objective_names[1] == "peak_power"
 

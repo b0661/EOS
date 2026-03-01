@@ -2062,22 +2062,46 @@ class DataContainer(SingletonMixin, DataABC, MutableMapping):
         end_datetime: Optional[DateTime] = None,
         interval: Optional[Duration] = None,
         fill_method: Optional[str] = None,
-        boundary: Optional[str] = "context",
+        dropna: Optional[bool] = True,
+        boundary: Literal["strict", "context"] = "context",
+        align_to_interval: bool = False,
     ) -> NDArray[Shape["*"], Any]:
         """Retrieve an array indexed by fixed time intervals for a specified key from the data in each DataProvider.
 
         Iterates through providers to find and return the first available array for the specified key.
 
         Args:
-            key (str): The field name to retrieve, representing a data attribute in DataRecords.
+            key (str): The field name in the DataRecord from which to extract values.
             start_datetime (datetime, optional): The start date for filtering the records (inclusive).
             end_datetime (datetime, optional): The end date for filtering the records (exclusive).
             interval (duration, optional): The fixed time interval. Defaults to 1 hour.
             fill_method (str): Method to handle missing values during resampling.
                 - 'linear': Linearly interpolate missing values (for numeric data only).
+                - 'time': Interpolate missing values (for numeric data only).
                 - 'ffill': Forward fill missing values.
                 - 'bfill': Backward fill missing values.
                 - 'none': Defaults to 'linear' for numeric values, otherwise 'ffill'.
+            dropna: (bool, optional): Whether to drop NAN/ None values before processing.
+                Defaults to True.
+            boundary (Literal["strict", "context"]):
+                "strict"  → only values inside [start, end)
+                "context" → include one value before and after for proper resampling
+            align_to_interval (bool): When True, snap the resample origin to the nearest
+                UTC epoch-aligned boundary of ``interval`` before resampling.  This ensures
+                that bucket timestamps always fall on wall-clock-round times regardless of
+                when ``start_datetime`` falls:
+
+                - 15-minute interval → buckets on :00, :15, :30, :45
+                - 1-hour interval    → buckets on the hour
+
+                When False (default), the origin is ``query_start`` (or ``"start_day"`` when
+                no start is given), preserving the existing behaviour where buckets are
+                aligned to the query window rather than the clock.
+
+                Set to True when storing compacted records back to the database so that the
+                resulting timestamps are predictable and human-readable.  Leave False for
+                forecast or reporting queries where alignment to the exact query window is
+                more important than clock-round boundaries.
 
         Returns:
             np.ndarray: A NumPy array containing aggregated data for the specified key.
@@ -2097,7 +2121,9 @@ class DataContainer(SingletonMixin, DataABC, MutableMapping):
                     end_datetime=end_datetime,
                     interval=interval,
                     fill_method=fill_method,
+                    dropna=dropna,
                     boundary=boundary,
+                    align_to_interval=align_to_interval,
                 )
                 break
             except KeyError:

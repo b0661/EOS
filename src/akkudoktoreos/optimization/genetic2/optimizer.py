@@ -67,9 +67,9 @@ import numpy as np
 
 from akkudoktoreos.core.emplan import EnergyManagementInstruction
 from akkudoktoreos.optimization.genetic2.genome import AssembledGenome
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.simulation.genetic2.engine import (
     EnergySimulationEngine,
-    EnergySimulationInput,
     EvaluationResult,
 )
 
@@ -202,7 +202,7 @@ class GeneticOptimizer:
     # Public API
     # ------------------------------------------------------------------
 
-    def optimize(self, inputs: EnergySimulationInput) -> OptimizationResult:
+    def optimize(self, context: SimulationContext) -> OptimizationResult:
         """Run the genetic optimisation for one horizon.
 
         Calls ``engine.setup_run()`` and ``engine.genome_requirements()``
@@ -212,7 +212,7 @@ class GeneticOptimizer:
         chain another call.
 
         Args:
-            inputs: Simulation input (step times and step interval).
+            context: Simulation context (step times and step interval).
 
         Returns:
             ``OptimizationResult`` containing the best genome, its fitness,
@@ -225,7 +225,7 @@ class GeneticOptimizer:
         # ----------------------------------------------------------
         # 1. Engine lifecycle: setup → freeze structure
         # ----------------------------------------------------------
-        self._engine.setup_run(inputs)
+        self._engine.setup_run(context)
         slices = self._engine.genome_requirements()  # transitions to STRUCTURE_FROZEN
 
         # ----------------------------------------------------------
@@ -305,7 +305,7 @@ class GeneticOptimizer:
     def extract_best_instructions(
         self,
         result: OptimizationResult,
-        inputs: EnergySimulationInput,
+        context: SimulationContext,
     ) -> dict[str, list[EnergyManagementInstruction]]:
         """Run the engine once for the best individual and extract S2 instructions.
 
@@ -322,7 +322,7 @@ class GeneticOptimizer:
         Args:
             result: The ``OptimizationResult`` returned by ``optimize()``.
                 Provides ``best_genome`` and the ``assembled`` descriptor.
-            inputs: The same ``EnergySimulationInput`` used during
+            context: The same ``SimulationContext`` used during
                 optimisation. Needed to call ``setup_run`` so the engine
                 reconstructs ``step_times`` in each device.
 
@@ -334,7 +334,7 @@ class GeneticOptimizer:
             ``NotImplementedError`` are silently omitted.
         """
         # Re-run the engine for a population of 1 using the best genome.
-        self._engine.setup_run(inputs)
+        self._engine.setup_run(context)
         self._engine.genome_requirements()  # transitions to STRUCTURE_FROZEN
 
         # Build a single-individual genome dict from the flat best genome.
@@ -651,13 +651,13 @@ class RollingHorizonOptimizer:
             window_times = self._all_step_times[start:end]
             commit_steps = min(self._roll_steps, end - start)
 
-            inputs = EnergySimulationInput(
+            context = SimulationContext(
                 step_times=window_times,
                 step_interval=self._step_interval,
             )
 
             ga = GeneticOptimizer(engine=self._engine, **self._ga_kwargs)
-            result = ga.optimize(inputs)
+            result = ga.optimize(context)
 
             # Commit the first commit_steps of each device's schedule
             for device_id, slc in result.assembled.slices.items():

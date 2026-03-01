@@ -43,9 +43,9 @@ class BatteryDevice(EnergyDevice):
         self.capacity_kwh = capacity_kwh
         self.max_power_kw = max_power_kw
 
-    def setup_run(self, step_times, step_interval):
-        self._horizon = len(step_times)
-        self._dt = step_interval
+    def setup_run(self, context):
+        self._horizon = context.horizon
+        self._dt = context.step_interval
 
     def genome_requirements(self):
         return GenomeSlice(

@@ -62,6 +62,7 @@ import numpy as np
 from akkudoktoreos.core.emplan import EnergyManagementInstruction
 from akkudoktoreos.optimization.genetic2.genome import GenomeSlice
 from akkudoktoreos.simulation.genetic2.arbitrator import DeviceGrant, DeviceRequest
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.utils.datetimeutil import DateTime
 
 # ============================================================
@@ -435,7 +436,7 @@ class EnergyDevice(ABC):
     ---------
     Called once per optimisation run::
 
-        setup_run(step_times, step_interval)
+        setup_run(context)
         genome_requirements()
 
     Called once per generation inside ``EnergySimulationEngine.evaluate_population``::
@@ -459,7 +460,7 @@ class EnergyDevice(ABC):
     # Structure Phase
     # ==========================================================
 
-    def setup_run(self, step_times: tuple[DateTime, ...], step_interval: float) -> None:
+    def setup_run(self, context: SimulationContext) -> None:
         """Configure the device for a new simulation run.
 
         Called once before ``genome_requirements`` at the start of each
@@ -473,9 +474,11 @@ class EnergyDevice(ABC):
         (including ``compute_cost``) can access them for time-of-use logic.
 
         Args:
-            step_times: Ordered tuple of ``DateTime`` timestamps defining
-                the simulation horizon. Length equals the genome horizon.
-            step_interval: Fixed time delta between consecutive steps [s].
+            context (SimulationContext):
+                Holds the simulation context with:
+                    step_times: Ordered tuple of ``DateTime`` timestamps defining
+                        the simulation horizon. Length equals the genome horizon.
+                    step_interval: Fixed time delta between consecutive steps [s].
         """
         raise NotImplementedError
 
@@ -718,19 +721,23 @@ class SingleStateEnergyDevice(EnergyDevice):
     # Structure Phase
     # ------------------------------------------------------------------
 
-    def setup_run(self, step_times: tuple[DateTime, ...], step_interval: float) -> None:
-        """Store horizon length, step interval, and step times for batch simulation.
+    def setup_run(self, context: SimulationContext) -> None:
+        """Store simulation context for batch simulation.
+
+        Horizon length, step interval, and step times for batch simulation.
 
         Args:
-            step_times: Ordered ``DateTime`` timestamps. Stored as
-                ``_step_times`` and forwarded into every
-                ``SingleStateBatchState`` so all lifecycle methods can use
-                them (time-of-use pricing, S2 instruction construction, etc.).
-            step_interval: Fixed time delta between steps [s].
+            context (SimulationContext):
+                Holds the simulation context with:
+                    step_times: Ordered ``DateTime`` timestamps. Stored as
+                        ``_step_times`` and forwarded into every `SingleStateBatchState`` so all
+                        lifecycle methods can use them (time-of-use pricing, S2 instruction
+                        construction, etc.).
+                    step_interval: Fixed time delta between steps [s].
         """
-        self._step_times = step_times
-        self._num_steps = len(step_times)
-        self._step_interval = step_interval
+        self._step_times = context.step_times
+        self._num_steps = context.horizon
+        self._step_interval = context.step_interval
 
     def genome_requirements(self) -> GenomeSlice | None:
         """Return one gene per simulation step, bounded by ``power_bounds``.

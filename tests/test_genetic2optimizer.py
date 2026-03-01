@@ -116,10 +116,8 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
     PortRequest,
     VectorizedBusArbitrator,
 )
-from akkudoktoreos.simulation.genetic2.engine import (
-    EnergySimulationEngine,
-    EnergySimulationInput,
-)
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
+from akkudoktoreos.simulation.genetic2.engine import EnergySimulationEngine
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
 from akkudoktoreos.utils.datetimeutil import to_datetime
 
@@ -259,8 +257,8 @@ def make_engine(devices: list, horizon: int) -> EnergySimulationEngine:
     return EnergySimulationEngine(registry, [AC_BUS], arb)
 
 
-def make_inputs(horizon: int) -> EnergySimulationInput:
-    return EnergySimulationInput(
+def make_context(horizon: int) -> SimulationContext:
+    return SimulationContext(
         step_times=tuple(to_datetime(i * 3600) for i in range(horizon)),
         step_interval=STEP_INTERVAL,
     )
@@ -690,7 +688,7 @@ class TestGeneticOptimizerOptimize:
     def result(self, engine_and_device):
         engine, _ = engine_and_device
         opt = make_optimizer(engine, pop=6, gens=3, seed=42)
-        return opt.optimize(make_inputs(self.HORIZON))
+        return opt.optimize(make_context(self.HORIZON))
 
     def test_returns_optimization_result(self, result):
         assert isinstance(result, OptimizationResult)
@@ -725,12 +723,12 @@ class TestGeneticOptimizerOptimize:
 
     def test_deterministic_with_fixed_seed(self, engine_and_device):
         engine, _ = engine_and_device
-        r1 = make_optimizer(engine, seed=0).optimize(make_inputs(self.HORIZON))
+        r1 = make_optimizer(engine, seed=0).optimize(make_context(self.HORIZON))
         # Re-run requires new engine (setup_run can be called again from STRUCTURE_FROZEN)
         dev2 = ScheduleDevice("s0", 0, limit=100.0)
         sink2 = SinkDevice("c0", 1)
         engine2 = make_engine([dev2, sink2], self.HORIZON)
-        r2 = make_optimizer(engine2, seed=0).optimize(make_inputs(self.HORIZON))
+        r2 = make_optimizer(engine2, seed=0).optimize(make_context(self.HORIZON))
         np.testing.assert_array_equal(r1.best_genome, r2.best_genome)
 
     def test_zero_genome_size_raises_value_error(self):
@@ -749,7 +747,7 @@ class TestGeneticOptimizerOptimize:
         engine = make_engine([source, sink], self.HORIZON)
         opt = make_optimizer(engine)
         with pytest.raises(ValueError, match="zero"):
-            opt.optimize(make_inputs(self.HORIZON))
+            opt.optimize(make_context(self.HORIZON))
 
     def test_custom_scalarize_influences_best_selection(self, engine_and_device):
         """A scalarize that returns constant zeros means any individual can win —
@@ -768,7 +766,7 @@ class TestGeneticOptimizerOptimize:
             scalarize=counting_scalarize,
             random_seed=1,
         )
-        result = opt.optimize(make_inputs(self.HORIZON))
+        result = opt.optimize(make_context(self.HORIZON))
         assert isinstance(result, OptimizationResult)
         assert len(calls) == 2   # once per generation
 
@@ -794,7 +792,7 @@ class TestGeneticOptimizerOptimize:
             generations=2,
             random_seed=5,
         )
-        result = opt.optimize(make_inputs(self.HORIZON))
+        result = opt.optimize(make_context(self.HORIZON))
         # After repair, all genes must be >= 0
         assert np.all(result.best_genome >= 0.0)
 
@@ -860,7 +858,7 @@ class TestExtractBestInstructions:
         dev = InstructionScheduleDevice("s0", 0, limit=100.0)
         sink = SinkDevice("c0", 1)
         engine = make_engine([dev, sink], self.HORIZON)
-        inputs = make_inputs(self.HORIZON)
+        inputs = make_context(self.HORIZON)
         return engine, dev, inputs
 
     @pytest.fixture()
@@ -915,7 +913,7 @@ class TestExtractBestInstructions:
         dev = ScheduleDevice("s0", 0, limit=100.0)   # base class raises NotImplementedError
         sink = SinkDevice("c0", 1)
         engine = make_engine([dev, sink], self.HORIZON)
-        inputs = make_inputs(self.HORIZON)
+        inputs = make_context(self.HORIZON)
         opt = make_optimizer(engine, pop=4, gens=2, seed=0)
         result = opt.optimize(inputs)
         instructions = opt.extract_best_instructions(result, inputs)
