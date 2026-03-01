@@ -174,9 +174,3 @@ Repeated once per generation inside evaluate_population().
 ### compute_cost()
 
 Repeated once per generation inside evaluate_population().
-
-
-
-
-
-

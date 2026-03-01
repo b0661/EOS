@@ -83,13 +83,13 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
     PortRequest,
     VectorizedBusArbitrator,
 )
-from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.simulation.genetic2.engine import (
     EnergySimulationEngine,
     EngineState,
     EvaluationResult,
 )
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.simulation.genetic2.topology import TopologyValidationError
 from akkudoktoreos.utils.datetimeutil import to_datetime
 

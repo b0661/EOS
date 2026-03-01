@@ -746,7 +746,8 @@ class SingleStateEnergyDevice(EnergyDevice):
             A ``GenomeSlice`` of length ``num_steps`` with lower and upper
             bounds set to the values returned by ``power_bounds()``.
         """
-        assert self._num_steps is not None, "Call setup_run() before genome_requirements()."
+        if self._num_steps is None:
+            raise RuntimeError("Call setup_run() before genome_requirements().")
         lower, upper = self.power_bounds()
 
         return GenomeSlice(
@@ -781,7 +782,8 @@ class SingleStateEnergyDevice(EnergyDevice):
             lifecycle method (``compute_cost``, ``extract_instructions``)
             can access the simulation timestamps without any conversion.
         """
-        assert self._step_times is not None, "Call setup_run() before create_batch_state()."
+        if self._step_times is None:
+            raise RuntimeError("Call setup_run() before create_batch_state().")
         return SingleStateBatchState(
             schedule=np.zeros((population_size, horizon)),
             state=np.full(population_size, self.initial_state()),

@@ -62,13 +62,13 @@ Covers
         - BATTERY: size == 2 × horizon; mode bounds [0, 2]; factor bounds [0, 1]
         - SOLAR: size == horizon; mode bounds [0, 1]
         - HYBRID: size == 2 × horizon; mode bounds [0, 3]; factor bounds [0, 1]
-        - Before setup_run raises AssertionError
+        - Before setup_run raises RuntimeError
 
     TestCreateBatchState
         - Array shapes and dtypes
         - soc_wh pre-filled with resolved battery_initial_soc_wh from context
         - step_times reference matches setup_run argument
-        - Before setup_run raises AssertionError
+        - Before setup_run raises RuntimeError
 
     TestRepairMode
         - BATTERY positions 0/1/2 → OFF/CHARGE/DISCHARGE values
@@ -150,6 +150,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from pendulum import Duration
+
 from akkudoktoreos.core.emplan import OMBCInstruction
 from akkudoktoreos.devices.devicesabc import EnergyPort, PortDirection
 from akkudoktoreos.devices.genetic2.hybridinverter import (
@@ -194,17 +196,17 @@ class FakeContext:
     def __init__(
         self,
         step_times: tuple,
-        step_interval: float,
+        step_interval_sec: float = STEP_INTERVAL,
         pv_w: np.ndarray | None = None,
         initial_soc_factor: float = 0.5,
     ) -> None:
         self.step_times = step_times
-        self.step_interval = step_interval
+        self.step_interval = Duration(seconds = step_interval_sec)
         self.horizon = len(step_times)
         self._pv_w = pv_w if pv_w is not None else np.zeros(len(step_times))
         self._initial_soc_factor = initial_soc_factor
 
-    def resolve(self, key: str) -> np.ndarray:
+    def resolve_prediction(self, key: str) -> np.ndarray:
         return self._pv_w.copy()
 
     def resolve_measurement(self, key: str) -> float:
@@ -213,7 +215,7 @@ class FakeContext:
 
 def make_context(
     horizon: int = HORIZON,
-    step_interval: float = STEP_INTERVAL,
+    step_interval_sec: float = STEP_INTERVAL,
     pv_w: float | np.ndarray = 4_000.0,
     initial_soc_factor: float = 0.5,
 ) -> FakeContext:
@@ -223,7 +225,7 @@ def make_context(
         pv_array = np.full(horizon, float(pv_w))
     else:
         pv_array = np.asarray(pv_w, dtype=np.float64)
-    return FakeContext(times, step_interval, pv_array, initial_soc_factor)
+    return FakeContext(times, step_interval_sec, pv_array, initial_soc_factor)
 
 
 # ---------------------------------------------------------------------------
@@ -657,7 +659,7 @@ class TestSetupRun:
 
     def test_stores_step_interval(self):
         device = make_device(make_battery_param())
-        assert device._step_interval == STEP_INTERVAL
+        assert device._step_interval_sec == STEP_INTERVAL
 
     def test_stores_step_times(self):
         context = make_context(horizon=4)
@@ -702,7 +704,7 @@ class TestSetupRun:
         # Context with PV array of length 2 but horizon 4
         ctx = FakeContext(
             step_times=make_step_times(4),
-            step_interval=STEP_INTERVAL,
+            step_interval_sec=STEP_INTERVAL,
             pv_w=np.full(2, 3000.0),   # wrong length
             initial_soc_factor=0.5,
         )
@@ -715,7 +717,7 @@ class TestSetupRun:
         device = HybridInverterDevice(param, 0, 0)
         ctx = FakeContext(
             step_times=make_step_times(4),
-            step_interval=STEP_INTERVAL,
+            step_interval_sec=STEP_INTERVAL,
             pv_w=np.full(1, 3000.0),   # wrong length
             initial_soc_factor=0.5,
         )
@@ -808,7 +810,7 @@ class TestGenomeRequirements:
     def test_before_setup_run_raises(self):
         param = make_battery_param()
         device = HybridInverterDevice(param, 0, 0)
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError):
             device.genome_requirements()
 
 
@@ -869,7 +871,7 @@ class TestCreateBatchState:
     def test_before_setup_run_raises(self):
         param = make_battery_param()
         device = HybridInverterDevice(param, 0, 0)
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError):
             device.create_batch_state(POP, HORIZON)
 
 

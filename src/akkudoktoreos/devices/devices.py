@@ -48,7 +48,6 @@ from typing import Any, Optional, TextIO, cast
 
 import numpy as np
 from loguru import logger
-from numpydantic import NDArray, Shape
 from pydantic import Field, computed_field, field_validator, model_validator
 
 from akkudoktoreos.config.configabc import SettingsBaseModel, TimeWindowSequence
@@ -74,9 +73,7 @@ from akkudoktoreos.devices.devicesabc import (
 )
 
 # Default charge rates for battery
-BATTERY_DEFAULT_CHARGE_RATES: list[float] = [
-    0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0
-]
+BATTERY_DEFAULT_CHARGE_RATES: list[float] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
 
 # ============================================================
@@ -292,9 +289,7 @@ class PortsMixin(PydanticBaseModel):
                 "At least one port is required. "
                 "Each port_id must be unique within this device."
             ),
-            "examples": [
-                [{"port_id": "p_dc", "bus_id": "bus_dc", "direction": "bidirectional"}]
-            ],
+            "examples": [[{"port_id": "p_dc", "bus_id": "bus_dc", "direction": "bidirectional"}]],
         },
     )
 
@@ -484,9 +479,7 @@ class BatteriesCommonSettings(PortsMixin, DevicesBaseSettings):
             levelized_cost_of_storage_kwh=self.levelized_cost_of_storage_kwh,
             max_charge_power_w=float(self.max_charge_power_w or 5000),
             min_charge_power_w=float(self.min_charge_power_w or 0),
-            charge_rates=(
-                tuple(self.charge_rates) if self.charge_rates is not None else None
-            ),
+            charge_rates=(tuple(self.charge_rates) if self.charge_rates is not None else None),
             min_soc_factor=self.min_soc_percentage / 100.0,
             max_soc_factor=self.max_soc_percentage / 100.0,
         )
@@ -570,7 +563,7 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             bus_id: bus_ac
             direction: bidirectional  # can import AC for battery charging
 
-    Notes
+    Notes:
     -----
     ``battery_id`` is retained for backward compatibility with existing
     configurations but is not used by ``to_domain()`` or the simulation
@@ -603,8 +596,7 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
         le=1,
         json_schema_extra={
             "description": (
-                "Efficiency of DC→AC conversion for battery discharging (0–1). "
-                "Default 1.0."
+                "Efficiency of DC→AC conversion for battery discharging (0–1). Default 1.0."
             ),
             "examples": [0.95, 1.0],
         },
@@ -704,8 +696,7 @@ class PVCommonSettings(PortsMixin, DevicesBaseSettings):
         lt=360,
         json_schema_extra={
             "description": (
-                "Array orientation [degrees]: 0°=North, 90°=East, "
-                "180°=South, 270°=West."
+                "Array orientation [degrees]: 0°=North, 90°=East, 180°=South, 270°=West."
             ),
             "examples": [180.0],
         },
@@ -750,7 +741,7 @@ class GridConnectionSettings(PortsMixin, DevicesBaseSettings):
             direction: bidirectional
             max_power_w: 11000     # grid connection limit [W]
 
-    Notes
+    Notes:
     -----
     ``GridConnectionParam`` does not yet exist in ``devicesabc``.
     ``to_domain()`` raises ``NotImplementedError`` until it is added.
@@ -901,7 +892,7 @@ class FixedLoadSettings(PortsMixin, DevicesBaseSettings):
             bus_id: bus_ac
             direction: sink
 
-    Notes
+    Notes:
     -----
     ``FixedLoadParam`` does not yet exist in ``devicesabc``.
     ``to_domain()`` raises ``NotImplementedError`` until it is added.
@@ -982,12 +973,9 @@ class HomeApplianceCommonSettings(PortsMixin, DevicesBaseSettings):
         default=None,
         json_schema_extra={
             "description": (
-                "Allowed scheduling time windows. "
-                "Defaults to the global optimisation time window."
+                "Allowed scheduling time windows. Defaults to the global optimisation time window."
             ),
-            "examples": [
-                {"windows": [{"start_time": "10:00", "duration": "2 hours"}]}
-            ],
+            "examples": [{"windows": [{"start_time": "10:00", "duration": "2 hours"}]}],
         },
     )
 
@@ -1211,10 +1199,7 @@ class ResourceKey(PydanticBaseModel):
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, ResourceKey):
             return NotImplemented
-        return (
-            self.resource_id == other.resource_id
-            and self.actuator_id == other.actuator_id
-        )
+        return self.resource_id == other.resource_id and self.actuator_id == other.actuator_id
 
 
 class ResourceRegistry(SingletonMixin, ConfigMixin, PydanticBaseModel):
@@ -1263,9 +1248,7 @@ class ResourceRegistry(SingletonMixin, ConfigMixin, PydanticBaseModel):
         """Retrieve the most recent status for a resource."""
         return self.latest.get(key)
 
-    def status_history(
-        self, key: ResourceKey
-    ) -> list[tuple[DateTime, ResourceStatus]]:
+    def status_history(self, key: ResourceKey) -> list[tuple[DateTime, ResourceStatus]]:
         """Retrieve historical status reports for a resource."""
         if not self.keep_history:
             raise RuntimeError("History tracking is disabled.")

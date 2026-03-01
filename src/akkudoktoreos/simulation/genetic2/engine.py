@@ -82,12 +82,11 @@ import numpy as np
 
 from akkudoktoreos.devices.devicesabc import EnergyBus
 from akkudoktoreos.optimization.genetic2.genome import GenomeSlice
-from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.simulation.genetic2.arbitrator import VectorizedBusArbitrator
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.simulation.genetic2.state import BatchSimulationState
 from akkudoktoreos.simulation.genetic2.topology import TopologyValidator
-from akkudoktoreos.utils.datetimeutil import DateTime
 
 
 class EngineState(Enum):
@@ -278,6 +277,8 @@ class EnergySimulationEngine:
                 f"evaluate_population() called in invalid state {self._state}. "
                 "Call genome_requirements() first."
             )
+        if self._context is None:
+            raise RuntimeError("evaluate_population() called with None simulation context avail.")
 
         pop_size: int = next(iter(genome_population.values())).shape[0]
         horizon: int = len(self._context.step_times)

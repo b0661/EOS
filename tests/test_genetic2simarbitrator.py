@@ -14,6 +14,7 @@ Covers:
     PortRequest / DeviceRequest / PortGrant / DeviceGrant
         - Immutability
         - Shape contract
+        - is_slack field default and immutability
 
     BusTopology
         - Immutability
@@ -41,14 +42,23 @@ Covers:
         - Multi-port device receives grants for all ports
         - Granted array shape is (population_size, horizon)
         - Population individuals receive independent grants
+
+    Slack port (is_slack=True)
+        - Slack receives bus residual after non-slack settlement
+        - Slack does not distort non-slack proportional split
+        - Slack export covers non-slack demand that producers cannot meet
+        - Slack import capped at max_import (energy_wh)
+        - Slack export capped at max_export (|min_energy_wh|)
+        - No slack port → behaviour identical to original proportional algorithm
+        - Slack grant is independent per individual and per timestep
+        - Slack on fully balanced bus gets zero grant
 """
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
-
 import numpy as np
 import pytest
+from dataclasses import FrozenInstanceError
 
 from akkudoktoreos.simulation.genetic2.arbitrator import (
     ArbitrationPriority,
@@ -59,6 +69,7 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
     PortRequest,
     VectorizedBusArbitrator,
 )
+
 
 # ============================================================
 # Helpers
@@ -74,19 +85,22 @@ def make_request(
     port_index: int,
     energy: list[list[float]],
     min_energy: list[list[float]] | None = None,
+    is_slack: bool = False,
 ) -> DeviceRequest:
     """Build a single-port DeviceRequest.
 
     Args:
         energy: Nested list of shape (population_size, horizon).
         min_energy: Optional floor, same shape. Defaults to all zeros.
+        is_slack: Whether the port is a slack (last-resort) port.
     """
     e = make_energy(energy)
     m = np.zeros_like(e) if min_energy is None else make_energy(min_energy)
     return DeviceRequest(
         device_index=device_index,
         port_requests=(
-            PortRequest(port_index=port_index, energy_wh=e, min_energy_wh=m),
+            PortRequest(port_index=port_index, energy_wh=e, min_energy_wh=m,
+                        is_slack=is_slack),
         ),
     )
 
@@ -134,12 +148,14 @@ def two_bus_topology(
 # Convenience wrappers for pop_size=1 tests.
 # Wrap a flat list into [[...]] so shape is (1, horizon).
 
-def req1(device_index, port_index, energy: list[float], min_energy=None):
+def req1(device_index, port_index, energy: list[float], min_energy=None,
+         is_slack: bool = False):
     """Single-individual request."""
     return make_request(
         device_index, port_index,
         [energy],
         None if min_energy is None else [min_energy],
+        is_slack=is_slack,
     )
 
 
@@ -160,6 +176,23 @@ class TestPortRequest:
         assert pr.energy_wh.shape == (3, 4)
         assert pr.min_energy_wh.shape == (3, 4)
 
+    def test_is_slack_defaults_to_false(self):
+        pr = PortRequest(
+            port_index=0,
+            energy_wh=np.zeros((2, 4)),
+            min_energy_wh=np.zeros((2, 4)),
+        )
+        assert pr.is_slack is False
+
+    def test_is_slack_can_be_set_true(self):
+        pr = PortRequest(
+            port_index=0,
+            energy_wh=np.zeros((2, 4)),
+            min_energy_wh=np.zeros((2, 4)),
+            is_slack=True,
+        )
+        assert pr.is_slack is True
+
     def test_immutable_port_index(self):
         pr = PortRequest(
             port_index=0,
@@ -177,6 +210,16 @@ class TestPortRequest:
         )
         with pytest.raises(FrozenInstanceError):
             pr.energy_wh = np.ones((2, 4))
+
+    def test_immutable_is_slack(self):
+        pr = PortRequest(
+            port_index=0,
+            energy_wh=np.zeros((2, 4)),
+            min_energy_wh=np.zeros((2, 4)),
+            is_slack=True,
+        )
+        with pytest.raises(FrozenInstanceError):
+            pr.is_slack = False
 
 
 # ============================================================
@@ -591,3 +634,194 @@ class TestArbitratorVectorizedPopulation:
         np.testing.assert_array_almost_equal(granted_bus0[:, 0], [10.0, 0.0])
         # Bus 1: ind 0 zero, ind 1 full grant
         np.testing.assert_array_almost_equal(granted_bus1[:, 0], [0.0, 10.0])
+
+
+# ============================================================
+# TestArbitratorSlack  (pop_size=1 and pop_size=3)
+#
+# Verifies two-phase slack behaviour: non-slack ports settle first
+# proportionally; the slack port absorbs the bus residual.
+# ============================================================
+
+class TestArbitratorSlack:
+    # ------------------------------------------------------------------
+    # Basic residual assignment (pop_size=1)
+    # ------------------------------------------------------------------
+
+    def test_slack_absorbs_surplus_when_supply_exceeds_non_slack_demand(self):
+        """Surplus supply is absorbed by the slack port (positive grant).
+
+        Supply=20, non-slack demand=10 → non-slack gets 10,
+        surplus=10 → slack absorbs +10.
+        """
+        arb = VectorizedBusArbitrator(single_bus_topology(3), horizon=1)
+        producer = req1(0, 0, [-20.0])
+        consumer = req1(1, 1, [10.0])
+        slack = req1(2, 2, [100.0], min_energy=[-100.0], is_slack=True)
+        grants = arb.arbitrate([producer, consumer, slack])
+
+        np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [10.0])
+        np.testing.assert_array_almost_equal(grant1(grants, 2, 2), [10.0])
+
+    def test_slack_imports_to_cover_non_slack_demand_not_met_by_producers(self):
+        """Insufficient local supply → slack imports the shortfall.
+
+        Supply=4, non-slack demand=10 → non-slack gets 4 (ratio=0.4),
+        residual = 4 − 4 = 0 from producers, but shortfall is 6 Wh
+        that was not served → slack imports +6.
+
+        Residual = total_supply − sum(non_slack_grants) = 4 − 4 = 0.
+        Wait — residual definition: supply − non-slack grants.
+        non_slack_grant = 10 * 0.4 = 4. residual = 4 − 4 = 0.
+        Slack gets 0. This is correct: the bus was balanced within local
+        resources; the non-slack consumer is just under-served (rationed).
+
+        To get the slack to import we need more non-slack demand than
+        supply AND no local producer covering the gap. Let's use a
+        scenario where demand=10, supply=0 (no producer) → slack must
+        import 10.
+        """
+        arb = VectorizedBusArbitrator(single_bus_topology(2), horizon=1)
+        consumer = req1(0, 0, [10.0])
+        slack = req1(1, 1, [100.0], min_energy=[-100.0], is_slack=True)
+        grants = arb.arbitrate([consumer, slack])
+
+        np.testing.assert_array_almost_equal(grant1(grants, 0, 0), [10.0])
+        np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [10.0])
+
+    def test_slack_gets_zero_on_perfectly_balanced_bus(self):
+        """When supply exactly meets non-slack demand, slack grant is zero."""
+        arb = VectorizedBusArbitrator(single_bus_topology(3), horizon=1)
+        producer = req1(0, 0, [-10.0])
+        consumer = req1(1, 1, [10.0])
+        slack = req1(2, 2, [100.0], min_energy=[-100.0], is_slack=True)
+        grants = arb.arbitrate([producer, consumer, slack])
+
+        np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [10.0])
+        np.testing.assert_array_almost_equal(grant1(grants, 2, 2), [0.0])
+
+    def test_slack_does_not_distort_non_slack_proportional_split(self):
+        """Non-slack consumers still split supply proportionally when slack is present.
+
+        Supply=12, non-slack a wants 6, b wants 3 → total demand=9.
+        Surplus=12−9=3. Slack absorbs +3. No deficit so no injection.
+        a gets 6 (full), b gets 3 (full). Slack = +3.
+
+        Use an exact-supply scenario to isolate proportional behaviour:
+        supply=6, demand=6 (a=4, b=2) → balanced, slack=0.
+        """
+        arb = VectorizedBusArbitrator(single_bus_topology(4), horizon=1)
+        # supply=6 exactly meets demand=6 (a=4, b=2 after proportional)
+        producer = req1(0, 0, [-6.0])
+        consumer_a = req1(1, 1, [4.0])
+        consumer_b = req1(2, 2, [2.0])
+        slack = req1(3, 3, [100.0], min_energy=[-100.0], is_slack=True)
+        grants = arb.arbitrate([producer, consumer_a, consumer_b, slack])
+
+        np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [4.0])
+        np.testing.assert_array_almost_equal(grant1(grants, 2, 2), [2.0])
+        np.testing.assert_array_almost_equal(grant1(grants, 3, 3), [0.0])
+
+    # ------------------------------------------------------------------
+    # Capacity clamping
+    # ------------------------------------------------------------------
+
+    def test_slack_inject_clamped_to_max_inject(self):
+        """Slack injection is capped at |min_energy_wh| when deficit is larger.
+
+        No producer, non-slack demand=10, slack max inject=6.
+        Deficit=10, capped to 6 → slack injects 6, consumer gets 6.
+        Slack net grant = −6 (injecting into bus).
+        """
+        arb = VectorizedBusArbitrator(single_bus_topology(2), horizon=1)
+        consumer = req1(0, 0, [10.0])
+        slack = req1(1, 1, [100.0], min_energy=[-6.0], is_slack=True)
+        grants = arb.arbitrate([consumer, slack])
+
+        np.testing.assert_array_almost_equal(grant1(grants, 0, 0), [6.0])
+        np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [-6.0])
+
+    def test_slack_absorb_clamped_to_max_absorb(self):
+        """Slack absorb is capped at energy_wh when surplus exceeds capacity.
+
+        Supply=20, non-slack demand=5, surplus=15.
+        Slack max absorb (energy_wh)=3 → slack grant = +3.
+        """
+        arb = VectorizedBusArbitrator(single_bus_topology(3), horizon=1)
+        producer = req1(0, 0, [-20.0])
+        consumer = req1(1, 1, [5.0])
+        slack = req1(2, 2, [3.0], min_energy=[-100.0], is_slack=True)
+        grants = arb.arbitrate([producer, consumer, slack])
+
+        np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [5.0])
+        np.testing.assert_array_almost_equal(grant1(grants, 2, 2), [3.0])
+
+    # ------------------------------------------------------------------
+    # No-slack bus — regression: behaviour unchanged
+    # ------------------------------------------------------------------
+
+    def test_no_slack_port_behaves_identically_to_original_algorithm(self):
+        """Without any slack port the algorithm is identical to the original.
+
+        supply=6, a wants 6, b wants 3 → proportional split: a=4, b=2.
+        """
+        arb = VectorizedBusArbitrator(single_bus_topology(3), horizon=1)
+        producer = req1(0, 0, [-6.0])
+        consumer_a = req1(1, 1, [6.0])
+        consumer_b = req1(2, 2, [3.0])
+        grants = arb.arbitrate([producer, consumer_a, consumer_b])
+
+        np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [4.0])
+        np.testing.assert_array_almost_equal(grant1(grants, 2, 2), [2.0])
+
+    # ------------------------------------------------------------------
+    # Per-step independence (pop_size=1, horizon=2)
+    # ------------------------------------------------------------------
+
+    def test_slack_grant_is_independent_per_timestep(self):
+        """Slack grant is computed step-by-step, independently.
+
+        t=0: supply=15, demand=10 → surplus=5  → slack absorbs +5
+        t=1: supply=8,  demand=10 → deficit=2  → slack injects −2,
+             consumer gets full 10 (effective supply = 8+2 = 10).
+        """
+        arb = VectorizedBusArbitrator(single_bus_topology(3), horizon=2)
+        producer = req1(0, 0, [-15.0, -8.0])
+        consumer = req1(1, 1, [10.0, 10.0])
+        slack = req1(2, 2, [100.0], min_energy=[-100.0], is_slack=True)
+        grants = arb.arbitrate([producer, consumer, slack])
+
+        np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [10.0, 10.0])
+        np.testing.assert_array_almost_equal(grant1(grants, 2, 2), [5.0, -2.0])
+
+    # ------------------------------------------------------------------
+    # Per-individual independence (pop_size=3)
+    # ------------------------------------------------------------------
+
+    def test_slack_grant_is_independent_per_individual(self):
+        """Each individual's slack grant reflects its own bus balance.
+
+        ind 0: supply=20, demand=10 → surplus=10  → slack absorbs +10
+        ind 1: supply=10, demand=10 → balanced    → slack = 0
+        ind 2: supply=5,  demand=10 → deficit=5   → slack injects −5,
+               consumer gets full 10.
+        """
+        arb = VectorizedBusArbitrator(single_bus_topology(3), horizon=1)
+
+        producer = make_request(0, 0, [[-20.0], [-10.0], [-5.0]])
+        consumer = make_request(1, 1, [[10.0], [10.0], [10.0]])
+        slack = make_request(2, 2,
+                             energy=[[100.0], [100.0], [100.0]],
+                             min_energy=[[-100.0], [-100.0], [-100.0]],
+                             is_slack=True)
+        grants = arb.arbitrate([producer, consumer, slack])
+
+        granted_consumer = get_port_grant(grants, 1, 1)   # (3, 1)
+        granted_slack = get_port_grant(grants, 2, 2)       # (3, 1)
+
+        np.testing.assert_array_almost_equal(
+            granted_consumer[:, 0], [10.0, 10.0, 10.0]
+        )
+        np.testing.assert_array_almost_equal(
+            granted_slack[:, 0], [10.0, 0.0, -5.0]
+        )

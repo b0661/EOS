@@ -84,7 +84,6 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
 from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.utils.datetimeutil import DateTime
 
-
 # ============================================================
 # Enumerations
 # ============================================================
@@ -94,8 +93,8 @@ class InverterType(IntEnum):
     """Physical topology of the inverter."""
 
     BATTERY = 0  # Battery only, no PV
-    SOLAR = 1    # PV only, no battery
-    HYBRID = 2   # PV + battery behind one AC port
+    SOLAR = 1  # PV only, no battery
+    HYBRID = 2  # PV + battery behind one AC port
 
 
 class InverterMode(IntEnum):
@@ -179,13 +178,9 @@ class HybridInverterParam:
                 raise ValueError("battery_capacity_wh must be > 0")
             if not (0 <= self.battery_min_charge_rate <= self.battery_max_charge_rate <= 1):
                 raise ValueError(
-                    "battery charge rates must satisfy "
-                    "0 <= min_charge_rate <= max_charge_rate <= 1"
+                    "battery charge rates must satisfy 0 <= min_charge_rate <= max_charge_rate <= 1"
                 )
-            if not (
-                0 <= self.battery_min_discharge_rate
-                <= self.battery_max_discharge_rate <= 1
-            ):
+            if not (0 <= self.battery_min_discharge_rate <= self.battery_max_discharge_rate <= 1):
                 raise ValueError(
                     "battery discharge rates must satisfy "
                     "0 <= min_discharge_rate <= max_discharge_rate <= 1"
@@ -237,9 +232,9 @@ class HybridInverterParam:
 class HybridInverterBatchState:
     """Mutable batch state for ``HybridInverterDevice``."""
 
-    modes: np.ndarray       # (population_size, horizon)  int8
-    factors: np.ndarray     # (population_size, horizon)  float64
-    soc_wh: np.ndarray      # (population_size, horizon)  float64
+    modes: np.ndarray  # (population_size, horizon)  int8
+    factors: np.ndarray  # (population_size, horizon)  float64
+    soc_wh: np.ndarray  # (population_size, horizon)  float64
     ac_power_w: np.ndarray  # (population_size, horizon)  float64
     population_size: int
     horizon: int
@@ -269,9 +264,9 @@ class HybridInverterDevice(EnergyDevice):
         # Populated by setup_run
         self._step_times: tuple[DateTime, ...] | None = None
         self._num_steps: int | None = None
-        self._step_interval: float | None = None
-        self._pv_power_w: np.ndarray | None = None          # set for SOLAR/HYBRID
-        self._battery_initial_soc_wh: float | None = None   # set for BATTERY/HYBRID
+        self._step_interval_sec: float | None = None
+        self._pv_power_w: np.ndarray | None = None  # set for SOLAR/HYBRID
+        self._battery_initial_soc_wh: float | None = None  # set for BATTERY/HYBRID
 
     @property
     def ports(self) -> tuple[EnergyPort, ...]:
@@ -296,41 +291,35 @@ class HybridInverterDevice(EnergyDevice):
         horizon = context.horizon
         self._step_times = context.step_times
         self._num_steps = horizon
-        self._step_interval = context.step_interval
+        self._step_interval_sec = context.step_interval.total_seconds()
 
         if self.param.inverter_type in (InverterType.SOLAR, InverterType.HYBRID):
             if self.param.pv_power_w_key is None:
                 raise ValueError(
-                    f"{self.device_id}: pv_power_w_key must be set "
-                    "for SOLAR or HYBRID inverter."
+                    f"{self.device_id}: pv_power_w_key must be set for SOLAR or HYBRID inverter."
                 )
-            pv = context.resolve(self.param.pv_power_w_key)
+            pv = context.resolve_prediction(self.param.pv_power_w_key)
             if pv.shape != (horizon,):
                 raise ValueError(
-                    f"{self.device_id}: PV forecast must have shape ({horizon},), "
-                    f"got {pv.shape}."
+                    f"{self.device_id}: PV forecast must have shape ({horizon},), got {pv.shape}."
                 )
             self._pv_power_w = pv
 
         if self.param.inverter_type in (InverterType.BATTERY, InverterType.HYBRID):
-            soc_factor = context.resolve_measurement(
-                self.param.battery_initial_soc_factor_key
-            )
-            soc_factor_value = float(soc_factor[0]) if np.ndim(soc_factor) != 0 else float(soc_factor)
+            soc_factor = context.resolve_measurement(self.param.battery_initial_soc_factor_key)
             if not (
-                self.param.battery_min_soc_factor
-                <= soc_factor_value
-                <= self.param.battery_max_soc_factor
+                self.param.battery_min_soc_factor <= soc_factor <= self.param.battery_max_soc_factor
             ):
                 raise ValueError(
-                    f"{self.device_id}: initial SoC factor {soc_factor_value} "
+                    f"{self.device_id}: initial SoC factor {soc_factor} "
                     f"outside allowed bounds [{self.param.battery_min_soc_factor}, "
                     f"{self.param.battery_max_soc_factor}]."
                 )
-            self._battery_initial_soc_wh = soc_factor_value * self.param.battery_capacity_wh
+            self._battery_initial_soc_wh = soc_factor * self.param.battery_capacity_wh
 
     def genome_requirements(self) -> GenomeSlice:
-        assert self._num_steps is not None, "Call setup_run() before genome_requirements()."
+        if self._num_steps is None:
+            raise RuntimeError("Call setup_run() before genome_requirements().")
         n = self._num_steps
         p = self.param
 
@@ -354,8 +343,11 @@ class HybridInverterDevice(EnergyDevice):
 
     def create_batch_state(self, population_size: int, horizon: int) -> HybridInverterBatchState:
         """Allocate batch state; soc_wh pre-filled with resolved initial SoC (0 for SOLAR)."""
-        assert self._step_times is not None, "Call setup_run() before create_batch_state()."
-        initial_soc = self._battery_initial_soc_wh if self._battery_initial_soc_wh is not None else 0.0
+        if self._step_times is None:
+            raise RuntimeError("Call setup_run() before create_batch_state().")
+        initial_soc = (
+            self._battery_initial_soc_wh if self._battery_initial_soc_wh is not None else 0.0
+        )
         return HybridInverterBatchState(
             modes=np.zeros((population_size, horizon), dtype=np.int8),
             factors=np.zeros((population_size, horizon), dtype=np.float64),
@@ -372,7 +364,8 @@ class HybridInverterDevice(EnergyDevice):
         genome_batch: np.ndarray,
     ) -> np.ndarray:
         """Decode, repair, and simulate the genome for the full population."""
-        assert self._step_interval is not None, "Call setup_run() before apply_genome_batch()."
+        if self._step_interval_sec is None:
+            raise RuntimeError("Call setup_run() before apply_genome_batch().")
         p = self.param
 
         if not p.has_factor_gene:
@@ -383,8 +376,10 @@ class HybridInverterDevice(EnergyDevice):
             raw_factors = genome_batch[:, 1::2]
 
         # Initial SoC: 0.0 for SOLAR (no battery), resolved Wh for BATTERY/HYBRID.
-        initial_soc_wh = self._battery_initial_soc_wh if self._battery_initial_soc_wh is not None else 0.0
-        soc = np.full(state.population_size, initial_soc_wh)
+        soc = np.full(
+            state.population_size,
+            self._battery_initial_soc_wh if self._battery_initial_soc_wh is not None else 0.0,
+        )
 
         pv_power_w = self._pv_power_w  # None for BATTERY
 
@@ -419,8 +414,9 @@ class HybridInverterDevice(EnergyDevice):
     # ------------------------------------------------------------------
 
     def build_device_request(self, state: HybridInverterBatchState) -> DeviceRequest:
-        assert self._step_interval is not None, "Call setup_run() before build_device_request()."
-        step_h = self._step_interval / 3600.0
+        if self._step_interval_sec is None:
+            raise RuntimeError("Call setup_run() before build_device_request().")
+        step_h = self._step_interval_sec / 3600.0
         return DeviceRequest(
             device_index=self._device_index,
             port_requests=(
@@ -433,8 +429,9 @@ class HybridInverterDevice(EnergyDevice):
         )
 
     def apply_device_grant(self, state: HybridInverterBatchState, grant: DeviceGrant) -> None:
-        assert self._step_interval is not None, "Call setup_run() before apply_device_grant()."
-        step_h = self._step_interval / 3600.0
+        if self._step_interval_sec is None:
+            raise RuntimeError("Call setup_run() before apply_device_grant().")
+        step_h = self._step_interval_sec / 3600.0
         state.ac_power_w[:] = grant.port_grants[0].granted_wh / step_h
 
     def compute_cost(self, state: HybridInverterBatchState) -> np.ndarray:
@@ -483,9 +480,10 @@ class HybridInverterDevice(EnergyDevice):
         soc_wh: np.ndarray,
     ) -> np.ndarray:
         """Repair factor genes for one time step across all individuals."""
-        assert self._step_interval is not None
+        if self._step_interval_sec is None:
+            raise RuntimeError("Step interval is None.")
         p = self.param
-        step_h = self._step_interval / 3600.0
+        step_h = self._step_interval_sec / 3600.0
         factor = raw_factors.copy()
 
         off_or_pv = (modes == InverterMode.OFF) | (modes == InverterMode.PV)
@@ -502,7 +500,8 @@ class HybridInverterDevice(EnergyDevice):
             headroom_wh = p.battery_max_soc_wh - soc_wh[charge_mask]
             max_factor = np.clip(
                 headroom_wh / (p.battery_capacity_wh * step_h * p.ac_to_battery_efficiency),
-                0.0, p.battery_max_charge_rate,
+                0.0,
+                p.battery_max_charge_rate,
             )
             f = np.minimum(f, max_factor)
             f[f < p.battery_min_charge_rate] = 0.0
@@ -515,7 +514,8 @@ class HybridInverterDevice(EnergyDevice):
             available_wh = soc_wh[discharge_mask] - p.battery_min_soc_wh
             max_factor = np.clip(
                 available_wh / (p.battery_capacity_wh * step_h),
-                0.0, p.battery_max_discharge_rate,
+                0.0,
+                p.battery_max_discharge_rate,
             )
             f = np.minimum(f, max_factor)
             f[f < p.battery_min_discharge_rate] = 0.0
@@ -592,9 +592,10 @@ class HybridInverterDevice(EnergyDevice):
         For SOLAR type, no battery exists: soc stays at 0.0 and the clamp
         is a no-op because battery_min_soc_wh == battery_max_soc_wh == 0.
         """
-        assert self._step_interval is not None
+        if self._step_interval_sec is None:
+            raise RuntimeError("Step interval is None.")
         p = self.param
-        step_h = self._step_interval / 3600.0
+        step_h = self._step_interval_sec / 3600.0
         new_soc = soc_wh.copy()
 
         charge_mask = (modes == InverterMode.CHARGE) & (factors > 0.0)
@@ -631,8 +632,7 @@ class HybridInverterDevice(EnergyDevice):
         charge_mask = state.modes == InverterMode.CHARGE
         if charge_mask.any():
             min_charge_ac_w = (
-                p.battery_min_charge_rate * p.battery_capacity_wh
-                / p.ac_to_battery_efficiency
+                p.battery_min_charge_rate * p.battery_capacity_wh / p.ac_to_battery_efficiency
             )
             if p.inverter_type == InverterType.HYBRID and pv_power_w is not None:
                 pv_clipped = np.clip(pv_power_w, p.pv_min_power_w, p.pv_max_power_w)
@@ -649,8 +649,7 @@ class HybridInverterDevice(EnergyDevice):
         discharge_mask = state.modes == InverterMode.DISCHARGE
         if discharge_mask.any():
             min_inject_ac_w = (
-                p.battery_min_discharge_rate * p.battery_capacity_wh
-                * p.battery_to_ac_efficiency
+                p.battery_min_discharge_rate * p.battery_capacity_wh * p.battery_to_ac_efficiency
             )
             if p.inverter_type == InverterType.HYBRID and pv_power_w is not None:
                 pv_clipped = np.clip(pv_power_w, p.pv_min_power_w, p.pv_max_power_w)

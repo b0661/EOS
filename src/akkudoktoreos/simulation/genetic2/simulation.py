@@ -23,13 +23,16 @@ Typical usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
+
 import numpy as np
 
 # Do not use datetimemutil - we do not need the pydantic model
 from pendulum import DateTime, Duration
 
 from akkudoktoreos.core.cache import cache_energy_management
-from akkudoktoreos.core.coreabc import get_config, get_prediction, get_measurement
+from akkudoktoreos.core.coreabc import get_measurement, get_prediction
+
 
 @dataclass(slots=True)
 class SimulationContext:
@@ -91,14 +94,14 @@ class SimulationContext:
             ValueError: If alignment to the horizon fails.
         """
         return get_prediction().key_to_array(
-                key=key,
-                start_datetime=self.step_times[0],
-                end_datetime=self.step_times[-1] + self.step_interval, # exclusive
-                interval=self.step_interval,
-                dropna = True,
-                boundary="context",
-                align_to_interval=True,
-            )
+            key=key,
+            start_datetime=self.step_times[0],
+            end_datetime=self.step_times[-1] + self.step_interval,  # exclusive
+            interval=self.step_interval,
+            dropna=True,
+            boundary="context",
+            align_to_interval=True,
+        )
 
     @cache_energy_management
     def resolve_measurement(self, key: str) -> Optional[float]:
@@ -117,7 +120,7 @@ class SimulationContext:
             KeyError: If the key does not exist in the store.
         """
         return get_measurement().key_to_value(
-                key=key,
-                target_datetime=self.step_times[0],
-                time_window=self.step_interval * self.horizon,
-            )
+            key=key,
+            target_datetime=self.step_times[0],
+            time_window=self.step_interval * self.horizon,
+        )

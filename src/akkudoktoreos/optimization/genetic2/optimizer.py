@@ -67,11 +67,11 @@ import numpy as np
 
 from akkudoktoreos.core.emplan import EnergyManagementInstruction
 from akkudoktoreos.optimization.genetic2.genome import AssembledGenome
-from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.simulation.genetic2.engine import (
     EnergySimulationEngine,
     EvaluationResult,
 )
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 
 # ============================================================
 # Types

@@ -241,7 +241,7 @@ class TestGenomeRequirements:
 
     def test_raises_if_setup_run_not_called(self):
         dev = AccumulatorDevice()
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError):
             dev.genome_requirements()
 
     def test_genome_requirements_reflects_new_horizon_after_reconfigure(self):
