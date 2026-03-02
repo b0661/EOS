@@ -2,11 +2,10 @@
 
 Models three inverter topologies as a single device class:
 
-- **Battery inverter** (``BATTERY``) — manages a battery pack on the AC
-  bus. No PV input.
+- **Battery inverter** (``BATTERY``) — manages a battery pack on the AC bus. No PV input.
 - **Solar inverter** (``SOLAR``) — converts DC PV power to AC. No battery.
-- **Hybrid inverter** (``HYBRID``) — manages both a battery pack and PV
-  input behind a single AC port.
+- **Hybrid inverter** (``HYBRID``) — manages both a battery pack and PV input behind a single
+    AC port.
 
 All three types share one bidirectional AC port. Net AC power is positive
 when consuming from the bus (charging) and negative when injecting into
@@ -15,19 +14,28 @@ convention used throughout the genetic2 framework.
 
 Genome structure
 ----------------
-Genes are interleaved per time step as ``[mode₀, factor₀, mode₁, factor₁, …]``
-for BATTERY and HYBRID types. SOLAR uses only ``[mode₀, mode₁, …]`` because
-PV output is fully determined by the forecast — there is nothing to control.
+Each time step is encoded in a **single gene** whose integer part selects
+the operation mode and whose fractional part encodes the operation mode
+factor:
 
-Mode genes are float-valued in the global genome but semantically discrete.
-``_repair_mode`` maps the float to the nearest *position index* in
-``HybridInverterParam.valid_modes`` (0-based), then looks up the actual
-``InverterMode`` integer at that position. This is necessary because
-BATTERY type skips InverterMode.PV (value 1), so a raw round-and-clip
-against the enum values would produce invalid modes.
+    gene = mode_position + factor          where factor ∈ [0, 1)
 
-Factor genes encode charge or discharge power as a fraction of the 1C
-rate: ``factor = 1.0`` means power = ``battery_capacity_wh`` W.
+``mode_position`` is the 0-based index into
+``HybridInverterParam.valid_modes``.  ``factor`` is the same quantity as
+before: a fraction of the 1C rate for charge/discharge, or irrelevant
+(zeroed during repair) for OFF and PV modes.
+
+This gives a genome of size ``horizon`` for all inverter types, with
+lower bound ``0.0`` and upper bound ``n_modes`` (upper boundary value
+decodes to the last valid mode with factor 0.0 after position clamping).
+
+Decoding one gene:
+    position = clip(floor(gene), 0, n_modes − 1)
+    mode     = valid_modes[position]
+    factor   = gene − floor(gene)           # fractional part ∈ [0, 1)
+
+Lamarckian repair writes the repaired values back:
+    genome[t] = position + repaired_factor
 
 PV forecast handling
 --------------------
@@ -207,10 +215,6 @@ class HybridInverterParam:
         return (InverterMode.OFF, InverterMode.PV, InverterMode.CHARGE, InverterMode.DISCHARGE)
 
     @property
-    def has_factor_gene(self) -> bool:
-        return self.inverter_type != InverterType.SOLAR
-
-    @property
     def n_modes(self) -> int:
         return len(self.valid_modes)
 
@@ -247,7 +251,17 @@ class HybridInverterBatchState:
 
 
 class HybridInverterDevice(EnergyDevice):
-    """Vectorised hybrid inverter energy device."""
+    """Vectorised hybrid inverter energy device.
+
+    Genome encoding
+    ---------------
+    Each time step is represented by a **single gene** in ``[0, n_modes)``.
+    The integer part (floor) selects the mode position in
+    ``param.valid_modes``; the fractional part is the operation mode
+    factor (charge/discharge rate as fraction of 1C).
+
+    OFF and PV modes ignore the factor (it is zeroed during repair).
+    """
 
     def __init__(
         self,
@@ -267,6 +281,11 @@ class HybridInverterDevice(EnergyDevice):
         self._step_interval_sec: float | None = None
         self._pv_power_w: np.ndarray | None = None  # set for SOLAR/HYBRID
         self._battery_initial_soc_wh: float | None = None  # set for BATTERY/HYBRID
+
+        # Cached mode-value lookup array, built once in __init__
+        self._mode_values: np.ndarray = np.array(
+            [m.value for m in param.valid_modes], dtype=np.int8
+        )
 
     @property
     def ports(self) -> tuple[EnergyPort, ...]:
@@ -307,35 +326,33 @@ class HybridInverterDevice(EnergyDevice):
 
         if self.param.inverter_type in (InverterType.BATTERY, InverterType.HYBRID):
             soc_factor = context.resolve_measurement(self.param.battery_initial_soc_factor_key)
-            if not (
-                self.param.battery_min_soc_factor <= soc_factor <= self.param.battery_max_soc_factor
-            ):
+            if not (0.0 <= soc_factor <= 1.0):
                 raise ValueError(
                     f"{self.device_id}: initial SoC factor {soc_factor} "
-                    f"outside allowed bounds [{self.param.battery_min_soc_factor}, "
-                    f"{self.param.battery_max_soc_factor}]."
+                    "outside allowed bounds [0.0, 1.0]."
                 )
             self._battery_initial_soc_wh = soc_factor * self.param.battery_capacity_wh
 
     def genome_requirements(self) -> GenomeSlice:
+        """Return genome slice descriptor.
+
+        The genome has exactly ``horizon`` genes, one per time step.
+        Each gene encodes both mode and factor:
+
+            gene ∈ [0.0, n_modes)
+            position = floor(gene)       → index into valid_modes
+            factor   = gene − position   → fractional part ∈ [0, 1)
+        """
         if self._num_steps is None:
             raise RuntimeError("Call setup_run() before genome_requirements().")
         n = self._num_steps
         p = self.param
-
-        mode_lb = np.zeros(n)
-        mode_ub = np.full(n, float(p.n_modes - 1))
-
-        if not p.has_factor_gene:
-            return GenomeSlice(start=0, size=n, lower_bound=mode_lb, upper_bound=mode_ub)
-
-        lower = np.empty(2 * n)
-        upper = np.empty(2 * n)
-        lower[0::2] = mode_lb
-        upper[0::2] = mode_ub
-        lower[1::2] = 0.0
-        upper[1::2] = 1.0
-        return GenomeSlice(start=0, size=2 * n, lower_bound=lower, upper_bound=upper)
+        return GenomeSlice(
+            start=0,
+            size=n,
+            lower_bound=np.zeros(n),
+            upper_bound=np.full(n, float(p.n_modes)),
+        )
 
     # ------------------------------------------------------------------
     # Batch Lifecycle
@@ -363,17 +380,22 @@ class HybridInverterDevice(EnergyDevice):
         state: HybridInverterBatchState,
         genome_batch: np.ndarray,
     ) -> np.ndarray:
-        """Decode, repair, and simulate the genome for the full population."""
+        """Decode, repair, and simulate the genome for the full population.
+
+        Args:
+            state: Pre-allocated batch state (mutated in place).
+            genome_batch: Float array of shape ``(population_size, horizon)``.
+                Each column ``t`` is a single gene per individual encoding
+                both mode position (integer part) and factor (fractional
+                part).  The array is updated in place with the repaired
+                values (Lamarckian repair).
+
+        Returns:
+            The mutated ``genome_batch`` with repaired gene values.
+        """
         if self._step_interval_sec is None:
             raise RuntimeError("Call setup_run() before apply_genome_batch().")
         p = self.param
-
-        if not p.has_factor_gene:
-            raw_modes = genome_batch
-            raw_factors = np.zeros_like(genome_batch)
-        else:
-            raw_modes = genome_batch[:, 0::2]
-            raw_factors = genome_batch[:, 1::2]
 
         # Initial SoC: 0.0 for SOLAR (no battery), resolved Wh for BATTERY/HYBRID.
         soc = np.full(
@@ -384,28 +406,28 @@ class HybridInverterDevice(EnergyDevice):
         pv_power_w = self._pv_power_w  # None for BATTERY
 
         for t in range(state.horizon):
+            gene_t = genome_batch[:, t]  # shape (pop,)
+
+            mode_t, raw_factor_t = self._decode_gene(gene_t)
+            state.modes[:, t] = mode_t
+
+            factor_t = self._repair_factor(mode_t, raw_factor_t, soc)
+            state.factors[:, t] = factor_t
+
             pv_dc_w = (
                 float(np.clip(pv_power_w[t], p.pv_min_power_w, p.pv_max_power_w))
                 if p.inverter_type in (InverterType.SOLAR, InverterType.HYBRID)
                 else 0.0
             )
 
-            mode_t = self._repair_mode(raw_modes[:, t])
-            state.modes[:, t] = mode_t
-
-            factor_t = self._repair_factor(mode_t, raw_factors[:, t], soc)
-            state.factors[:, t] = factor_t
-
             state.ac_power_w[:, t] = self._compute_ac_power(mode_t, factor_t, pv_dc_w)
 
             soc = self._advance_soc(soc, mode_t, factor_t, pv_dc_w)
             state.soc_wh[:, t] = soc
 
-            if not p.has_factor_gene:
-                genome_batch[:, t] = mode_t.astype(np.float64)
-            else:
-                genome_batch[:, 2 * t] = mode_t.astype(np.float64)
-                genome_batch[:, 2 * t + 1] = factor_t
+            # Lamarckian write-back: integer part = mode position, frac = factor.
+            position = self._mode_position(mode_t)  # 0-based index into valid_modes
+            genome_batch[:, t] = position.astype(np.float64) + factor_t
 
         return genome_batch
 
@@ -467,11 +489,44 @@ class HybridInverterDevice(EnergyDevice):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _repair_mode(self, raw_modes: np.ndarray) -> np.ndarray:
-        """Map float mode genes to valid InverterMode integers via position index."""
-        mode_values = np.array([m.value for m in self.param.valid_modes], dtype=np.int8)
-        pos = np.clip(np.round(raw_modes), 0, self.param.n_modes - 1).astype(np.intp)
-        return mode_values[pos]
+    def _decode_gene(self, gene: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Decode a single-gene vector into mode integers and raw factors.
+
+        Args:
+            gene: Float array of shape ``(population_size,)``.
+                The integer part (floor) is the mode position index into
+                ``param.valid_modes``; the fractional part is the raw
+                (unrepaired) factor.
+
+        Returns:
+            mode: ``int8`` array of shape ``(population_size,)`` containing
+                the actual ``InverterMode`` integer values.
+            factor: ``float64`` array of shape ``(population_size,)``
+                containing the fractional part of the gene, in ``[0, 1)``.
+        """
+        floored = np.floor(gene)
+        position = np.clip(floored, 0, self.param.n_modes - 1).astype(np.intp)
+        mode = self._mode_values[position]
+        factor = gene - floored
+        # Clamp factor to [0, 1) to guard against floating-point overshoot at ub.
+        factor = np.clip(factor, 0.0, 1.0 - np.finfo(float).eps)
+        return mode, factor
+
+    def _mode_position(self, mode: np.ndarray) -> np.ndarray:
+        """Return the 0-based position index in ``valid_modes`` for each mode value.
+
+        Args:
+            mode: ``int8`` array of mode *values* (InverterMode integers).
+
+        Returns:
+            ``int64`` array of the same shape with the position indices.
+        """
+        # Build inverse lookup: mode_value → position_index.
+        # valid_modes has at most 4 entries so a linear search is fine.
+        positions = np.zeros_like(mode, dtype=np.int64)
+        for pos, m in enumerate(self.param.valid_modes):
+            positions[mode == m.value] = pos
+        return positions
 
     def _repair_factor(
         self,
@@ -592,9 +647,12 @@ class HybridInverterDevice(EnergyDevice):
         For SOLAR type, no battery exists: soc stays at 0.0 and the clamp
         is a no-op because battery_min_soc_wh == battery_max_soc_wh == 0.
         """
+        p = self.param
+        if p.inverter_type == InverterType.SOLAR:
+            # Solar inverter does not have battery
+            return soc_wh
         if self._step_interval_sec is None:
             raise RuntimeError("Step interval is None.")
-        p = self.param
         step_h = self._step_interval_sec / 3600.0
         new_soc = soc_wh.copy()
 

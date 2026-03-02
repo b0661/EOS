@@ -7,7 +7,7 @@ Module under test
 Test strategy
 -------------
 Each class exercises one cohesive responsibility. Internal helpers
-(_repair_mode, _repair_factor, _compute_ac_power, _advance_soc) are
+(_decode_gene, _repair_factor, _compute_ac_power, _advance_soc) are
 tested in isolation by calling them directly on a device instance that
 has been through setup_run. This lets us verify the physics without
 running the full apply_genome_batch pipeline.
@@ -41,7 +41,6 @@ Covers
 
     HybridInverterParam — derived properties
         - valid_modes returns correct tuple per type
-        - has_factor_gene True for BATTERY/HYBRID, False for SOLAR
         - n_modes matches valid_modes length
         - battery_min/max_soc_wh computed correctly from factors
 
@@ -59,9 +58,11 @@ Covers
         - BATTERY: resolve_measurement provides initial SoC Wh
 
     TestGenomeRequirements
-        - BATTERY: size == 2 × horizon; mode bounds [0, 2]; factor bounds [0, 1]
-        - SOLAR: size == horizon; mode bounds [0, 1]
-        - HYBRID: size == 2 × horizon; mode bounds [0, 3]; factor bounds [0, 1]
+        - All types: size == horizon (single gene per step)
+        - All types: lower_bound == 0.0 for all steps
+        - BATTERY: upper_bound == n_modes == 3.0
+        - SOLAR:   upper_bound == n_modes == 2.0
+        - HYBRID:  upper_bound == n_modes == 4.0
         - Before setup_run raises RuntimeError
 
     TestCreateBatchState
@@ -70,14 +71,16 @@ Covers
         - step_times reference matches setup_run argument
         - Before setup_run raises RuntimeError
 
-    TestRepairMode
-        - BATTERY positions 0/1/2 → OFF/CHARGE/DISCHARGE values
-        - SOLAR positions 0/1 → OFF/PV values
-        - HYBRID positions 0/1/2/3 → OFF/PV/CHARGE/DISCHARGE values
-        - Fractional values round to nearest position
-        - Out-of-range high clipped to last mode
+    TestDecodeGene
+        - Integer part selects mode position in valid_modes
+        - Fractional part is returned as raw factor
+        - BATTERY: positions 0/1/2 → OFF/CHARGE/DISCHARGE
+        - SOLAR:   positions 0/1   → OFF/PV
+        - HYBRID:  positions 0/1/2/3 → OFF/PV/CHARGE/DISCHARGE
+        - Fractional part extracted correctly
+        - Out-of-range high clipped to last mode, factor = 0 at integer boundary
         - Out-of-range low clipped to OFF
-        - Mixed population vector processed correctly
+        - Mode dtype is int8
 
     TestRepairFactor
         - OFF/PV modes: factor forced to 0.0
@@ -110,9 +113,10 @@ Covers
         - HYBRID CHARGE: PV exceeds charge demand → only PV used
 
     TestApplyGenomeBatch
-        - SOLAR: genome size == horizon; factors all zero; modes decoded
-        - BATTERY: modes and factors decoded from interleaved genome
-        - Lamarckian write-back: genome contains repaired values after call
+        - All types: genome shape is (population_size, horizon)
+        - SOLAR: factors all zero; modes decoded from integer part of gene
+        - BATTERY: modes and factors decoded from single-gene encoding
+        - Lamarckian write-back: genome[:, t] = mode_position + repaired_factor
         - SoC evolves correctly across a 3-step horizon
         - Population axis independent: two individuals with different modes
         - Mixed modes in one population processed per-individual
@@ -185,7 +189,7 @@ class FakeContext:
     """Minimal SimulationContext stand-in for unit tests.
 
     Avoids any dependency on the real prediction/measurement stores.
-    ``resolve(key)`` returns a pre-configured PV array.
+    ``resolve_prediction(key)`` returns a pre-configured PV array.
     ``resolve_measurement(key)`` returns a pre-configured SoC factor.
 
     Pass ``pv_w`` as a flat array of length ``horizon`` (values in W).
@@ -200,7 +204,7 @@ class FakeContext:
         initial_soc_factor: float = 0.5,
     ) -> None:
         self.step_times = step_times
-        self.step_interval = Duration(seconds = step_interval_sec)
+        self.step_interval = Duration(seconds=step_interval_sec)
         self.horizon = len(step_times)
         self._pv_w = pv_w if pv_w is not None else np.zeros(len(step_times))
         self._initial_soc_factor = initial_soc_factor
@@ -366,6 +370,17 @@ def make_device(
     return device
 
 
+def make_genome(pop: int, horizon: int, mode_positions: list[int], factors: list[float]) -> np.ndarray:
+    """Build a genome array from parallel lists of mode positions and factors.
+
+    Each gene = mode_position + factor, broadcast across all individuals
+    in the population.  ``mode_positions`` and ``factors`` must each have
+    length ``horizon``.
+    """
+    gene_values = [float(p) + f for p, f in zip(mode_positions, factors)]
+    return np.tile(gene_values, (pop, 1))
+
+
 # ============================================================
 # TestInverterType
 # ============================================================
@@ -433,81 +448,52 @@ class TestHybridInverterParamValidation:
     def test_solar_pv_to_ac_efficiency_zero_raises(self):
         with pytest.raises(ValueError, match="pv_to_ac_efficiency"):
             HybridInverterParam(
-                device_id="s",
-                port_id="p",
-                bus_id="b",
+                device_id="s", port_id="p", bus_id="b",
                 inverter_type=InverterType.SOLAR,
-                off_state_power_consumption_w=0.0,
-                on_state_power_consumption_w=0.0,
+                off_state_power_consumption_w=0.0, on_state_power_consumption_w=0.0,
                 pv_to_ac_efficiency=0.0,   # invalid
                 pv_to_battery_efficiency=0.95,
-                pv_max_power_w=8000.0,
-                pv_min_power_w=0.0,
+                pv_max_power_w=8000.0, pv_min_power_w=0.0,
                 pv_power_w_key=PV_KEY,
-                ac_to_battery_efficiency=0.95,
-                battery_to_ac_efficiency=0.95,
-                battery_capacity_wh=0.0,
-                battery_charge_rates=None,
-                battery_min_charge_rate=0.0,
-                battery_max_charge_rate=0.0,
-                battery_min_discharge_rate=0.0,
-                battery_max_discharge_rate=0.0,
-                battery_min_soc_factor=0.0,
-                battery_max_soc_factor=0.1,
+                ac_to_battery_efficiency=0.95, battery_to_ac_efficiency=0.95,
+                battery_capacity_wh=0.0, battery_charge_rates=None,
+                battery_min_charge_rate=0.0, battery_max_charge_rate=0.0,
+                battery_min_discharge_rate=0.0, battery_max_discharge_rate=0.0,
+                battery_min_soc_factor=0.0, battery_max_soc_factor=0.1,
                 battery_initial_soc_factor_key=SOC_KEY,
             )
 
     def test_solar_pv_max_power_zero_raises(self):
         with pytest.raises(ValueError, match="pv_max_power_w"):
             HybridInverterParam(
-                device_id="s",
-                port_id="p",
-                bus_id="b",
+                device_id="s", port_id="p", bus_id="b",
                 inverter_type=InverterType.SOLAR,
-                off_state_power_consumption_w=0.0,
-                on_state_power_consumption_w=0.0,
-                pv_to_ac_efficiency=0.97,
-                pv_to_battery_efficiency=0.95,
+                off_state_power_consumption_w=0.0, on_state_power_consumption_w=0.0,
+                pv_to_ac_efficiency=0.97, pv_to_battery_efficiency=0.95,
                 pv_max_power_w=0.0,   # invalid
-                pv_min_power_w=0.0,
-                pv_power_w_key=PV_KEY,
-                ac_to_battery_efficiency=0.95,
-                battery_to_ac_efficiency=0.95,
-                battery_capacity_wh=0.0,
-                battery_charge_rates=None,
-                battery_min_charge_rate=0.0,
-                battery_max_charge_rate=0.0,
-                battery_min_discharge_rate=0.0,
-                battery_max_discharge_rate=0.0,
-                battery_min_soc_factor=0.0,
-                battery_max_soc_factor=0.1,
+                pv_min_power_w=0.0, pv_power_w_key=PV_KEY,
+                ac_to_battery_efficiency=0.95, battery_to_ac_efficiency=0.95,
+                battery_capacity_wh=0.0, battery_charge_rates=None,
+                battery_min_charge_rate=0.0, battery_max_charge_rate=0.0,
+                battery_min_discharge_rate=0.0, battery_max_discharge_rate=0.0,
+                battery_min_soc_factor=0.0, battery_max_soc_factor=0.1,
                 battery_initial_soc_factor_key=SOC_KEY,
             )
 
     def test_solar_pv_min_exceeds_max_raises(self):
         with pytest.raises(ValueError, match="pv_min_power_w"):
             HybridInverterParam(
-                device_id="s",
-                port_id="p",
-                bus_id="b",
+                device_id="s", port_id="p", bus_id="b",
                 inverter_type=InverterType.SOLAR,
-                off_state_power_consumption_w=0.0,
-                on_state_power_consumption_w=0.0,
-                pv_to_ac_efficiency=0.97,
-                pv_to_battery_efficiency=0.95,
-                pv_max_power_w=8000.0,
-                pv_min_power_w=9000.0,   # > max
+                off_state_power_consumption_w=0.0, on_state_power_consumption_w=0.0,
+                pv_to_ac_efficiency=0.97, pv_to_battery_efficiency=0.95,
+                pv_max_power_w=8000.0, pv_min_power_w=9000.0,   # > max
                 pv_power_w_key=PV_KEY,
-                ac_to_battery_efficiency=0.95,
-                battery_to_ac_efficiency=0.95,
-                battery_capacity_wh=0.0,
-                battery_charge_rates=None,
-                battery_min_charge_rate=0.0,
-                battery_max_charge_rate=0.0,
-                battery_min_discharge_rate=0.0,
-                battery_max_discharge_rate=0.0,
-                battery_min_soc_factor=0.0,
-                battery_max_soc_factor=0.1,
+                ac_to_battery_efficiency=0.95, battery_to_ac_efficiency=0.95,
+                battery_capacity_wh=0.0, battery_charge_rates=None,
+                battery_min_charge_rate=0.0, battery_max_charge_rate=0.0,
+                battery_min_discharge_rate=0.0, battery_max_discharge_rate=0.0,
+                battery_min_soc_factor=0.0, battery_max_soc_factor=0.1,
                 battery_initial_soc_factor_key=SOC_KEY,
             )
 
@@ -590,15 +576,6 @@ class TestHybridInverterParamDerivedProperties:
             InverterMode.DISCHARGE,
         )
 
-    def test_battery_has_factor_gene(self):
-        assert make_battery_param().has_factor_gene is True
-
-    def test_solar_has_no_factor_gene(self):
-        assert make_solar_param().has_factor_gene is False
-
-    def test_hybrid_has_factor_gene(self):
-        assert make_hybrid_param().has_factor_gene is True
-
     def test_battery_n_modes(self):
         assert make_battery_param().n_modes == 3
 
@@ -669,27 +646,17 @@ class TestSetupRun:
     def test_solar_pv_power_w_key_none_raises(self):
         """SOLAR with pv_power_w_key=None must raise at setup_run."""
         param = HybridInverterParam(
-            device_id="s",
-            port_id="p",
-            bus_id="b",
+            device_id="s", port_id="p", bus_id="b",
             inverter_type=InverterType.SOLAR,
-            off_state_power_consumption_w=0.0,
-            on_state_power_consumption_w=0.0,
-            pv_to_ac_efficiency=0.97,
-            pv_to_battery_efficiency=0.95,
-            pv_max_power_w=8000.0,
-            pv_min_power_w=0.0,
+            off_state_power_consumption_w=0.0, on_state_power_consumption_w=0.0,
+            pv_to_ac_efficiency=0.97, pv_to_battery_efficiency=0.95,
+            pv_max_power_w=8000.0, pv_min_power_w=0.0,
             pv_power_w_key=None,   # invalid for SOLAR
-            ac_to_battery_efficiency=0.95,
-            battery_to_ac_efficiency=0.95,
-            battery_capacity_wh=0.0,
-            battery_charge_rates=None,
-            battery_min_charge_rate=0.0,
-            battery_max_charge_rate=0.0,
-            battery_min_discharge_rate=0.0,
-            battery_max_discharge_rate=0.0,
-            battery_min_soc_factor=0.0,
-            battery_max_soc_factor=0.1,
+            ac_to_battery_efficiency=0.95, battery_to_ac_efficiency=0.95,
+            battery_capacity_wh=0.0, battery_charge_rates=None,
+            battery_min_charge_rate=0.0, battery_max_charge_rate=0.0,
+            battery_min_discharge_rate=0.0, battery_max_discharge_rate=0.0,
+            battery_min_soc_factor=0.0, battery_max_soc_factor=0.1,
             battery_initial_soc_factor_key=SOC_KEY,
         )
         device = HybridInverterDevice(param, 0, 0)
@@ -700,7 +667,6 @@ class TestSetupRun:
         """SOLAR with resolved PV array of wrong length raises at setup_run."""
         param = make_solar_param()
         device = HybridInverterDevice(param, 0, 0)
-        # Context with PV array of length 2 but horizon 4
         ctx = FakeContext(
             step_times=make_step_times(4),
             step_interval_sec=STEP_INTERVAL,
@@ -727,8 +693,7 @@ class TestSetupRun:
         """Initial SoC factor outside [min_soc, max_soc] raises at setup_run."""
         param = make_battery_param(min_soc=0.2, max_soc=0.8)
         device = HybridInverterDevice(param, 0, 0)
-        # SoC factor 0.1 < min_soc_factor 0.2
-        ctx = make_context(initial_soc_factor=0.1)
+        ctx = make_context(initial_soc_factor=1.1)
         with pytest.raises(ValueError, match="initial SoC factor"):
             device.setup_run(ctx)
 
@@ -754,57 +719,60 @@ class TestSetupRun:
 # ============================================================
 
 class TestGenomeRequirements:
-    def test_battery_genome_size(self):
+    """The genome has one gene per time step for all inverter types.
+
+    Each gene encodes mode (integer part) + factor (fractional part).
+    Lower bound is always 0.0; upper bound is n_modes (so the last valid
+    mode is the integer n_modes − 1 and factor reaches up to 1.0).
+    """
+
+    def test_battery_genome_size_equals_horizon(self):
         device = make_device(make_battery_param(), horizon=4)
         slc = device.genome_requirements()
-        assert slc.size == 2 * 4
+        assert slc.size == 4
 
-    def test_battery_mode_upper_bound(self):
-        # 3 modes → position indices 0, 1, 2 → upper bound 2.0
-        device = make_device(make_battery_param(), horizon=4)
-        slc = device.genome_requirements()
-        mode_ub = slc.upper_bound[0::2]  # even positions
-        np.testing.assert_array_equal(mode_ub, np.full(4, 2.0))
-
-    def test_battery_mode_lower_bound(self):
-        device = make_device(make_battery_param(), horizon=4)
-        slc = device.genome_requirements()
-        mode_lb = slc.lower_bound[0::2]
-        np.testing.assert_array_equal(mode_lb, np.zeros(4))
-
-    def test_battery_factor_bounds(self):
-        device = make_device(make_battery_param(), horizon=4)
-        slc = device.genome_requirements()
-        np.testing.assert_array_equal(slc.lower_bound[1::2], np.zeros(4))
-        np.testing.assert_array_equal(slc.upper_bound[1::2], np.ones(4))
-
-    def test_solar_genome_size(self):
+    def test_solar_genome_size_equals_horizon(self):
         device = make_device(make_solar_param(), horizon=4)
         slc = device.genome_requirements()
         assert slc.size == 4
 
-    def test_solar_mode_upper_bound(self):
-        # 2 modes → upper bound 1.0
-        device = make_device(make_solar_param(), horizon=4)
+    def test_hybrid_genome_size_equals_horizon(self):
+        device = make_device(make_hybrid_param(), horizon=4)
         slc = device.genome_requirements()
-        np.testing.assert_array_equal(slc.upper_bound, np.ones(4))
+        assert slc.size == 4
 
-    def test_solar_mode_lower_bound(self):
+    def test_battery_lower_bound_all_zero(self):
+        device = make_device(make_battery_param(), horizon=4)
+        slc = device.genome_requirements()
+        np.testing.assert_array_equal(slc.lower_bound, np.zeros(4))
+
+    def test_solar_lower_bound_all_zero(self):
         device = make_device(make_solar_param(), horizon=4)
         slc = device.genome_requirements()
         np.testing.assert_array_equal(slc.lower_bound, np.zeros(4))
 
-    def test_hybrid_genome_size(self):
+    def test_hybrid_lower_bound_all_zero(self):
         device = make_device(make_hybrid_param(), horizon=4)
         slc = device.genome_requirements()
-        assert slc.size == 2 * 4
+        np.testing.assert_array_equal(slc.lower_bound, np.zeros(4))
 
-    def test_hybrid_mode_upper_bound(self):
-        # 4 modes → upper bound 3.0
+    def test_battery_upper_bound_equals_n_modes(self):
+        # BATTERY has 3 modes → upper bound 3.0
+        device = make_device(make_battery_param(), horizon=4)
+        slc = device.genome_requirements()
+        np.testing.assert_array_equal(slc.upper_bound, np.full(4, 3.0))
+
+    def test_solar_upper_bound_equals_n_modes(self):
+        # SOLAR has 2 modes → upper bound 2.0
+        device = make_device(make_solar_param(), horizon=4)
+        slc = device.genome_requirements()
+        np.testing.assert_array_equal(slc.upper_bound, np.full(4, 2.0))
+
+    def test_hybrid_upper_bound_equals_n_modes(self):
+        # HYBRID has 4 modes → upper bound 4.0
         device = make_device(make_hybrid_param(), horizon=4)
         slc = device.genome_requirements()
-        mode_ub = slc.upper_bound[0::2]
-        np.testing.assert_array_equal(mode_ub, np.full(4, 3.0))
+        np.testing.assert_array_equal(slc.upper_bound, np.full(4, 4.0))
 
     def test_before_setup_run_raises(self):
         param = make_battery_param()
@@ -875,105 +843,142 @@ class TestCreateBatchState:
 
 
 # ============================================================
-# TestRepairMode
+# TestDecodeGene
 # ============================================================
 
-class TestRepairMode:
-    # BATTERY: valid_modes = (OFF, CHARGE, DISCHARGE) → values (0, 2, 3)
-    # Genome position 0 → OFF(0), position 1 → CHARGE(2), position 2 → DISCHARGE(3)
+class TestDecodeGene:
+    """Tests for _decode_gene, which splits a gene into mode and raw factor.
 
-    def test_battery_position_0_maps_to_off(self):
+    Gene encoding:
+        gene = mode_position + factor    (factor ∈ [0, 1))
+
+    For BATTERY valid_modes = (OFF, CHARGE, DISCHARGE):
+        gene ∈ [0, 1) → position 0 → OFF
+        gene ∈ [1, 2) → position 1 → CHARGE
+        gene ∈ [2, 3) → position 2 → DISCHARGE
+
+    For SOLAR valid_modes = (OFF, PV):
+        gene ∈ [0, 1) → position 0 → OFF
+        gene ∈ [1, 2) → position 1 → PV
+
+    For HYBRID valid_modes = (OFF, PV, CHARGE, DISCHARGE):
+        gene ∈ [0, 1) → position 0 → OFF
+        gene ∈ [1, 2) → position 1 → PV
+        gene ∈ [2, 3) → position 2 → CHARGE
+        gene ∈ [3, 4) → position 3 → DISCHARGE
+    """
+
+    def _decode(self, device, gene_values):
+        gene = np.array(gene_values, dtype=np.float64)
+        return device._decode_gene(gene)
+
+    # ---- BATTERY mode decoding ----
+
+    def test_battery_gene_0_decodes_to_off(self):
         device = make_device(make_battery_param())
-        raw = np.array([0.0])
-        result = device._repair_mode(raw)
-        assert result[0] == InverterMode.OFF
+        mode, _ = self._decode(device, [0.0])
+        assert mode[0] == InverterMode.OFF
 
-    def test_battery_position_1_maps_to_charge(self):
+    def test_battery_gene_1_decodes_to_charge(self):
         device = make_device(make_battery_param())
-        raw = np.array([1.0])
-        result = device._repair_mode(raw)
-        assert result[0] == InverterMode.CHARGE
+        mode, _ = self._decode(device, [1.0])
+        assert mode[0] == InverterMode.CHARGE
 
-    def test_battery_position_2_maps_to_discharge(self):
+    def test_battery_gene_2_decodes_to_discharge(self):
         device = make_device(make_battery_param())
-        raw = np.array([2.0])
-        result = device._repair_mode(raw)
-        assert result[0] == InverterMode.DISCHARGE
+        mode, _ = self._decode(device, [2.0])
+        assert mode[0] == InverterMode.DISCHARGE
 
-    def test_battery_never_produces_pv_mode(self):
-        # All positions 0..2 should never yield InverterMode.PV (value 1)
+    def test_battery_never_decodes_to_pv(self):
         device = make_device(make_battery_param())
-        raw = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
-        result = device._repair_mode(raw)
-        assert InverterMode.PV not in result
+        mode, _ = self._decode(device, [0.0, 0.5, 1.0, 1.5, 2.0, 2.9])
+        assert InverterMode.PV not in mode
 
-    def test_solar_position_0_maps_to_off(self):
+    # ---- SOLAR mode decoding ----
+
+    def test_solar_gene_0_decodes_to_off(self):
         device = make_device(make_solar_param())
-        raw = np.array([0.0])
-        result = device._repair_mode(raw)
-        assert result[0] == InverterMode.OFF
+        mode, _ = self._decode(device, [0.0])
+        assert mode[0] == InverterMode.OFF
 
-    def test_solar_position_1_maps_to_pv(self):
+    def test_solar_gene_1_decodes_to_pv(self):
         device = make_device(make_solar_param())
-        raw = np.array([1.0])
-        result = device._repair_mode(raw)
-        assert result[0] == InverterMode.PV
+        mode, _ = self._decode(device, [1.0])
+        assert mode[0] == InverterMode.PV
 
-    def test_hybrid_position_0_maps_to_off(self):
+    # ---- HYBRID mode decoding ----
+
+    def test_hybrid_gene_0_decodes_to_off(self):
         device = make_device(make_hybrid_param())
-        raw = np.array([0.0])
-        assert device._repair_mode(raw)[0] == InverterMode.OFF
+        mode, _ = self._decode(device, [0.0])
+        assert mode[0] == InverterMode.OFF
 
-    def test_hybrid_position_1_maps_to_pv(self):
+    def test_hybrid_gene_1_decodes_to_pv(self):
         device = make_device(make_hybrid_param())
-        raw = np.array([1.0])
-        assert device._repair_mode(raw)[0] == InverterMode.PV
+        mode, _ = self._decode(device, [1.0])
+        assert mode[0] == InverterMode.PV
 
-    def test_hybrid_position_2_maps_to_charge(self):
+    def test_hybrid_gene_2_decodes_to_charge(self):
         device = make_device(make_hybrid_param())
-        raw = np.array([2.0])
-        assert device._repair_mode(raw)[0] == InverterMode.CHARGE
+        mode, _ = self._decode(device, [2.0])
+        assert mode[0] == InverterMode.CHARGE
 
-    def test_hybrid_position_3_maps_to_discharge(self):
+    def test_hybrid_gene_3_decodes_to_discharge(self):
         device = make_device(make_hybrid_param())
-        raw = np.array([3.0])
-        assert device._repair_mode(raw)[0] == InverterMode.DISCHARGE
+        mode, _ = self._decode(device, [3.0])
+        assert mode[0] == InverterMode.DISCHARGE
 
-    def test_fractional_rounds_to_nearest(self):
-        # 0.4 rounds to 0 (OFF), 0.6 rounds to 1 (CHARGE for BATTERY)
+    # ---- Factor (fractional part) extraction ----
+
+    def test_fractional_part_extracted_correctly(self):
         device = make_device(make_battery_param())
-        raw = np.array([0.4, 0.6])
-        result = device._repair_mode(raw)
-        assert result[0] == InverterMode.OFF
-        assert result[1] == InverterMode.CHARGE
+        _, factor = self._decode(device, [1.3, 2.7])
+        assert factor[0] == pytest.approx(0.3, rel=1e-9)
+        assert factor[1] == pytest.approx(0.7, rel=1e-9)
+
+    def test_integer_gene_gives_zero_factor(self):
+        device = make_device(make_battery_param())
+        _, factor = self._decode(device, [0.0, 1.0, 2.0])
+        np.testing.assert_array_almost_equal(factor, 0.0)
+
+    def test_mode_and_factor_independent(self):
+        """A gene of 1.6 decodes to CHARGE (pos 1) with factor 0.6."""
+        device = make_device(make_battery_param())
+        mode, factor = self._decode(device, [1.6])
+        assert mode[0] == InverterMode.CHARGE
+        assert factor[0] == pytest.approx(0.6, rel=1e-9)
+
+    # ---- Boundary and out-of-range handling ----
 
     def test_out_of_range_high_clipped_to_last_mode(self):
-        device = make_device(make_battery_param())  # n_modes=3, last position=2
-        raw = np.array([99.0])
-        result = device._repair_mode(raw)
-        assert result[0] == InverterMode.DISCHARGE  # last valid mode
+        # BATTERY n_modes=3; gene=99.0 → position clipped to 2 → DISCHARGE
+        device = make_device(make_battery_param())
+        mode, factor = self._decode(device, [99.0])
+        assert mode[0] == InverterMode.DISCHARGE
 
     def test_out_of_range_low_clipped_to_off(self):
         device = make_device(make_battery_param())
-        raw = np.array([-5.0])
-        result = device._repair_mode(raw)
-        assert result[0] == InverterMode.OFF
+        mode, _ = self._decode(device, [-5.0])
+        assert mode[0] == InverterMode.OFF
 
-    def test_result_dtype_is_int8(self):
+    def test_mode_dtype_is_int8(self):
         device = make_device(make_battery_param())
-        raw = np.array([0.0, 1.0, 2.0])
-        result = device._repair_mode(raw)
-        assert result.dtype == np.int8
+        mode, _ = self._decode(device, [0.0, 1.0])
+        assert mode.dtype == np.int8
 
-    def test_mixed_population_processed_correctly(self):
+    def test_population_vector_decoded_independently(self):
+        """Multiple gene values (simulating a population) are decoded correctly."""
         device = make_device(make_hybrid_param())
-        # Population of 4: positions 0, 1, 2, 3
-        raw = np.array([0.0, 1.0, 2.0, 3.0])
-        result = device._repair_mode(raw)
-        assert result[0] == InverterMode.OFF
-        assert result[1] == InverterMode.PV
-        assert result[2] == InverterMode.CHARGE
-        assert result[3] == InverterMode.DISCHARGE
+        # genes: OFF(0.2), PV(1.5), CHARGE(2.8), DISCHARGE(3.1)
+        mode, factor = self._decode(device, [0.2, 1.5, 2.8, 3.1])
+        assert mode[0] == InverterMode.OFF
+        assert mode[1] == InverterMode.PV
+        assert mode[2] == InverterMode.CHARGE
+        assert mode[3] == InverterMode.DISCHARGE
+        assert factor[0] == pytest.approx(0.2, rel=1e-9)
+        assert factor[1] == pytest.approx(0.5, rel=1e-9)
+        assert factor[2] == pytest.approx(0.8, rel=1e-9)
+        assert factor[3] == pytest.approx(0.1, rel=1e-9)
 
 
 # ============================================================
@@ -1007,14 +1012,11 @@ class TestRepairFactor:
         param = make_battery_param(max_charge=0.7, capacity_wh=10_000.0)
         device = make_device(param)
         result = self._call(device, [InverterMode.CHARGE], [1.0], [1000.0])
-        # Factor should be capped at max_charge_rate = 0.7
         assert result[0] == pytest.approx(0.7, rel=1e-6)
 
     def test_charge_below_min_charge_rate_clipped_to_min(self):
         param = make_battery_param(min_charge=0.1, max_charge=1.0, capacity_wh=10_000.0)
         device = make_device(param)
-        # Request factor 0.05 < min_charge_rate 0.1 → clipped up to 0.1
-        # (zeroing only happens when SoC cap pushes the factor below min)
         result = self._call(device, [InverterMode.CHARGE], [0.05], [5000.0])
         assert result[0] == pytest.approx(0.1)
 
@@ -1023,25 +1025,18 @@ class TestRepairFactor:
     def test_charge_discrete_rates_snap_to_nearest(self):
         param = make_battery_param(charge_rates=(0.25, 0.5, 0.75, 1.0))
         device = make_device(param)
-        # Request 0.6 → nearest discrete rate is 0.5
         result = self._call(device, [InverterMode.CHARGE], [0.6], [1000.0])
         assert result[0] == pytest.approx(0.5)
 
     def test_charge_discrete_rates_snap_rounds_up(self):
         param = make_battery_param(charge_rates=(0.25, 0.75, 1.0))
         device = make_device(param)
-        # Request 0.55 → nearest is 0.75 (distance 0.20) vs 0.25 (distance 0.30)
         result = self._call(device, [InverterMode.CHARGE], [0.55], [1000.0])
         assert result[0] == pytest.approx(0.75)
 
     # ---- CHARGE: SoC cap ----
 
     def test_charge_soc_cap_reduces_factor(self):
-        # capacity=10000, max_soc=0.9 → max_soc_wh=9000
-        # current soc = 8500, headroom = 500 Wh
-        # max_factor = headroom / (capacity × step_h × ac_eff)
-        #            = 500 / (10000 × 1.0 × 0.95)
-        #            = 500 / 9500 ≈ 0.05263
         param = make_battery_param(
             capacity_wh=10_000.0, max_soc=0.9, ac_to_bat_eff=0.95,
             min_charge=0.01, max_charge=1.0,
@@ -1052,19 +1047,14 @@ class TestRepairFactor:
         assert result[0] == pytest.approx(expected_max, rel=1e-5)
 
     def test_charge_soc_at_max_zeroes_factor(self):
-        param = make_battery_param(
-            capacity_wh=10_000.0, max_soc=0.9, min_charge=0.05
-        )
+        param = make_battery_param(capacity_wh=10_000.0, max_soc=0.9, min_charge=0.05)
         device = make_device(param)
-        # soc exactly at max → headroom = 0 → max_factor = 0 < min_charge → zeroed
         result = self._call(device, [InverterMode.CHARGE], [1.0], [9000.0])
         assert result[0] == pytest.approx(0.0)
 
     # ---- DISCHARGE: rate bounds ----
 
     def test_discharge_clips_to_max_discharge_rate(self):
-        # soc=9000, min_soc=0.1 → available=8000 Wh, max_factor=0.8 > max_discharge=0.5
-        # so max_discharge is the binding constraint, not the SoC cap
         param = make_battery_param(max_discharge=0.5, capacity_wh=10_000.0)
         device = make_device(param)
         result = self._call(device, [InverterMode.DISCHARGE], [1.0], [9000.0])
@@ -1073,18 +1063,12 @@ class TestRepairFactor:
     # ---- DISCHARGE: SoC floor ----
 
     def test_discharge_soc_at_min_zeroes_factor(self):
-        param = make_battery_param(
-            capacity_wh=10_000.0, min_soc=0.1, min_discharge=0.05
-        )
+        param = make_battery_param(capacity_wh=10_000.0, min_soc=0.1, min_discharge=0.05)
         device = make_device(param)
-        # soc at min → available = 0 → factor 0 < min_discharge → zeroed
         result = self._call(device, [InverterMode.DISCHARGE], [1.0], [1000.0])
         assert result[0] == pytest.approx(0.0)
 
     def test_discharge_partial_soc_reduces_factor(self):
-        # capacity=10000, min_soc=0.1 → min_soc_wh=1000
-        # current soc=2000, available=1000 Wh
-        # max_factor = 1000 / (10000 × 1.0) = 0.1
         param = make_battery_param(
             capacity_wh=10_000.0, min_soc=0.1, min_discharge=0.05, max_discharge=1.0
         )
@@ -1106,40 +1090,26 @@ class TestComputeAcPower:
         factors = np.array(factors_list, dtype=np.float64)
         return device._compute_ac_power(modes, factors, pv_dc_w)
 
-    # ---- OFF mode ----
-
     def test_off_returns_off_state_power(self):
         param = make_battery_param(off_w=8.0)
         device = make_device(param)
         result = self._call(device, [InverterMode.OFF], [0.0])
         assert result[0] == pytest.approx(8.0)
 
-    # ---- SOLAR PV mode ----
-
     def test_solar_pv_injects_correct_power(self):
-        # pv_dc=4000, pv_to_ac=0.97, on_state=10
-        # expected = -(4000 × 0.97) + 10 = -3870
         param = make_solar_param(on_w=10.0)
-        param_pv_to_ac = param.pv_to_ac_efficiency  # 0.97
         device = make_device(param)
         result = self._call(device, [InverterMode.PV], [0.0], pv_dc_w=4000.0)
-        expected = -(4000.0 * param_pv_to_ac) + 10.0
+        expected = -(4000.0 * 0.97) + 10.0
         assert result[0] == pytest.approx(expected, rel=1e-9)
 
     def test_solar_pv_negative_power(self):
-        """AC power must be negative (injection) for PV with no auxiliary."""
         param = make_solar_param(on_w=0.0)
         device = make_device(param)
         result = self._call(device, [InverterMode.PV], [0.0], pv_dc_w=1000.0)
         assert result[0] < 0.0
 
-    # ---- BATTERY CHARGE ----
-
     def test_battery_charge_active_consumes_from_bus(self):
-        # factor=0.5, capacity=10000, ac_eff=0.95, on_w=10
-        # charge_power_w = 0.5 × 10000 = 5000
-        # gross_ac_w = 5000 / 0.95 ≈ 5263.16
-        # expected = 5263.16 + 10
         param = make_battery_param(capacity_wh=10_000.0, ac_to_bat_eff=0.95, on_w=10.0)
         device = make_device(param)
         result = self._call(device, [InverterMode.CHARGE], [0.5])
@@ -1147,7 +1117,6 @@ class TestComputeAcPower:
         assert result[0] == pytest.approx(expected, rel=1e-9)
 
     def test_battery_charge_active_positive_power(self):
-        """AC power must be positive (consuming) during CHARGE."""
         device = make_device(make_battery_param())
         result = self._call(device, [InverterMode.CHARGE], [0.3])
         assert result[0] > 0.0
@@ -1158,12 +1127,7 @@ class TestComputeAcPower:
         result = self._call(device, [InverterMode.CHARGE], [0.0])
         assert result[0] == pytest.approx(5.0)
 
-    # ---- BATTERY DISCHARGE ----
-
     def test_battery_discharge_active_injects_into_bus(self):
-        # factor=0.5, capacity=10000, bat_to_ac=0.95, on_w=10
-        # battery_ac_w = 0.5 × 10000 × 0.95 = 4750
-        # expected = -4750 + 10 = -4740
         param = make_battery_param(capacity_wh=10_000.0, bat_to_ac_eff=0.95, on_w=10.0)
         device = make_device(param)
         result = self._call(device, [InverterMode.DISCHARGE], [0.5])
@@ -1171,36 +1135,21 @@ class TestComputeAcPower:
         assert result[0] == pytest.approx(expected, rel=1e-9)
 
     def test_battery_discharge_negative_power(self):
-        """AC power must be negative (injection) during DISCHARGE with large factor."""
         param = make_battery_param(on_w=1.0)
         device = make_device(param)
         result = self._call(device, [InverterMode.DISCHARGE], [1.0])
         assert result[0] < 0.0
 
     def test_battery_discharge_factor_zero_returns_on_state(self):
-        # factor=0 → total_inject=0 → ac = -0 + on_state = on_state
         param = make_battery_param(on_w=15.0)
         device = make_device(param)
         result = self._call(device, [InverterMode.DISCHARGE], [0.0])
         assert result[0] == pytest.approx(15.0)
 
-    # ---- HYBRID CHARGE: PV offsets AC demand ----
-
     def test_hybrid_charge_pv_reduces_ac_demand(self):
-        # capacity=10000, factor=0.5, charge_power=5000W, ac_eff=0.95
-        # gross_ac = 5000/0.95 = 5263.16
-        # pv_dc=3000, pv_to_bat=0.95 → pv_for_bat=2850W
-        # pv_used = min(2850, 5000) = 2850
-        # ac_offset = 2850 / 0.95 = 3000
-        # net_ac = 5263.16 - 3000 = 2263.16 (+ surplus injection)
-        # pv_surplus_dc = 3000 - 2850/0.95 = 3000 - 3000 = 0
-        # ac_w = 2263.16 - 0 + on_state
         param = make_hybrid_param(
-            capacity_wh=10_000.0,
-            ac_to_bat_eff=0.95,
-            pv_to_bat_eff=0.95,
-            pv_to_ac_eff=0.97,
-            on_w=10.0,
+            capacity_wh=10_000.0, ac_to_bat_eff=0.95,
+            pv_to_bat_eff=0.95, pv_to_ac_eff=0.97, on_w=10.0,
         )
         device = make_device(param, pv_w=3000.0)
         pv_dc = 3000.0
@@ -1216,36 +1165,19 @@ class TestComputeAcPower:
         assert result[0] == pytest.approx(expected, rel=1e-9)
 
     def test_hybrid_charge_pv_surplus_injects(self):
-        # PV power greatly exceeds charge demand → net AC should be negative (injection)
-        param = make_hybrid_param(
-            capacity_wh=1_000.0,   # small battery, factor 0.1 → charge 100W
-            on_w=0.0,
-        )
-        device = make_device(param, pv_w=10_000.0)  # large PV
+        param = make_hybrid_param(capacity_wh=1_000.0, on_w=0.0)
+        device = make_device(param, pv_w=10_000.0)
         result = self._call(device, [InverterMode.CHARGE], [0.1], pv_dc_w=10_000.0)
-        assert result[0] < 0.0  # net injection
-
-    # ---- HYBRID DISCHARGE: battery + PV both inject ----
+        assert result[0] < 0.0
 
     def test_hybrid_discharge_combines_battery_and_pv(self):
-        # factor=0.5, capacity=10000, bat_to_ac=0.95 → battery_ac=4750
-        # pv_dc=2000, pv_to_ac=0.97 → pv_ac=1940
-        # total_inject = 4750 + 1940 = 6690
-        # expected = -6690 + on_state
         param = make_hybrid_param(
-            capacity_wh=10_000.0,
-            bat_to_ac_eff=0.95,
-            pv_to_ac_eff=0.97,
-            on_w=5.0,
+            capacity_wh=10_000.0, bat_to_ac_eff=0.95, pv_to_ac_eff=0.97, on_w=5.0,
         )
         device = make_device(param, pv_w=2000.0)
         result = self._call(device, [InverterMode.DISCHARGE], [0.5], pv_dc_w=2000.0)
-        battery_ac = 0.5 * 10_000.0 * 0.95
-        pv_ac = 2000.0 * 0.97
-        expected = -(battery_ac + pv_ac) + 5.0
+        expected = -(0.5 * 10_000.0 * 0.95 + 2000.0 * 0.97) + 5.0
         assert result[0] == pytest.approx(expected, rel=1e-9)
-
-    # ---- population vectorisation ----
 
     def test_mixed_modes_independent(self):
         param = make_battery_param(off_w=5.0, on_w=10.0, capacity_wh=10_000.0)
@@ -1253,9 +1185,9 @@ class TestComputeAcPower:
         modes = np.array([InverterMode.OFF, InverterMode.CHARGE, InverterMode.DISCHARGE], dtype=np.int8)
         factors = np.array([0.0, 0.5, 0.5])
         result = device._compute_ac_power(modes, factors, 0.0)
-        assert result[0] == pytest.approx(5.0)   # OFF
-        assert result[1] > 0.0                    # CHARGE consumes
-        assert result[2] < 0.0                    # DISCHARGE injects
+        assert result[0] == pytest.approx(5.0)
+        assert result[1] > 0.0
+        assert result[2] < 0.0
 
 
 # ============================================================
@@ -1279,16 +1211,11 @@ class TestAdvanceSoc:
     def test_pv_mode_soc_unchanged_for_solar(self):
         device = make_device(make_solar_param())
         result = self._call(device, [0.0], [InverterMode.PV], [0.0], pv_dc_w=3000.0)
-        # SoC should not change for SOLAR (no battery)
         assert result[0] == pytest.approx(0.0)
 
     def test_battery_charge_increases_soc(self):
-        # factor=0.5, capacity=10000, step_h=1.0, ac_eff=0.95
-        # stored_wh = 0.5 × 10000 × 1.0 × 0.95 = 4750
-        # new_soc = 2000 + 4750 = 6750
         param = make_battery_param(
-            capacity_wh=10_000.0, ac_to_bat_eff=0.95,
-            min_soc=0.0, max_soc=1.0,
+            capacity_wh=10_000.0, ac_to_bat_eff=0.95, min_soc=0.0, max_soc=1.0,
         )
         device = make_device(param, initial_soc_factor=0.5)
         result = self._call(device, [2000.0], [InverterMode.CHARGE], [0.5])
@@ -1296,12 +1223,7 @@ class TestAdvanceSoc:
         assert result[0] == pytest.approx(expected, rel=1e-9)
 
     def test_battery_discharge_decreases_soc(self):
-        # factor=0.3, capacity=10000, step_h=1.0
-        # drawn_wh = 0.3 × 10000 × 1.0 = 3000 (battery side, pre-efficiency)
-        # new_soc = 8000 - 3000 = 5000
-        param = make_battery_param(
-            capacity_wh=10_000.0, min_soc=0.0, max_soc=1.0,
-        )
+        param = make_battery_param(capacity_wh=10_000.0, min_soc=0.0, max_soc=1.0)
         device = make_device(param, initial_soc_factor=0.5)
         result = self._call(device, [8000.0], [InverterMode.DISCHARGE], [0.3])
         expected = 8000.0 - 0.3 * 10_000.0 * 1.0
@@ -1309,34 +1231,21 @@ class TestAdvanceSoc:
 
     def test_soc_clamped_at_max_on_overcharge(self):
         param = make_battery_param(
-            capacity_wh=10_000.0, max_soc=0.9, min_soc=0.0,
-            ac_to_bat_eff=1.0,
+            capacity_wh=10_000.0, max_soc=0.9, min_soc=0.0, ac_to_bat_eff=1.0,
         )
         device = make_device(param, initial_soc_factor=0.5)
-        # Start near max, charge full — result must be clamped to max_soc_wh=9000
         result = self._call(device, [8900.0], [InverterMode.CHARGE], [1.0])
         assert result[0] == pytest.approx(9000.0)
 
     def test_soc_clamped_at_min_on_over_discharge(self):
-        param = make_battery_param(
-            capacity_wh=10_000.0, min_soc=0.1, max_soc=1.0,
-        )
+        param = make_battery_param(capacity_wh=10_000.0, min_soc=0.1, max_soc=1.0)
         device = make_device(param, initial_soc_factor=0.5)
-        # Start near min, discharge max — result must be clamped to min_soc_wh=1000
         result = self._call(device, [1100.0], [InverterMode.DISCHARGE], [1.0])
         assert result[0] == pytest.approx(1000.0)
 
     def test_hybrid_charge_pv_contributes_first(self):
-        # capacity=10000, factor=0.5, charge_power=5000W
-        # pv_dc=2000, pv_to_bat=0.95 → pv_for_bat=1900W
-        # pv_used=min(1900, 5000)=1900
-        # ac_used=5000-1900=3100
-        # stored_wh = (1900 + 3100 × 0.95) × 1.0
-        #           = (1900 + 2945) = 4845
         param = make_hybrid_param(
-            capacity_wh=10_000.0,
-            ac_to_bat_eff=0.95,
-            pv_to_bat_eff=0.95,
+            capacity_wh=10_000.0, ac_to_bat_eff=0.95, pv_to_bat_eff=0.95,
             min_soc=0.0, max_soc=1.0,
         )
         device = make_device(param, pv_w=2000.0, initial_soc_factor=0.5)
@@ -1350,19 +1259,13 @@ class TestAdvanceSoc:
         assert result[0] == pytest.approx(expected, rel=1e-9)
 
     def test_hybrid_charge_pv_exceeds_demand_uses_only_pv(self):
-        # capacity=1000, factor=0.1, charge_power=100W
-        # pv_dc=5000, pv_to_bat=0.95 → pv_for_bat=4750W > 100W
-        # pv_used=min(4750,100)=100, ac_used=0
-        # stored_wh = (100 + 0) × 1.0 = 100
         param = make_hybrid_param(
-            capacity_wh=1_000.0,
-            ac_to_bat_eff=0.95,
-            pv_to_bat_eff=0.95,
+            capacity_wh=1_000.0, ac_to_bat_eff=0.95, pv_to_bat_eff=0.95,
             min_soc=0.0, max_soc=1.0,
         )
         device = make_device(param, pv_w=5000.0, initial_soc_factor=0.5)
         result = self._call(device, [200.0], [InverterMode.CHARGE], [0.1], pv_dc_w=5000.0)
-        stored_wh = 0.1 * 1_000.0  # pv fully covers → no AC efficiency loss
+        stored_wh = 0.1 * 1_000.0
         expected = 200.0 + stored_wh
         assert result[0] == pytest.approx(expected, rel=1e-9)
 
@@ -1372,101 +1275,123 @@ class TestAdvanceSoc:
 # ============================================================
 
 class TestApplyGenomeBatch:
-    """Integration tests for the full apply_genome_batch pipeline."""
+    """Integration tests for the full apply_genome_batch pipeline.
+
+    Genome shape is always (population_size, horizon) — one gene per step.
+    """
 
     # ---- SOLAR ----
 
-    def test_solar_genome_size_is_horizon(self):
+    def test_solar_genome_shape_is_pop_by_horizon(self):
+        """SOLAR genome has shape (pop, horizon), not (pop, 2*horizon)."""
         device = make_device(make_solar_param(), horizon=4)
         state = device.create_batch_state(POP, 4)
-        genome = np.zeros((POP, 4))  # size == horizon for SOLAR
+        genome = np.zeros((POP, 4))
         device.apply_genome_batch(state, genome)
-        assert state.modes.shape == (POP, 4)
+        assert genome.shape == (POP, 4)
 
     def test_solar_all_factors_zero(self):
         device = make_device(make_solar_param(), horizon=4)
         state = device.create_batch_state(POP, 4)
-        # All mode genes at 0 (OFF)
-        genome = np.zeros((POP, 4))
+        genome = np.zeros((POP, 4))   # all OFF (position 0)
         device.apply_genome_batch(state, genome)
         np.testing.assert_array_equal(state.factors, 0.0)
 
-    def test_solar_pv_mode_decoded(self):
+    def test_solar_pv_mode_decoded_from_gene_1(self):
+        """Gene value 1.0 → position 1 → InverterMode.PV for SOLAR."""
         device = make_device(make_solar_param(), horizon=4)
         state = device.create_batch_state(1, 4)
-        # Gene value 1.0 → position 1 → InverterMode.PV
-        genome = np.ones((1, 4))
+        genome = np.ones((1, 4))   # gene=1.0 → PV
         device.apply_genome_batch(state, genome)
         assert all(state.modes[0, :] == InverterMode.PV)
 
     # ---- BATTERY ----
 
-    def test_battery_mode_and_factor_decoded(self):
+    def test_battery_genome_shape_is_pop_by_horizon(self):
+        """BATTERY genome shape (pop, horizon), same as all other types."""
         device = make_device(make_battery_param(), horizon=2)
         state = device.create_batch_state(1, 2)
-        # Genome: [mode=1(→CHARGE), factor=0.5, mode=2(→DISCHARGE), factor=0.3]
-        genome = np.array([[1.0, 0.5, 2.0, 0.3]])
+        genome = np.array([[1.5, 2.3]])   # shape (1, 2)
         device.apply_genome_batch(state, genome)
-        # Step 0: position 1 → CHARGE (value 2)
-        assert state.modes[0, 0] == InverterMode.CHARGE
-        # Step 1: position 2 → DISCHARGE (value 3)
-        assert state.modes[0, 1] == InverterMode.DISCHARGE
+        assert genome.shape == (1, 2)
 
-    def test_battery_genome_writeback_lamarckian(self):
-        # After apply_genome_batch, genome contains repaired mode integers as floats
-        param = make_battery_param(max_charge=0.6)  # caps factor at 0.6
-        device = make_device(param, horizon=1)
-        state = device.create_batch_state(1, 1)
-        # Genome: position 1 (CHARGE), factor 1.0 (will be capped to 0.6)
-        genome = np.array([[1.0, 1.0]])
-        device.apply_genome_batch(state, genome)
-        # Repaired factor in genome[:, 1] should be ≤ 0.6
-        assert genome[0, 1] <= 0.6
-
-    def test_battery_mode_writeback(self):
+    def test_battery_charge_decoded_from_gene_in_range_1_to_2(self):
+        """Gene ∈ [1, 2) → position 1 → CHARGE for BATTERY."""
         device = make_device(make_battery_param(), horizon=1)
         state = device.create_batch_state(1, 1)
-        # Position 0.2 → rounds to 0 → OFF (value 0)
-        genome = np.array([[0.2, 0.0]])
+        genome = np.array([[1.5]])   # position=1 → CHARGE, raw_factor=0.5
         device.apply_genome_batch(state, genome)
-        assert genome[0, 0] == pytest.approx(float(InverterMode.OFF))
+        assert state.modes[0, 0] == InverterMode.CHARGE
+
+    def test_battery_discharge_decoded_from_gene_in_range_2_to_3(self):
+        """Gene ∈ [2, 3) → position 2 → DISCHARGE for BATTERY."""
+        device = make_device(make_battery_param(), horizon=1)
+        state = device.create_batch_state(1, 1)
+        genome = np.array([[2.3]])   # position=2 → DISCHARGE, raw_factor=0.3
+        device.apply_genome_batch(state, genome)
+        assert state.modes[0, 0] == InverterMode.DISCHARGE
+
+    def test_battery_factor_decoded_from_fractional_part(self):
+        """After repair the factor equals the (clamped) fractional part of the gene."""
+        param = make_battery_param(min_charge=0.0, max_charge=1.0, capacity_wh=10_000.0)
+        device = make_device(param, initial_soc_factor=0.1)
+        state = device.create_batch_state(1, 1)
+        genome = np.array([[1.4]])   # CHARGE with raw_factor=0.4
+        device.apply_genome_batch(state, genome)
+        assert state.factors[0, 0] == pytest.approx(0.4, rel=1e-6)
+
+    # ---- Lamarckian write-back ----
+
+    def test_lamarckian_writeback_encodes_position_plus_factor(self):
+        """After apply_genome_batch, genome[:, t] = mode_position + repaired_factor."""
+        param = make_battery_param(max_charge=0.6, min_charge=0.0)
+        device = make_device(param, horizon=1)
+        state = device.create_batch_state(1, 1)
+        # CHARGE (position 1) with factor 1.0 → capped to 0.6
+        genome = np.array([[1.99]])
+        device.apply_genome_batch(state, genome)
+        # Written-back gene: position=1, repaired_factor <= 0.6 → gene in [1.0, 1.6]
+        assert 1.0 <= genome[0, 0] <= 1.6 + 1e-9
+
+    def test_lamarckian_writeback_off_mode_has_zero_factor(self):
+        """OFF mode genes write back as pure integers (factor zeroed)."""
+        device = make_device(make_battery_param(), horizon=1)
+        state = device.create_batch_state(1, 1)
+        genome = np.array([[0.7]])   # OFF with factor=0.7; factor zeroed by repair
+        device.apply_genome_batch(state, genome)
+        assert genome[0, 0] == pytest.approx(0.0, abs=1e-9)  # position=0, factor=0
 
     # ---- SoC evolution ----
 
     def test_soc_evolves_across_steps(self):
         param = make_battery_param(
-            capacity_wh=10_000.0,
-            min_soc=0.0, max_soc=1.0, ac_to_bat_eff=1.0,
+            capacity_wh=10_000.0, min_soc=0.0, max_soc=1.0, ac_to_bat_eff=1.0,
         )
         device = make_device(param, horizon=3, initial_soc_factor=0.5)
         state = device.create_batch_state(1, 3)
-        # 3 steps all CHARGE (position 1) with factor 0.1 each
-        genome = np.array([[1.0, 0.1, 1.0, 0.1, 1.0, 0.1]])
+        # Gene 1.1: position=1 (CHARGE), factor=0.1 each step
+        genome = np.array([[1.1, 1.1, 1.1]])
         device.apply_genome_batch(state, genome)
-        # each step stores 0.1 × 10000 × 1.0 × 1.0 = 1000 Wh
-        expected_soc_t0 = 5000.0 + 1000.0
-        expected_soc_t1 = expected_soc_t0 + 1000.0
-        expected_soc_t2 = expected_soc_t1 + 1000.0
-        assert state.soc_wh[0, 0] == pytest.approx(expected_soc_t0, rel=1e-6)
-        assert state.soc_wh[0, 1] == pytest.approx(expected_soc_t1, rel=1e-6)
-        assert state.soc_wh[0, 2] == pytest.approx(expected_soc_t2, rel=1e-6)
+        expected_t0 = 5000.0 + 0.1 * 10_000.0 * 1.0 * 1.0
+        expected_t1 = expected_t0 + 0.1 * 10_000.0
+        expected_t2 = expected_t1 + 0.1 * 10_000.0
+        assert state.soc_wh[0, 0] == pytest.approx(expected_t0, rel=1e-6)
+        assert state.soc_wh[0, 1] == pytest.approx(expected_t1, rel=1e-6)
+        assert state.soc_wh[0, 2] == pytest.approx(expected_t2, rel=1e-6)
 
     # ---- Population axis independence ----
 
     def test_population_axis_independent(self):
         device = make_device(make_battery_param(capacity_wh=10_000.0), horizon=1)
         state = device.create_batch_state(2, 1)
-        # Individual 0: CHARGE (pos=1) with factor 0.5
-        # Individual 1: DISCHARGE (pos=2) with factor 0.3
-        genome = np.array([
-            [1.0, 0.5],  # individual 0
-            [2.0, 0.3],  # individual 1
-        ])
+        # Individual 0: gene=1.5 → CHARGE, factor=0.5
+        # Individual 1: gene=2.3 → DISCHARGE, factor=0.3
+        genome = np.array([[1.5], [2.3]])
         device.apply_genome_batch(state, genome)
         assert state.modes[0, 0] == InverterMode.CHARGE
         assert state.modes[1, 0] == InverterMode.DISCHARGE
-        assert state.ac_power_w[0, 0] > 0.0   # charging consumes
-        assert state.ac_power_w[1, 0] < 0.0   # discharging injects
+        assert state.ac_power_w[0, 0] > 0.0   # CHARGE consumes
+        assert state.ac_power_w[1, 0] < 0.0   # DISCHARGE injects
 
 
 # ============================================================
@@ -1480,8 +1405,8 @@ class TestBuildDeviceRequest:
         device = HybridInverterDevice(param, device_index, port_index)
         device.setup_run(make_context(horizon=horizon))
         state = device.create_batch_state(pop, horizon)
-        # All CHARGE mode with factor 0.2 — gives a predictable ac_power_w
-        genome = np.tile([1.0, 0.2], (pop, horizon))
+        # Gene 1.2: position=1 (CHARGE), factor=0.2 — predictable ac_power_w
+        genome = np.full((pop, horizon), 1.2)
         device.apply_genome_batch(state, genome)
         return device, state
 
@@ -1531,8 +1456,8 @@ class TestBuildDeviceRequest:
         device = HybridInverterDevice(param, 0, 0)
         device.setup_run(make_context(horizon=HORIZON))
         state = device.create_batch_state(1, HORIZON)
-        # All OFF (genome pos 0 = OFF for BATTERY)
-        genome = np.zeros((1, 2 * HORIZON))
+        # Gene 0.0: position=0 (OFF), factor=0.0
+        genome = np.zeros((1, HORIZON))
         device.apply_genome_batch(state, genome)
         req = device.build_device_request(state)
         np.testing.assert_array_equal(req.port_requests[0].min_energy_wh, 0.0)
@@ -1542,8 +1467,8 @@ class TestBuildDeviceRequest:
         device = HybridInverterDevice(param, 0, 0)
         device.setup_run(make_context(horizon=1))
         state = device.create_batch_state(1, 1)
-        # CHARGE mode (position 1), factor 0.5
-        genome = np.array([[1.0, 0.5]])
+        # Gene 1.5: CHARGE with factor=0.5
+        genome = np.array([[1.5]])
         device.apply_genome_batch(state, genome)
         req = device.build_device_request(state)
         assert req.port_requests[0].min_energy_wh[0, 0] > 0.0
@@ -1553,8 +1478,8 @@ class TestBuildDeviceRequest:
         device = HybridInverterDevice(param, 0, 0)
         device.setup_run(make_context(horizon=1))
         state = device.create_batch_state(1, 1)
-        # DISCHARGE mode (position 2), factor 0.5
-        genome = np.array([[2.0, 0.5]])
+        # Gene 2.5: DISCHARGE with factor=0.5
+        genome = np.array([[2.5]])
         device.apply_genome_batch(state, genome)
         req = device.build_device_request(state)
         assert req.port_requests[0].min_energy_wh[0, 0] < 0.0
@@ -1585,7 +1510,6 @@ class TestApplyDeviceGrant:
     def test_grant_conversion_step_h(self):
         device = make_device(make_battery_param())
         state = device.create_batch_state(1, 1)
-        # granted 500 Wh at 1-hour step → power should be 500 W
         granted_wh = np.array([[500.0]])
         grant = self._make_grant(granted_wh)
         device.apply_device_grant(state, grant)
@@ -1594,7 +1518,6 @@ class TestApplyDeviceGrant:
     def test_other_state_arrays_unchanged(self):
         device = make_device(make_battery_param())
         state = device.create_batch_state(POP, HORIZON)
-        # Populate modes with something non-zero
         state.modes[:] = InverterMode.CHARGE
         modes_before = state.modes.copy()
         grant = self._make_grant(np.zeros((POP, HORIZON)))
@@ -1633,26 +1556,21 @@ class TestComputeCost:
 class TestExtractInstructions:
     def _run(self, param, modes_per_step: list, factors_per_step: list):
         """Run apply_genome_batch with a hand-crafted genome that produces
-        the requested modes and factors (for a single individual)."""
+        the requested modes and factors (for a single individual).
+
+        Genes are constructed as ``mode_position + factor`` so that
+        _decode_gene produces the desired values before repair.
+        """
         horizon = len(modes_per_step)
         device = make_device(param, horizon=horizon)
         state = device.create_batch_state(1, horizon)
 
-        if param.has_factor_gene:
-            # Build interleaved genome from desired position indices and factors.
-            # We need position indices, not InverterMode values.
-            mode_positions = [
-                param.valid_modes.index(InverterMode(m)) for m in modes_per_step
-            ]
-            genome = np.empty((1, 2 * horizon))
-            for t, (pos, f) in enumerate(zip(mode_positions, factors_per_step)):
-                genome[0, 2 * t] = float(pos)
-                genome[0, 2 * t + 1] = f
-        else:
-            mode_positions = [
-                param.valid_modes.index(InverterMode(m)) for m in modes_per_step
-            ]
-            genome = np.array([[float(p) for p in mode_positions]])
+        # Build position index for each requested mode.
+        mode_positions = [
+            param.valid_modes.index(InverterMode(m)) for m in modes_per_step
+        ]
+        genes = [float(pos) + f for pos, f in zip(mode_positions, factors_per_step)]
+        genome = np.array([genes])   # shape (1, horizon)
 
         device.apply_genome_batch(state, genome)
         return device, state
@@ -1669,11 +1587,7 @@ class TestExtractInstructions:
 
     def test_all_elements_are_ombc_instruction(self):
         param = make_battery_param()
-        device, state = self._run(
-            param,
-            [InverterMode.OFF] * HORIZON,
-            [0.0] * HORIZON,
-        )
+        device, state = self._run(param, [InverterMode.OFF] * HORIZON, [0.0] * HORIZON)
         result = device.extract_instructions(state, 0)
         assert all(isinstance(inst, OMBCInstruction) for inst in result)
 
@@ -1685,11 +1599,7 @@ class TestExtractInstructions:
 
     def test_execution_times_match_step_times(self):
         param = make_solar_param()
-        device, state = self._run(
-            param,
-            [InverterMode.PV] * HORIZON,
-            [0.0] * HORIZON,
-        )
+        device, state = self._run(param, [InverterMode.PV] * HORIZON, [0.0] * HORIZON)
         result = device.extract_instructions(state, 0)
         expected_times = make_step_times(HORIZON)
         for inst, expected_dt in zip(result, expected_times):
@@ -1701,32 +1611,27 @@ class TestExtractInstructions:
         device, state = self._run(param, modes, [0.0, 0.5, 0.5, 0.0])
         result = device.extract_instructions(state, 0)
         expected_names = [InverterMode(m).name for m in modes]
-        # Note: repair may zero some factors, but modes should be preserved for valid inputs
         for inst, name in zip(result, expected_names):
             assert inst.operation_mode_id == name
 
     def test_operation_mode_factor_matches_state(self):
         param = make_battery_param(min_charge=0.05, max_charge=1.0)
         device, state = self._run(
-            param,
-            [InverterMode.CHARGE] * HORIZON,
-            [0.3] * HORIZON,
+            param, [InverterMode.CHARGE] * HORIZON, [0.3] * HORIZON,
         )
         result = device.extract_instructions(state, 0)
-        for inst in result:
-            assert inst.operation_mode_factor == pytest.approx(
-                state.factors[0, result.index(inst)], rel=1e-9
-            )
+        for i, inst in enumerate(result):
+            assert inst.operation_mode_factor == pytest.approx(state.factors[0, i], rel=1e-9)
 
     def test_individual_index_selects_correct_row(self):
         param = make_battery_param()
         horizon = 2
         device = make_device(param, horizon=horizon)
         state = device.create_batch_state(2, horizon)
-        # Individual 0: all OFF; Individual 1: all CHARGE
+        # Individual 0: OFF (gene=0.0); Individual 1: CHARGE (gene=1.3)
         genome = np.array([
-            [0.0, 0.0, 0.0, 0.0],   # pos 0=OFF, factor 0 × 2 steps
-            [1.0, 0.3, 1.0, 0.3],   # pos 1=CHARGE, factor 0.3 × 2 steps
+            [0.0, 0.0],    # individual 0: OFF both steps
+            [1.3, 1.3],    # individual 1: CHARGE both steps, factor=0.3
         ])
         device.apply_genome_batch(state, genome)
 
