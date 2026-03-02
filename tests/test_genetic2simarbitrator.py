@@ -56,10 +56,9 @@ Covers:
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
-
 import numpy as np
 import pytest
+from dataclasses import FrozenInstanceError
 
 from akkudoktoreos.simulation.genetic2.arbitrator import (
     ArbitrationPriority,
@@ -70,6 +69,7 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
     PortRequest,
     VectorizedBusArbitrator,
 )
+
 
 # ============================================================
 # Helpers
@@ -664,22 +664,12 @@ class TestArbitratorSlack:
         np.testing.assert_array_almost_equal(grant1(grants, 2, 2), [10.0])
 
     def test_slack_imports_to_cover_non_slack_demand_not_met_by_producers(self):
-        """Insufficient local supply → slack imports the shortfall.
+        """No local supply → slack injects to fully cover non-slack demand.
 
-        Supply=4, non-slack demand=10 → non-slack gets 4 (ratio=0.4),
-        residual = 4 − 4 = 0 from producers, but shortfall is 6 Wh
-        that was not served → slack imports +6.
-
-        Residual = total_supply − sum(non_slack_grants) = 4 − 4 = 0.
-        Wait — residual definition: supply − non-slack grants.
-        non_slack_grant = 10 * 0.4 = 4. residual = 4 − 4 = 0.
-        Slack gets 0. This is correct: the bus was balanced within local
-        resources; the non-slack consumer is just under-served (rationed).
-
-        To get the slack to import we need more non-slack demand than
-        supply AND no local producer covering the gap. Let's use a
-        scenario where demand=10, supply=0 (no producer) → slack must
-        import 10.
+        No producer, non-slack demand=10.
+        Deficit=10 → slack injects 10 into bus → slack grant = −10
+        (negative = injecting, i.e. grid supplies household).
+        Consumer receives full 10 from the slack's injection.
         """
         arb = VectorizedBusArbitrator(single_bus_topology(2), horizon=1)
         consumer = req1(0, 0, [10.0])
@@ -687,7 +677,7 @@ class TestArbitratorSlack:
         grants = arb.arbitrate([consumer, slack])
 
         np.testing.assert_array_almost_equal(grant1(grants, 0, 0), [10.0])
-        np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [10.0])
+        np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [-10.0])
 
     def test_slack_gets_zero_on_perfectly_balanced_bus(self):
         """When supply exactly meets non-slack demand, slack grant is zero."""
@@ -788,7 +778,7 @@ class TestArbitratorSlack:
         arb = VectorizedBusArbitrator(single_bus_topology(3), horizon=2)
         producer = req1(0, 0, [-15.0, -8.0])
         consumer = req1(1, 1, [10.0, 10.0])
-        slack = req1(2, 2, [100.0], min_energy=[-100.0], is_slack=True)
+        slack = req1(2, 2, [100.0, 100.0], min_energy=[-100.0, -100.0], is_slack=True)
         grants = arb.arbitrate([producer, consumer, slack])
 
         np.testing.assert_array_almost_equal(grant1(grants, 1, 1), [10.0, 10.0])
