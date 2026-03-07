@@ -21,6 +21,7 @@ import pytest
 
 from akkudoktoreos.devices.devicesabc import EnergyDevice
 from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 
 # ============================================================
 # Minimal concrete stubs
@@ -33,7 +34,7 @@ class StubDevice(EnergyDevice):
         self.device_id = device_id
 
     # Implement abstract methods minimally so instantiation works
-    def setup_run(self, step_times, step_interval): pass
+    def setup_run(self, context: SimulationContext): pass
     def genome_requirements(self): return None
     @property
     def ports(self): return ()

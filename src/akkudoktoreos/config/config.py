@@ -36,7 +36,7 @@ from akkudoktoreos.core.logabc import LOGGING_LEVELS
 from akkudoktoreos.core.logsettings import LoggingCommonSettings
 from akkudoktoreos.core.pydantic import PydanticModelNestedValueMixin, merge_models
 from akkudoktoreos.core.version import __version__
-from akkudoktoreos.devices.devices import DevicesCommonSettings
+from akkudoktoreos.devices.devices import BusesCommonSettings, DevicesCommonSettings
 from akkudoktoreos.measurement.measurement import MeasurementCommonSettings
 from akkudoktoreos.optimization.optimization import OptimizationCommonSettings
 from akkudoktoreos.prediction.elecprice import ElecPriceCommonSettings
@@ -236,6 +236,9 @@ class SettingsEOS(pydantic_settings.BaseSettings, PydanticModelNestedValueMixin)
     logging: Optional[LoggingCommonSettings] = Field(
         default=None, json_schema_extra={"description": "Logging Settings"}
     )
+    buses: Optional[BusesCommonSettings] = Field(
+        default=None, json_schema_extra={"description": "Energy Buses Settings"}
+    )
     devices: Optional[DevicesCommonSettings] = Field(
         default=None, json_schema_extra={"description": "Devices Settings"}
     )
@@ -292,6 +295,7 @@ class SettingsEOSDefaults(SettingsEOS):
     database: DatabaseCommonSettings = Field(default_factory=DatabaseCommonSettings)
     ems: EnergyManagementCommonSettings = Field(default_factory=EnergyManagementCommonSettings)
     logging: LoggingCommonSettings = Field(default_factory=LoggingCommonSettings)
+    buses: BusesCommonSettings = Field(default_factory=BusesCommonSettings)
     devices: DevicesCommonSettings = Field(default_factory=DevicesCommonSettings)
     measurement: MeasurementCommonSettings = Field(default_factory=MeasurementCommonSettings)
     optimization: OptimizationCommonSettings = Field(default_factory=OptimizationCommonSettings)

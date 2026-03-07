@@ -4,7 +4,6 @@ from unittest.mock import Mock, patch
 
 import pandas as pd
 import pytest
-
 from loguru import logger
 
 from akkudoktoreos.core.cache import CacheFileStore

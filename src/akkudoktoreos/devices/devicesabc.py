@@ -66,6 +66,41 @@ from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.utils.datetimeutil import DateTime
 
 # ============================================================
+# Instruction Extraction Context
+# ============================================================
+
+
+@dataclass
+class InstructionContext:
+    """Shared cross-device context available during S2 instruction extraction.
+
+    Passed by ``GeneticOptimizer.extract_best_instructions`` to every
+    ``device.extract_instructions()`` call so devices can inspect the
+    arbitrated outcome of *other* devices when deciding which operation
+    mode to emit.
+
+    The primary use-case is translating an explicit battery charge/discharge
+    setpoint into a firmware-autonomous mode (e.g. ``SELF_CONSUMPTION``)
+    when the arbitrated grid exchange at that step is near zero — meaning
+    the optimizer already found a self-consumption equilibrium and the
+    inverter firmware can maintain it without a precise setpoint.
+
+    Attributes:
+        grid_granted_wh:
+            Net AC energy granted to the grid-connection device per step,
+            shape ``(horizon,)`` [Wh].  Positive = import from grid;
+            negative = export to grid.  ``None`` if no grid-connection
+            device is registered (e.g. off-grid or island-mode setups).
+        step_interval_sec:
+            Duration of each simulation step [s].  Convenience copy so
+            devices do not need to cache it separately.
+    """
+
+    grid_granted_wh: np.ndarray | None  # shape (horizon,), or None
+    step_interval_sec: float
+
+
+# ============================================================
 # Operation Mode Enums
 # ============================================================
 
@@ -631,6 +666,7 @@ class EnergyDevice(ABC):
         self,
         state: Any,
         individual_index: int,
+        instruction_context: InstructionContext | None = None,
     ) -> list[EnergyManagementInstruction]:
         """Extract S2 control instructions for one individual from the batch state.
 
@@ -655,6 +691,14 @@ class EnergyDevice(ABC):
                 state was produced from a single-individual population (the
                 normal case when called from
                 ``GeneticOptimizer.extract_best_instructions``).
+            instruction_context: Optional shared cross-device context
+                populated by ``GeneticOptimizer.extract_best_instructions``.
+                Provides the arbitrated grid exchange (``grid_granted_wh``)
+                and the step interval so devices can select firmware-autonomous
+                modes (e.g. ``SELF_CONSUMPTION``) when the optimizer already
+                found a near-zero-export equilibrium at a given step.
+                Devices that do not need cross-device context may ignore this
+                argument; it defaults to ``None`` for backward compatibility.
 
         Returns:
             Ordered list of ``EnergyManagementInstruction`` objects covering

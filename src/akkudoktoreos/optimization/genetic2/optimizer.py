@@ -66,6 +66,7 @@ from typing import Any
 import numpy as np
 
 from akkudoktoreos.core.emplan import EnergyManagementInstruction
+from akkudoktoreos.devices.devicesabc import InstructionContext
 from akkudoktoreos.optimization.genetic2.genome import AssembledGenome
 from akkudoktoreos.simulation.genetic2.engine import (
     EnergySimulationEngine,
@@ -332,6 +333,13 @@ class GeneticOptimizer:
             still have meaningful instructions, e.g. a fixed-schedule load).
             Devices for which ``extract_instructions`` raises
             ``NotImplementedError`` are silently omitted.
+
+            An ``InstructionContext`` carrying the arbitrated grid exchange
+            (``grid_granted_wh``) is built from the single-individual
+            re-evaluation and passed to every device.  Devices that
+            implement ``SELF_CONSUMPTION`` detection (or other cross-device
+            mode logic) receive the per-step grid signal automatically;
+            devices that ignore the context argument are unaffected.
         """
         # Re-run the engine for a population of 1 using the best genome.
         self._engine.setup_run(context)
@@ -350,13 +358,37 @@ class GeneticOptimizer:
         # The engine exposes them via the registry after evaluate_population.
         batch_state = self._engine.last_batch_state  # see engine change below
 
+        # ------------------------------------------------------------------
+        # Build InstructionContext — shared cross-device context that lets
+        # devices inspect the arbitrated grid outcome when choosing modes.
+        # ------------------------------------------------------------------
+        # Look for a GridConnectionDevice by finding the first device state
+        # that carries a ``granted_wh`` attribute (duck-typed, no hard import).
+        grid_granted_wh: np.ndarray | None = None
+        for device in self._engine._registry.all_devices():
+            device_state = batch_state.device_states.get(device.device_id)
+            if device_state is not None and hasattr(device_state, "granted_wh"):
+                # granted_wh has shape (1, horizon) for population_size=1;
+                # squeeze to (horizon,) for per-step use in extract_instructions.
+                grid_granted_wh = device_state.granted_wh[0]
+                break
+
+        instruction_context = InstructionContext(
+            grid_granted_wh=grid_granted_wh,
+            step_interval_sec=context.step_interval.total_seconds(),
+        )
+
         instructions: dict[str, list[EnergyManagementInstruction]] = {}
         for device in self._engine._registry.all_devices():
             device_state = batch_state.device_states.get(device.device_id)
             if device_state is None:
                 continue
             try:
-                instrs = device.extract_instructions(device_state, individual_index=0)
+                instrs = device.extract_instructions(
+                    device_state,
+                    individual_index=0,
+                    instruction_context=instruction_context,
+                )
                 instructions[device.device_id] = instrs
             except NotImplementedError:
                 pass  # Device has not implemented extract_instructions yet — skip.

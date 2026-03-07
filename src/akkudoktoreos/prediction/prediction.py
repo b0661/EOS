@@ -49,8 +49,8 @@ from akkudoktoreos.prediction.pvforecastimport import PVForecastImport
 from akkudoktoreos.prediction.pvforecastvrm import PVForecastVrm
 from akkudoktoreos.prediction.weatherbrightsky import WeatherBrightSky
 from akkudoktoreos.prediction.weatherclearoutside import WeatherClearOutside
-from akkudoktoreos.prediction.weatheropenmeteo import WeatherOpenMeteo
 from akkudoktoreos.prediction.weatherimport import WeatherImport
+from akkudoktoreos.prediction.weatheropenmeteo import WeatherOpenMeteo
 
 
 class PredictionCommonSettings(SettingsBaseModel):

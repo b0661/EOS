@@ -56,9 +56,10 @@ Covers:
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import numpy as np
 import pytest
-from dataclasses import FrozenInstanceError
 
 from akkudoktoreos.simulation.genetic2.arbitrator import (
     ArbitrationPriority,
@@ -69,7 +70,6 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
     PortRequest,
     VectorizedBusArbitrator,
 )
-
 
 # ============================================================
 # Helpers
@@ -200,7 +200,7 @@ class TestPortRequest:
             min_energy_wh=np.zeros((2, 4)),
         )
         with pytest.raises(FrozenInstanceError):
-            pr.port_index = 1
+            pr.port_index = 1 # type: ignore[assignment]
 
     def test_immutable_energy_reference(self):
         pr = PortRequest(
@@ -209,7 +209,7 @@ class TestPortRequest:
             min_energy_wh=np.zeros((2, 4)),
         )
         with pytest.raises(FrozenInstanceError):
-            pr.energy_wh = np.ones((2, 4))
+            pr.energy_wh = np.ones((2, 4)) # type: ignore[assignment]
 
     def test_immutable_is_slack(self):
         pr = PortRequest(
@@ -219,7 +219,7 @@ class TestPortRequest:
             is_slack=True,
         )
         with pytest.raises(FrozenInstanceError):
-            pr.is_slack = False
+            pr.is_slack = False # type: ignore[assignment]
 
 
 # ============================================================
@@ -240,7 +240,7 @@ class TestDeviceRequest:
     def test_immutable(self):
         dr = DeviceRequest(device_index=0, port_requests=())
         with pytest.raises(FrozenInstanceError):
-            dr.device_index = 1
+            dr.device_index = 1 # type: ignore[assignment]
 
 
 # ============================================================
@@ -256,7 +256,7 @@ class TestPortGrant:
     def test_immutable(self):
         g = PortGrant(port_index=0, granted_wh=np.zeros((2, 4)))
         with pytest.raises(FrozenInstanceError):
-            g.port_index = 1
+            g.port_index = 1 # type: ignore[assignment]
 
 
 # ============================================================
@@ -272,7 +272,7 @@ class TestDeviceGrant:
     def test_immutable(self):
         dg = DeviceGrant(device_index=0, port_grants=())
         with pytest.raises(FrozenInstanceError):
-            dg.device_index = 99
+            dg.device_index = 99 # type: ignore[assignment]
 
 
 # ============================================================
@@ -289,12 +289,12 @@ class TestBusTopology:
     def test_immutable_num_buses(self):
         topo = BusTopology(port_to_bus=np.zeros(2, dtype=int), num_buses=1)
         with pytest.raises(FrozenInstanceError):
-            topo.num_buses = 2
+            topo.num_buses = 2 # type: ignore[assignment]
 
     def test_immutable_array_reference(self):
         topo = BusTopology(port_to_bus=np.zeros(2, dtype=int), num_buses=1)
         with pytest.raises(FrozenInstanceError):
-            topo.port_to_bus = np.ones(2, dtype=int)
+            topo.port_to_bus = np.ones(2, dtype=int) # type: ignore[assignment]
 
 
 # ============================================================

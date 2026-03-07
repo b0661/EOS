@@ -6,7 +6,6 @@ humidity, cloud cover, and solar irradiance. The data is mapped to the `WeatherD
 format, enabling consistent access to forecasted and historical weather attributes.
 """
 
-import json
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -63,7 +62,7 @@ WeatherDataOpenMeteoMapping: List[Tuple[str, Optional[str], Optional[Union[str, 
     ("soil_moisture_7_to_28cm", None, None),
     ("soil_moisture_28_to_100cm", None, None),
     ("soil_moisture_100_to_255cm", None, None),
-    ("sunshine_duration",None, None),  # Sekunden zu Stunden
+    ("sunshine_duration", None, None),  # Sekunden zu Stunden
 ]
 """Mapping of Open-Meteo weather data keys to WeatherDataRecord field descriptions.
 
@@ -137,16 +136,16 @@ class WeatherOpenMeteo(WeatherProvider):
                 "wind_speed_10m",
                 "wind_direction_10m",
                 "wind_gusts_10m",
-                "shortwave_radiation",      # GHI
-                "direct_radiation",          # DNI
-                "diffuse_radiation",          # DHI
+                "shortwave_radiation",  # GHI
+                "direct_radiation",  # DNI
+                "diffuse_radiation",  # DHI
                 "dew_point_2m",
                 "apparent_temperature",
                 "precipitation_probability",
                 "visibility",
-                "sunshine_duration"
+                "sunshine_duration",
             ],
-            "timezone": self.config.general.timezone
+            "timezone": self.config.general.timezone,
         }
 
         # Berechne die Anzahl der Tage zwischen Start und Ende
@@ -172,11 +171,7 @@ class WeatherOpenMeteo(WeatherProvider):
 
         logger.debug(f"Open-Meteo Request params: {params}")
 
-        response = requests.get(
-            source,
-            params=params,
-            timeout=10
-        )
+        response = requests.get(source, params=params, timeout=10)
         response.raise_for_status()  # Raise an error for bad responses
         logger.debug(f"Response from {source}: {response.status_code}")
 
@@ -266,7 +261,7 @@ class WeatherOpenMeteo(WeatherProvider):
         hourly_data = openmeteo_data["hourly"]
         timestamps = hourly_data["time"]
 
-        logger.info(f"Verwende direkte Strahlungswerte von Open-Meteo (GHI, DNI, DHI)")
+        logger.info("Verwende direkte Strahlungswerte von Open-Meteo (GHI, DNI, DHI)")
 
         # Für jeden Zeitstempel die Daten verarbeiten
         for idx, timestamp in enumerate(timestamps):
@@ -302,7 +297,9 @@ class WeatherOpenMeteo(WeatherProvider):
         if ghi_series.isnull().all():
             logger.warning("Keine GHI-Daten von Open-Meteo erhalten")
         else:
-            logger.debug(f"GHI-Daten erfolgreich von Open-Meteo geladen. Bereich: {ghi_series.min():.1f} - {ghi_series.max():.1f} W/m²")
+            logger.debug(
+                f"GHI-Daten erfolgreich von Open-Meteo geladen. Bereich: {ghi_series.min():.1f} - {ghi_series.max():.1f} W/m²"
+            )
 
         # Precipitable Water (PWAT) mit PVLib Methode hinzufügen
         key = WeatherDataRecord.key_from_description("Temperature (°C)")

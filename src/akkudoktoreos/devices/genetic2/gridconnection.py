@@ -222,7 +222,7 @@ class GridConnectionDevice(EnergyDevice):
         # Populated during setup_run
         self._step_times: tuple[DateTime, ...] | None = None
         self._num_steps: int | None = None
-        self._step_interval: float | None = None
+        self._step_interval_sec: float | None = None
 
         # Resolved per-step price arrays, shape (horizon,).
         # None when the corresponding price key is not configured;
@@ -277,7 +277,7 @@ class GridConnectionDevice(EnergyDevice):
         horizon = context.horizon
         self._step_times = context.step_times
         self._num_steps = horizon
-        self._step_interval = context.step_interval
+        self._step_interval_sec = context.step_interval.total_seconds()
 
         if self.param.import_price_key is not None:
             prices = context.resolve(self.param.import_price_key)
@@ -378,9 +378,9 @@ class GridConnectionDevice(EnergyDevice):
             ``DeviceRequest`` covering the full grid connection window
             for the entire population batch.
         """
-        assert self._step_interval is not None, "Call setup_run() before build_device_request()."
+        assert self._step_interval_sec is not None, "Call setup_run() before build_device_request()."
         p = self.param
-        step_h = self._step_interval / 3600.0
+        step_h = self._step_interval_sec / 3600.0
         pop = state.population_size
         horizon = state.horizon
 
@@ -460,10 +460,10 @@ class GridConnectionDevice(EnergyDevice):
             where ``num_objectives`` is 1 normally or 2 when
             ``include_peak_power_objective`` is ``True``.
         """
-        assert self._step_interval is not None, "Call setup_run() before compute_cost()."
+        assert self._step_interval_sec is not None, "Call setup_run() before compute_cost()."
         p = self.param
         granted = state.granted_wh  # (pop, horizon)
-        step_h = self._step_interval / 3600.0
+        step_h = self._step_interval_sec / 3600.0
         horizon = state.horizon
 
         # Build per-step price vectors, shape (horizon,).

@@ -23,7 +23,7 @@ Covers
         - Construction and field access
 
     OptimizationResult
-        - Construction and field access
+        - Construction and field accesstest_returns_optimization_solution
 
     GeneticOptimizer._build_assembled_genome
         - Empty slice dict → zero-size AssembledGenome
@@ -85,6 +85,13 @@ Covers
         - window_size == total_steps behaves like a single GA run
         - Last window truncated correctly when total_steps not divisible
         - Multiple windows each contribute their roll_steps to the schedule
+
+    TestExtractBestInstructions — InstructionContext propagation
+        - instruction_context is passed to every extract_instructions call
+        - instruction_context.step_interval_sec matches the SimulationContext
+        - instruction_context.grid_granted_wh is None when no grid device registered
+        - instruction_context.grid_granted_wh is populated when a GridConnectionDevice
+          is present in the engine (duck-typed via granted_wh attribute)
 """
 
 from __future__ import annotations
@@ -97,6 +104,7 @@ from akkudoktoreos.devices.devicesabc import (
     EnergyBus,
     EnergyCarrier,
     EnergyPort,
+    InstructionContext,
     PortDirection,
     SingleStateBatchState,
     SingleStateEnergyDevice,
@@ -821,7 +829,7 @@ class InstructionScheduleDevice(ScheduleDevice):
     ``state.step_times`` are available and correctly aligned with the schedule.
     """
 
-    def extract_instructions(self, state, individual_index: int):
+    def extract_instructions(self, state, individual_index: int, instruction_context=None):
         from akkudoktoreos.devices.devicesabc import SingleStateBatchState
         s: SingleStateBatchState = state
         schedule_row = s.schedule[individual_index]   # (horizon,) [W]
@@ -918,6 +926,76 @@ class TestExtractBestInstructions:
         result = opt.optimize(inputs)
         instructions = opt.extract_best_instructions(result, inputs)
         assert instructions == {}
+
+    # ------------------------------------------------------------------
+    # InstructionContext propagation
+    # ------------------------------------------------------------------
+
+    def test_instruction_context_passed_to_extract_instructions(self):
+        """extract_best_instructions passes an InstructionContext to every device.
+
+        We subclass InstructionScheduleDevice to capture the context argument
+        and assert it is an InstructionContext instance.
+        """
+        received: list[InstructionContext | None] = []
+
+        class CapturingDevice(InstructionScheduleDevice):
+            def extract_instructions(self, state, individual_index, instruction_context=None):
+                received.append(instruction_context)
+                return super().extract_instructions(state, individual_index, instruction_context)
+
+        dev = CapturingDevice("s0", 0, limit=100.0)
+        sink = SinkDevice("c0", 1)
+        engine = make_engine([dev, sink], self.HORIZON)
+        inputs = make_context(self.HORIZON)
+        opt = make_optimizer(engine, pop=4, gens=2, seed=42)
+        result = opt.optimize(inputs)
+        opt.extract_best_instructions(result, inputs)
+
+        assert len(received) == 1
+        assert isinstance(received[0], InstructionContext)
+
+    def test_instruction_context_step_interval_matches_context(self):
+        """InstructionContext.step_interval_sec must equal the SimulationContext interval."""
+        received: list[InstructionContext] = []
+
+        class CapturingDevice(InstructionScheduleDevice):
+            def extract_instructions(self, state, individual_index, instruction_context=None):
+                if instruction_context is not None:
+                    received.append(instruction_context)
+                return super().extract_instructions(state, individual_index, instruction_context)
+
+        dev = CapturingDevice("s0", 0, limit=100.0)
+        sink = SinkDevice("c0", 1)
+        engine = make_engine([dev, sink], self.HORIZON)
+        inputs = make_context(self.HORIZON)
+        opt = make_optimizer(engine, pop=4, gens=2, seed=0)
+        result = opt.optimize(inputs)
+        opt.extract_best_instructions(result, inputs)
+
+        ctx = received[0]
+        assert ctx.step_interval_sec == pytest.approx(inputs.step_interval, rel=1e-9)
+
+    def test_instruction_context_grid_wh_none_without_grid_device(self):
+        """When no grid-connection device is registered, grid_granted_wh is None."""
+        received: list[InstructionContext] = []
+
+        class CapturingDevice(InstructionScheduleDevice):
+            def extract_instructions(self, state, individual_index, instruction_context=None):
+                if instruction_context is not None:
+                    received.append(instruction_context)
+                return super().extract_instructions(state, individual_index, instruction_context)
+
+        dev = CapturingDevice("s0", 0, limit=100.0)
+        sink = SinkDevice("c0", 1)
+        engine = make_engine([dev, sink], self.HORIZON)
+        inputs = make_context(self.HORIZON)
+        opt = make_optimizer(engine, pop=4, gens=2, seed=0)
+        result = opt.optimize(inputs)
+        opt.extract_best_instructions(result, inputs)
+
+        # Neither ScheduleDevice nor SinkDevice has granted_wh on its state.
+        assert received[0].grid_granted_wh is None
 
 
 # ============================================================

@@ -109,6 +109,14 @@ class OptimizationCommonSettings(SettingsBaseModel):
             key_list = df.columns.tolist()
         return sorted(set(key_list))
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def horizon(self) -> int:
+        """Number of optimization steps."""
+        if self.interval is None or self.interval == 0:
+            return 0
+        num_steps = int(float(self.horizon_hours * 3600) / self.interval)
+
     # Validators
     @model_validator(mode="after")
     def _enforce_algorithm_configuration(self) -> "OptimizationCommonSettings":
