@@ -128,6 +128,30 @@ import pytest
 from pendulum import Duration
 
 # ---------------------------------------------------------------------------
+# Framework imports
+# ---------------------------------------------------------------------------
+from akkudoktoreos.core.emplan import EnergyManagementPlan, OMBCInstruction
+from akkudoktoreos.devices.devicesabc import (
+    EnergyBus,
+    EnergyCarrier,
+    EnergyPort,
+    PortDirection,
+)
+from akkudoktoreos.devices.genetic2.gridconnection import (
+    GridConnectionDevice,
+    GridConnectionParam,
+)
+from akkudoktoreos.devices.genetic2.homeappliance import (
+    HomeApplianceDevice,
+    HomeApplianceParam,
+)
+from akkudoktoreos.devices.genetic2.hybridinverter import (
+    HybridInverterDevice,
+    HybridInverterParam,
+    InverterType,
+)
+
+# ---------------------------------------------------------------------------
 # Imports from the module under test
 # ---------------------------------------------------------------------------
 from akkudoktoreos.optimization.genetic2.genetic2 import (
@@ -138,30 +162,11 @@ from akkudoktoreos.optimization.genetic2.genetic2 import (
     _result_to_plan,
     _result_to_solution,
 )
-
-# ---------------------------------------------------------------------------
-# Framework imports
-# ---------------------------------------------------------------------------
-from akkudoktoreos.core.emplan import EnergyManagementPlan, OMBCInstruction
-from akkudoktoreos.devices.devicesabc import (
-    EnergyBus,
-    EnergyCarrier,
-    EnergyPort,
-    PortDirection,
-)
-from akkudoktoreos.devices.genetic2.gridconnection import GridConnectionDevice, GridConnectionParam
-from akkudoktoreos.devices.genetic2.homeappliance import HomeApplianceDevice, HomeApplianceParam
-from akkudoktoreos.devices.genetic2.hybridinverter import (
-    HybridInverterDevice,
-    HybridInverterParam,
-    InverterType,
-)
 from akkudoktoreos.optimization.genetic2.genome import AssembledGenome, GenomeSlice
 from akkudoktoreos.optimization.genetic2.optimizer import OptimizationResult
 from akkudoktoreos.simulation.genetic2.arbitrator import VectorizedBusArbitrator
 from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.utils.datetimeutil import to_datetime
-
 
 # ============================================================
 # Shared constants

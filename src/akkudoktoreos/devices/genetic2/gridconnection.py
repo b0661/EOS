@@ -379,7 +379,9 @@ class GridConnectionDevice(EnergyDevice):
             ``DeviceRequest`` covering the full grid connection window
             for the entire population batch.
         """
-        assert self._step_interval_sec is not None, "Call setup_run() before build_device_request()."
+        assert self._step_interval_sec is not None, (
+            "Call setup_run() before build_device_request()."
+        )
         p = self.param
         step_h = self._step_interval_sec / 3600.0
         pop = state.population_size

@@ -52,9 +52,18 @@ from pendulum import now as pendulum_now
 from akkudoktoreos.core.coreabc import ConfigMixin, EnergyManagementSystemMixin
 from akkudoktoreos.core.emplan import EnergyManagementPlan
 from akkudoktoreos.devices.devicesabc import EnergyBus, EnergyCarrier
-from akkudoktoreos.devices.genetic2.gridconnection import GridConnectionDevice, GridConnectionParam
-from akkudoktoreos.devices.genetic2.homeappliance import HomeApplianceDevice, HomeApplianceParam
-from akkudoktoreos.devices.genetic2.hybridinverter import HybridInverterDevice, HybridInverterParam
+from akkudoktoreos.devices.genetic2.gridconnection import (
+    GridConnectionDevice,
+    GridConnectionParam,
+)
+from akkudoktoreos.devices.genetic2.homeappliance import (
+    HomeApplianceDevice,
+    HomeApplianceParam,
+)
+from akkudoktoreos.devices.genetic2.hybridinverter import (
+    HybridInverterDevice,
+    HybridInverterParam,
+)
 
 if TYPE_CHECKING:
     # Only used in type annotations on the private helpers — not needed at runtime.
@@ -303,9 +312,7 @@ class Genetic2Optimization(ConfigMixin, EnergyManagementSystemMixin):
         # ------------------------------------------------------------------
         step_interval_sec: Optional[int] = self.config.optimization.interval
         if step_interval_sec is None or step_interval_sec <= 0:
-            raise ValueError(
-                f"Optimization step interval invalid: {step_interval_sec} seconds"
-            )
+            raise ValueError(f"Optimization step interval invalid: {step_interval_sec} seconds")
 
         step_interval: Duration = Duration(seconds=int(step_interval_sec))
 
@@ -327,8 +334,7 @@ class Genetic2Optimization(ConfigMixin, EnergyManagementSystemMixin):
         # ------------------------------------------------------------------
         start_datetime = self.ems.start_datetime
         step_times = tuple(
-            start_datetime.add(seconds=int(i * step_interval_sec))
-            for i in range(horizon)
+            start_datetime.add(seconds=int(i * step_interval_sec)) for i in range(horizon)
         )
 
         context = SimulationContext(

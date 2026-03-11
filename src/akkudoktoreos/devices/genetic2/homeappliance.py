@@ -55,8 +55,12 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
     PortRequest,
 )
 from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
-from akkudoktoreos.utils.datetimeutil import DateTime, TimeWindow, TimeWindowSequence, to_duration
-
+from akkudoktoreos.utils.datetimeutil import (
+    DateTime,
+    TimeWindow,
+    TimeWindowSequence,
+    to_duration,
+)
 
 # ============================================================
 # Hashable time-window value type
@@ -89,6 +93,7 @@ class CycleTimeWindow:
     def to_time_window(self) -> TimeWindow:
         """Reconstruct a ``TimeWindow`` for use in ``_build_allowed_steps``."""
         import pendulum
+
         from akkudoktoreos.utils.datetimeutil import Time
         h, m, s = self.start_time
         start = Time(h, m, s)
