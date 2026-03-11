@@ -28,47 +28,25 @@ window constraint.
 
 The returned value is cast to ``int`` and clamped to
 ``[0, num_cycles]``.  If no measurement exists yet (first run of the
-day, device not yet started) the call returns ``None`` and the device
-defaults to ``completed = 0``, planning all cycles as normal.
-
-The ``completed`` count is consumed from the *front* of
-``cycle_time_windows``: if 1 of 2 cycles is done, the first (earlier)
-window is dropped and only the second is planned.  This is consistent
-with the ordering guarantee enforced during repair — the earliest cycle
-always runs first.
-
-Repair pipeline
----------------
-1. Round each gene to the nearest integer step.
-2. Clip to ``[0, max_start]``.
-3. Per-cycle window repair: snap to nearest allowed step for that cycle.
-4. Sort starts so ``start[k] <= start[k+1]`` (ordering, removes genome
-   symmetry).
-5. Gap enforcement: push ``start[k+1]`` forward if needed so the gap
-   between consecutive cycles satisfies ``min_cycle_gap_h``.
-
-Steps 4–5 iterate over the (small) cycle axis but remain fully
-vectorised over the population axis.
-
-Sign convention
----------------
-Positive power/energy → consuming from bus (load).
+day) the device defaults to 0 completed cycles and plans all
+``num_cycles`` runs normally.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 from loguru import logger
 
-from akkudoktoreos.core.emplan import OMBCInstruction
+from akkudoktoreos.core.emplan import EnergyManagementInstruction, OMBCInstruction
 from akkudoktoreos.devices.devicesabc import (
     ApplianceOperationMode,
     DeviceParam,
     EnergyDevice,
     EnergyPort,
+    InstructionContext,
 )
 from akkudoktoreos.optimization.genetic2.genome import GenomeSlice
 from akkudoktoreos.simulation.genetic2.arbitrator import (
@@ -77,7 +55,7 @@ from akkudoktoreos.simulation.genetic2.arbitrator import (
     PortRequest,
 )
 from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
-from akkudoktoreos.utils.datetimeutil import Date, DateTime, Duration, Time, TimeWindow, TimeWindowSequence, to_duration
+from akkudoktoreos.utils.datetimeutil import DateTime, TimeWindow, TimeWindowSequence, to_duration
 
 
 # ============================================================
@@ -111,6 +89,7 @@ class CycleTimeWindow:
     def to_time_window(self) -> TimeWindow:
         """Reconstruct a ``TimeWindow`` for use in ``_build_allowed_steps``."""
         import pendulum
+        from akkudoktoreos.utils.datetimeutil import Time
         h, m, s = self.start_time
         start = Time(h, m, s)
         duration = to_duration(f"{self.duration_seconds} seconds")
@@ -246,8 +225,6 @@ class HomeApplianceBatchState:
         horizon: Number of simulation time steps.
         step_times: Ordered ``DateTime`` timestamps, length ``horizon``.
         num_remaining_cycles: Number of cycles still to be planned.
-            May be less than ``HomeApplianceParam.num_cycles`` when the
-            measurement store reports completed cycles.
     """
 
     start_steps: np.ndarray        # (population_size, num_remaining_cycles)
@@ -265,20 +242,7 @@ class HomeApplianceBatchState:
 
 
 class HomeApplianceDevice(EnergyDevice):
-    """Vectorized multi-cycle shiftable home appliance for the genetic2 framework.
-
-    Parameters
-    ----------
-    param:
-        Immutable device parameters, including ``cycle_time_windows``.
-    device_index:
-        Index used by the bus arbitrator to identify this device's port
-        request and match it to its grant. Must be unique across all
-        devices registered with the same engine.
-    port_index:
-        Index of this device's AC port in the arbitrator's port-to-bus
-        topology array.
-    """
+    """Vectorized multi-cycle shiftable home appliance for the genetic2 framework."""
 
     def __init__(
         self,
@@ -307,70 +271,37 @@ class HomeApplianceDevice(EnergyDevice):
     # ------------------------------------------------------------------
 
     def setup_run(self, context: SimulationContext) -> None:
-        """Cache run-scoped quantities, read completed-cycle measurement,
-        and build per-cycle feasibility masks for remaining cycles only.
-
-        The completed-cycle count is read from the measurement store via
-        ``context.resolve_measurement``.  This calls ``key_to_value``
-        on the measurement store, which uses ``get_nearest_by_datetime``
-        internally to find the record nearest to the simulation start
-        within the full horizon window.  If no record exists yet
-        (``None`` returned) the device defaults to 0 completed cycles.
-
-        Args:
-            context: Immutable run context.
-        """
+        """Cache run-scoped quantities and build per-cycle feasibility masks."""
         self._step_times = context.step_times
         self._horizon = context.horizon
         self._step_interval_h = context.step_interval.total_seconds() / 3600.0
         self._power_per_step_w = self._param.consumption_wh / float(self._param.duration_h)
 
-        # --- Resolve completed cycles from measurement store ---
         completed = self._resolve_completed_cycles(context)
         self._num_remaining_cycles = self._param.num_cycles - completed
 
-        # --- Build feasibility masks for remaining cycles only ---
-        # Drop the first `completed` windows — they correspond to the
-        # cycles that have already run (cycles are always time-ordered).
         remaining_windows = list(self._param.resolved_cycle_time_windows[completed:])
-        self._allowed_steps = self._build_allowed_steps(context, remaining_windows)
-
+        self._allowed_steps = self. (context, remaining_windows)
         self._price_eur_per_wh = self._resolve_price(context)
 
     def _resolve_completed_cycles(self, context: SimulationContext) -> int:
-        """Read the completed-cycle count from the measurement store.
-
-        Uses ``context.resolve_measurement``, which calls
-        ``key_to_value(key, target_datetime=step_times[0],
-        time_window=step_interval * horizon)`` on the measurement store.
-        This is equivalent to ``get_nearest_by_datetime`` bounded to the
-        simulation horizon window.
-
-        Returns:
-            Number of completed cycles, clamped to ``[0, num_cycles]``.
-            Defaults to 0 if no measurement is found.
-        """
+        """Read completed-cycle count from measurement store."""
         key = self._param.effective_cycles_completed_key
         try:
             raw = context.resolve_measurement(key)
         except KeyError:
-            # Key not registered in the measurement store at all
             logger.debug(
                 "HomeApplianceDevice '{}': measurement key '{}' not found, "
                 "assuming 0 completed cycles.",
-                self.device_id,
-                key,
+                self.device_id, key,
             )
             return 0
 
         if raw is None:
-            # Key exists but no record near the simulation start yet
             logger.debug(
                 "HomeApplianceDevice '{}': no measurement for '{}' near {}, "
                 "assuming 0 completed cycles.",
-                self.device_id,
-                key,
-                context.step_times[0],
+                self.device_id, key, context.step_times[0],
             )
             return 0
 
@@ -380,10 +311,7 @@ class HomeApplianceDevice(EnergyDevice):
             logger.warning(
                 "HomeApplianceDevice '{}': completed cycles {} out of range "
                 "[0, {}], clamped to {}.",
-                self.device_id,
-                completed,
-                self._param.num_cycles,
-                clamped,
+                self.device_id, completed, self._param.num_cycles, clamped,
             )
         return clamped
 
@@ -401,13 +329,6 @@ class HomeApplianceDevice(EnergyDevice):
         Each entry in ``windows`` is either ``None`` (any step valid) or a
         tuple of ``CycleTimeWindow`` objects that are reconstructed into
         ``TimeWindow`` instances for the ``contains`` check.
-
-        Args:
-            context: Run context providing step times.
-            windows: Per-remaining-cycle time windows.
-
-        Returns:
-            Boolean array of shape ``(len(windows), horizon)``.
         """
         horizon = context.horizon
         num_remaining = len(windows)
@@ -428,11 +349,7 @@ class HomeApplianceDevice(EnergyDevice):
         return allowed
 
     def _resolve_price(self, context: SimulationContext) -> np.ndarray:
-        """Resolve the electricity price forecast or return a flat fallback.
-
-        Returns:
-            Price array of shape ``(horizon,)`` [EUR/Wh].
-        """
+        """Resolve electricity price forecast or return flat fallback."""
         if self._param.price_forecast_key is not None:
             try:
                 raw = context.resolve_prediction(self._param.price_forecast_key)
@@ -442,18 +359,7 @@ class HomeApplianceDevice(EnergyDevice):
         return np.full(context.horizon, 1e-4)
 
     def genome_requirements(self) -> GenomeSlice | None:
-        """Declare one start-step gene per *remaining* cycle.
-
-        Returns ``None`` when all cycles are already completed so the
-        genome assembler allocates no genes for this device.
-
-        Returns:
-            ``GenomeSlice`` of size ``num_remaining_cycles``, or ``None``
-            if ``num_remaining_cycles == 0``.
-
-        Raises:
-            RuntimeError: If called before ``setup_run``.
-        """
+        """Declare one start-step gene per *remaining* cycle."""
         if self._num_remaining_cycles is None or self._horizon is None:
             raise RuntimeError("Call setup_run() before genome_requirements().")
 
@@ -464,7 +370,7 @@ class HomeApplianceDevice(EnergyDevice):
         n = self._num_remaining_cycles
 
         return GenomeSlice(
-            start=0,  # re-indexed by GenomeAssembler
+            start=0,
             size=n,
             lower_bound=np.zeros(n),
             upper_bound=np.full(n, max_start),
@@ -505,26 +411,7 @@ class HomeApplianceDevice(EnergyDevice):
         state: HomeApplianceBatchState,
         genome_batch: np.ndarray,
     ) -> np.ndarray:
-        """Decode, repair, and expand start-step genes into a schedule.
-
-        No-ops immediately when ``num_remaining_cycles == 0`` (all
-        cycles done), leaving the schedule as all zeros.
-
-        Repair pipeline:
-            1. Round and clip to ``[0, max_start]``.
-            2. Per-cycle window repair (snap to nearest allowed step).
-            3. Sort starts across cycles (ordering, removes symmetry).
-            4. Gap enforcement (push forward to satisfy min_cycle_gap_h).
-            5. Reconstruct flat-block power schedule.
-            6. Lamarckian write-back into ``genome_batch``.
-
-        Args:
-            state: Device batch state (modified in-place).
-            genome_batch: Shape ``(population_size, num_remaining_cycles)``.
-
-        Returns:
-            Repaired ``genome_batch``, same shape.
-        """
+        """Decode, repair, and expand start-step genes into a schedule."""
         if self._allowed_steps is None or self._horizon is None:
             raise RuntimeError("Call setup_run() before apply_genome_batch().")
 
@@ -540,15 +427,12 @@ class HomeApplianceDevice(EnergyDevice):
         power_w = self._power_per_step_w
         max_start = max(0, horizon - duration_steps)
 
-        # --- Steps 1 & 2: round, clip, per-cycle window repair ---
         starts = np.clip(np.rint(genome_batch).astype(int), 0, max_start)
         for k in range(num_remaining):
             starts[:, k] = self._repair_cycle_to_allowed(starts[:, k], k, max_start)
 
-        # --- Step 3: sort so cycles are time-ordered ---
         starts = np.sort(starts, axis=1)
 
-        # --- Step 4: gap enforcement (causal, sequential over cycle axis) ---
         min_next_start = duration_steps + gap_steps
         for k in range(1, num_remaining):
             earliest = np.minimum(starts[:, k - 1] + min_next_start, max_start)
@@ -556,7 +440,6 @@ class HomeApplianceDevice(EnergyDevice):
 
         state.start_steps[:] = starts.astype(float)
 
-        # --- Step 5: reconstruct schedule ---
         state.schedule[:] = 0.0
         if power_w is not None and power_w > 0:
             d_idx = np.arange(duration_steps)
@@ -566,7 +449,6 @@ class HomeApplianceDevice(EnergyDevice):
                 col_idx = np.clip(col_idx, 0, horizon - 1)
                 state.schedule[row_idx, col_idx] += power_w
 
-        # --- Step 6: Lamarckian write-back ---
         genome_batch[:] = starts.astype(float)
         return genome_batch
 
@@ -576,17 +458,7 @@ class HomeApplianceDevice(EnergyDevice):
         cycle_index: int,
         max_start: int,
     ) -> np.ndarray:
-        """Snap each individual's start for remaining cycle ``k`` to the
-        nearest allowed step for that cycle's window.
-
-        Args:
-            starts_k: Integer start steps, shape ``(population_size,)``.
-            cycle_index: Index into ``_allowed_steps`` rows.
-            max_start: Maximum feasible start step (inclusive).
-
-        Returns:
-            Repaired start steps, same shape.
-        """
+        """Snap each individual's start for remaining cycle ``k`` to nearest allowed step."""
         allowed_row = self._allowed_steps[cycle_index]
         allowed_indices = np.where(allowed_row)[0]
 
@@ -643,8 +515,6 @@ class HomeApplianceDevice(EnergyDevice):
     def compute_cost(self, state: HomeApplianceBatchState) -> np.ndarray:
         """Compute electricity cost across all remaining cycles.
 
-        ``cost[i] = sum_t( granted_wh[i, t] × price_eur_per_wh[t] )``
-
         Returns:
             Shape ``(population_size, 1)`` [EUR].
         """
@@ -661,18 +531,21 @@ class HomeApplianceDevice(EnergyDevice):
         self,
         state: HomeApplianceBatchState,
         individual_index: int,
-    ) -> list[OMBCInstruction]:
-        """Extract per-step control instructions for one individual.
+        instruction_context: InstructionContext | None = None,
+    ) -> list[EnergyManagementInstruction]:
+        """Extract S2 instructions for the best individual.
 
-        Steps covered by a remaining cycle block => RUN.
-        All other steps => OFF.
+        Steps covered by a remaining cycle block → ``RUN``.
+        All other steps → ``OFF``.
 
         Args:
-            state: Batch state produced by apply_genome_batch.
-            individual_index: Row index into state.start_steps.
+            state: Batch state for a single-individual population.
+            individual_index: Row index (usually 0).
+            instruction_context: Optional context (accepted for interface
+                uniformity; not used by this device).
 
         Returns:
-            Ordered list of OMBCInstruction, one per horizon step.
+            Ordered list of ``OMBCInstruction``, one per step.
         """
         duration = self._param.duration_h
         num_remaining = state.num_remaining_cycles
@@ -685,16 +558,12 @@ class HomeApplianceDevice(EnergyDevice):
 
         return [
             OMBCInstruction(
-                id=None,  # Auto-generate
                 resource_id=self.device_id,
                 execution_time=step_time,
-                abnormal_condition=False,
-                operation_mode_id=(
-                    str(ApplianceOperationMode.RUN)
-                    if t in active_steps
-                    else str(ApplianceOperationMode.OFF)
+                operation_mode_id=str(
+                    ApplianceOperationMode.RUN if t in active_steps else ApplianceOperationMode.OFF
                 ),
-                operation_mode_factor=0.0  # Ignored but required
+                operation_mode_factor=1.0 if t in active_steps else 0.0,
             )
             for t, step_time in enumerate(state.step_times)
         ]

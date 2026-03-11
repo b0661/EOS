@@ -330,11 +330,27 @@ def _make_instance(
     buses: list[EnergyBus] | None = None,
     opt_cfg: _FakeOptCfg | None = None,
 ) -> Genetic2Optimization:
+    """Return a ``Genetic2Optimization`` whose ``config`` and ``ems`` are fakes.
+
+    ``ConfigMixin.config`` and ``EnergyManagementSystemMixin.ems`` are both
+    ``@classproperty`` descriptors that call global singletons — they ignore
+    instance attributes set via ``object.__setattr__``.  We therefore create
+    a one-off subclass per call that shadows both descriptors with regular
+    ``@property`` returning the fake objects.
+    """
     cfg = _FakeConfig(device_params, buses, opt_cfg)
-    obj = object.__new__(Genetic2Optimization)
-    object.__setattr__(obj, "config", cfg)
-    object.__setattr__(obj, "ems", _FakeEMS())
-    return obj
+    fake_ems = _FakeEMS()
+
+    class _TestOptimization(Genetic2Optimization):
+        @property  # type: ignore[override]
+        def config(self):  # type: ignore[override]
+            return cfg
+
+        @property  # type: ignore[override]
+        def ems(self):  # type: ignore[override]
+            return fake_ems
+
+    return object.__new__(_TestOptimization)
 
 
 # ============================================================
@@ -718,7 +734,7 @@ class TestOptimizeValidation:
 
 # GeneticOptimizer is imported by name into genetic2.py, so the patch
 # target is the binding inside that module, not the original module.
-_OPTIMIZER_PATCH = "akkudoktoreos.optimization.genetic2.genetic2.GeneticOptimizer"
+_OPTIMIZER_PATCH = "akkudoktoreos.optimization.genetic2.optimizer.GeneticOptimizer"
 
 
 class TestOptimizeContext:
@@ -785,7 +801,7 @@ class TestOptimizeContext:
 # ============================================================
 
 # EnergySimulationEngine is imported by name into genetic2.py.
-_ENGINE_PATCH = "akkudoktoreos.optimization.genetic2.genetic2.EnergySimulationEngine"
+_ENGINE_PATCH = "akkudoktoreos.simulation.genetic2.engine.EnergySimulationEngine"
 
 
 class TestOptimizeBusHandling:

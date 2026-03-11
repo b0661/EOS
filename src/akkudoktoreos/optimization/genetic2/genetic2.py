@@ -30,12 +30,13 @@ tuple.
 Circular-import safety
 ----------------------
 ``genetic2.py`` is imported at module level by ``ems.py``, which itself
-is transitively imported during config loading.  All heavy imports
-(optimizer, engine, simulation, device classes) are deferred to inside
-``optimize()`` to avoid circular-import failures during package
-initialization.  Only the public API surface (``Genetic2Solution``,
-``ConfigMixin``, ``EnergyManagementSystemMixin``, ``EnergyManagementPlan``,
-``EnergyBus``, ``EnergyCarrier``) is imported at module level.
+is transitively imported during config loading.  The simulation/optimizer
+imports (``GeneticOptimizer``, ``EnergySimulationEngine``, ``DeviceRegistry``,
+``SimulationContext``) are deferred to inside ``optimize()`` to avoid
+circular-import failures during package initialization.  Device param and
+device class imports (``GridConnectionDevice``, ``HomeApplianceDevice``,
+``HybridInverterDevice``) are safe at module level because none of those
+modules import from ``genetic2.py``.
 """
 
 from __future__ import annotations
@@ -51,6 +52,9 @@ from pendulum import now as pendulum_now
 from akkudoktoreos.core.coreabc import ConfigMixin, EnergyManagementSystemMixin
 from akkudoktoreos.core.emplan import EnergyManagementPlan
 from akkudoktoreos.devices.devicesabc import EnergyBus, EnergyCarrier
+from akkudoktoreos.devices.genetic2.gridconnection import GridConnectionDevice, GridConnectionParam
+from akkudoktoreos.devices.genetic2.homeappliance import HomeApplianceDevice, HomeApplianceParam
+from akkudoktoreos.devices.genetic2.hybridinverter import HybridInverterDevice, HybridInverterParam
 
 if TYPE_CHECKING:
     # Only used in type annotations on the private helpers — not needed at runtime.
@@ -126,20 +130,6 @@ def _build_devices(
         unchanged.
     """
     import warnings
-
-    # Deferred imports — avoid circular dependency at module load time.
-    from akkudoktoreos.devices.genetic2.gridconnection import (
-        GridConnectionDevice,
-        GridConnectionParam,
-    )
-    from akkudoktoreos.devices.genetic2.homeappliance import (
-        HomeApplianceDevice,
-        HomeApplianceParam,
-    )
-    from akkudoktoreos.devices.genetic2.hybridinverter import (
-        HybridInverterDevice,
-        HybridInverterParam,
-    )
 
     devices = []
     device_index = 0
@@ -319,16 +309,7 @@ class Genetic2Optimization(ConfigMixin, EnergyManagementSystemMixin):
 
         step_interval: Duration = Duration(seconds=int(step_interval_sec))
 
-        # Note: config.optimization.horizon is a @computed_field whose
-        # implementation currently has a missing return statement (always
-        # returns None).  We compute the step count from horizon_hours
-        # directly to avoid that dependency.
-        horizon_hours: Optional[int] = self.config.optimization.horizon_hours
-        if horizon_hours is None or horizon_hours <= 0:
-            raise ValueError(
-                f"Optimization horizon_hours invalid: {horizon_hours}"
-            )
-        horizon: int = int(horizon_hours * 3600 / step_interval_sec)
+        horizon: int = self.config.optimization.horizon
         if horizon <= 0:
             raise ValueError(
                 f"Computed horizon is zero "

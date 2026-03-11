@@ -116,6 +116,7 @@ class OptimizationCommonSettings(SettingsBaseModel):
         if self.interval is None or self.interval == 0:
             return 0
         num_steps = int(float(self.horizon_hours * 3600) / self.interval)
+        return num_steps
 
     # Validators
     @model_validator(mode="after")

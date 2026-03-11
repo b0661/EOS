@@ -61,6 +61,7 @@ from akkudoktoreos.core.emplan import EnergyManagementInstruction
 from akkudoktoreos.devices.devicesabc import (
     EnergyDevice,
     EnergyPort,
+    InstructionContext,
     PortDirection,
 )
 from akkudoktoreos.simulation.genetic2.arbitrator import (
@@ -504,6 +505,7 @@ class GridConnectionDevice(EnergyDevice):
         self,
         state: GridConnectionBatchState,
         individual_index: int,
+        instruction_context: InstructionContext | None = None,
     ) -> list[EnergyManagementInstruction]:
         """Return an empty instruction list.
 

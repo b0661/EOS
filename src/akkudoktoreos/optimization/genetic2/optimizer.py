@@ -375,7 +375,11 @@ class GeneticOptimizer:
 
         instruction_context = InstructionContext(
             grid_granted_wh=grid_granted_wh,
-            step_interval_sec=context.step_interval.total_seconds(),
+            step_interval_sec=(
+                context.step_interval.total_seconds()
+                if hasattr(context.step_interval, "total_seconds")
+                else float(context.step_interval)
+            ),
         )
 
         instructions: dict[str, list[EnergyManagementInstruction]] = {}
