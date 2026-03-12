@@ -8,7 +8,11 @@
       "name": "Apache 2.0",
       "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
     },
+<<<<<<< HEAD
     "version": "v0.3.0.dev2603180681250771"
+=======
+    "version": "v0.2.0.dev2603121645650601"
+>>>>>>> 74647bf (fest: Add GENETIC2 optimization framework.)
   },
   "paths": {
     "/v1/admin/cache/clear": {

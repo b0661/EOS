@@ -512,7 +512,8 @@ def InstructionCard(
         config.devices
         and config.devices.batteries
         and any(
-            battery_config.device_id == resource_id for battery_config in config.devices.batteries
+            battery_config.device_id == resource_id
+            for battery_config in config.devices.batteries.values()
         )
     ):
         # This is a battery
@@ -525,7 +526,7 @@ def InstructionCard(
         and config.devices.electric_vehicles
         and any(
             electric_vehicle_config.device_id == resource_id
-            for electric_vehicle_config in config.devices.electric_vehicles
+            for electric_vehicle_config in config.devices.electric_vehicles.values()
         )
     ):
         # This is a car battery
@@ -535,7 +536,7 @@ def InstructionCard(
         and config.devices.home_appliances
         and any(
             home_appliance.device_id == resource_id
-            for home_appliance in config.devices.home_appliances
+            for home_appliance in config.devices.home_appliances.values()
         )
     ):
         # This is a home appliance

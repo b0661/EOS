@@ -22,6 +22,7 @@ from monsterui.franken import (  # Select: Does not work - using Select from Fas
     Form,
     Grid,
     Input,
+    Kbd,
     Option,
     P,
     Pre,
@@ -31,6 +32,7 @@ from monsterui.franken import (  # Select: Does not work - using Select from Fas
 )
 
 from akkudoktoreos.server.dash.context import request_url_for
+from akkudoktoreos.server.dash.markdown import Markdown
 
 scrollbar_viewport_styles = (
     "scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch;"
@@ -696,6 +698,7 @@ def ConfigCard(
     default: str,
     description: str,
     deprecated: Optional[Union[str, bool]],
+    scope: Optional[list[str]],
     update_error: Optional[str],
     update_value: Optional[str],
     update_open: Optional[bool],
@@ -757,7 +760,14 @@ def ConfigCard(
                 cls="list-none",
             ),
             Grid(
-                TextView(description),
+                Div(
+                    DivHStacked(
+                        *[Kbd(s) for s in scope],
+                    )
+                    if scope
+                    else None,
+                    Markdown(description),
+                ),
                 P(config_type),
             )
             if not deprecated

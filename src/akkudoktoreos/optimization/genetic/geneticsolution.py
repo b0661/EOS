@@ -653,7 +653,7 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
         )
 
         # Add battery instructions (fill rate based control)
-        last_operation_mode: Optional[str] = None
+        last_operation_mode: Optional[BatteryOperationMode] = None
         last_operation_mode_factor: Optional[float] = None
         resource_id = self._battery_device_id()
         # ac_charge, dc_charge, discharge_allowed start at hour 0 of start day

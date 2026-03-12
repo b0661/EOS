@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from akkudoktoreos.config.config import ConfigEOS
     from akkudoktoreos.core.database import Database
     from akkudoktoreos.core.ems import EnergyManagement
-    from akkudoktoreos.devices.devices import ResourceRegistry
     from akkudoktoreos.measurement.measurement import Measurement
     from akkudoktoreos.prediction.prediction import Prediction
 
@@ -33,7 +32,6 @@ _ems_eos: Optional[EnergyManagement] = None
 _database_eos: Optional[Database] = None
 _measurement_eos: Optional[Measurement] = None
 _prediction_eos: Optional[Prediction] = None
-_resource_registry_eos: Optional[ResourceRegistry] = None
 
 
 def get_adapter(init: bool = False) -> Adapter:
@@ -496,43 +494,6 @@ class DatabaseMixin:
         return get_database()
 
 
-def get_resource_registry(init: bool = False) -> ResourceRegistry:
-    """Retrieve the singleton EOS Resource Registry instance.
-
-    This function provides access to the global EOS ResourceRegistry instance.
-    The instance is created on first access if `init` is True. If the instance
-    is accessed before initialization and `init` is False, a RuntimeError is raised.
-
-    Args:
-        init (bool): If True, create the ResourceRegistry instance if it does not exist.
-                     Default is False.
-
-    Returns:
-        ResourceRegistry: The global EOS Resource Registry instance.
-
-    Raises:
-        RuntimeError: If accessed before initialization with `init=False`.
-
-    Usage:
-        .. code-block:: python
-
-            registry = get_resource_registry(init=True)  # Initialize and retrieve
-            registry.register_device(my_device)
-    """
-    global _resource_registry_eos
-    if _resource_registry_eos is None:
-        from akkudoktoreos.config.config import ConfigEOS
-
-        if not init and not ConfigEOS.documentation_mode():
-            raise RuntimeError("ResourceRegistry access before init.")
-
-        from akkudoktoreos.devices.devices import ResourceRegistry
-
-        _resource_registry_eos = ResourceRegistry()
-
-    return _resource_registry_eos
-
-
 class StartMixin(EnergyManagementSystemMixin):
     """A mixin to manage the start datetime for energy management.
 
@@ -665,7 +626,5 @@ def singletons_init() -> None:
             get_measurement(init=True)
         if _prediction_eos is None:
             get_prediction(init=True)
-        if _resource_registry_eos is None:
-            get_resource_registry(init=True)
     finally:
         _singletons_init_running = False

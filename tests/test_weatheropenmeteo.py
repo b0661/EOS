@@ -271,7 +271,7 @@ def test_openmeteo_development_forecast_data(provider, config_eos, is_system_tes
     if not is_system_test:
         return
 
-    # Us actual date for forecast (not historic data)
+    # Use actual date for forecast (not historic data)
     now = to_datetime(in_timezone="Europe/Berlin")
     start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end_date = start_date + pd.Timedelta(days=3)  # 3 Tage Vorhersage

@@ -156,6 +156,21 @@ def get_deprecated(
     return getattr(subfield_info, "deprecated", None)
 
 
+def get_scope(
+    extra: Dict[str, Any],
+) -> Optional[list[str]]:
+    """Fetch x-scope.
+
+    Returns the value of json_schema_extra["x-scope"] as a list of strings, or None if not set.
+    """
+    scope = extra.get("x-scope")
+    if scope is None:
+        return None
+    if isinstance(scope, list):
+        return [str(s) for s in scope]
+    return [str(scope)]
+
+
 def get_default_value(field_info: Union[FieldInfo, ComputedFieldInfo], regular_field: bool) -> Any:
     """Retrieve the default value of a field.
 
@@ -252,6 +267,7 @@ def create_config_details(
                     config["default"] = json.dumps(get_default_value(subfield_info, regular_field))
                     config["description"] = get_description(subfield_info, extra)
                     config["deprecated"] = get_deprecated(subfield_info, extra)
+                    config["scope"] = get_scope(extra)
                     if isinstance(subfield_info, ComputedFieldInfo):
                         config["read-only"] = "ro"
                         type_description = str(subfield_info.return_type)
@@ -405,6 +421,7 @@ def ConfigPlanesCard(
                     config["default"],
                     config["description"],
                     config["deprecated"],
+                    config["scope"],
                     update_error,
                     update_value,
                     update_open,
@@ -745,6 +762,7 @@ def Configuration(
                     config["default"],
                     config["description"],
                     config["deprecated"],
+                    config["scope"],
                     update_error,
                     update_value,
                     update_open,

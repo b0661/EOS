@@ -17,12 +17,8 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 
-from akkudoktoreos.devices.genetic.battery import Battery
-from akkudoktoreos.devices.genetic.inverter import Inverter
-from akkudoktoreos.optimization.genetic.geneticdevices import (
-    InverterParameters,
-    SolarPanelBatteryParameters,
-)
+from akkudoktoreos.devices.genetic.battery import Battery, SolarPanelBatteryParameters
+from akkudoktoreos.devices.genetic.inverter import Inverter, InverterParameters
 
 # ---------------------------------------------------------------------------
 # Helpers / Fixtures

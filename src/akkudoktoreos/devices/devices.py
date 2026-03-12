@@ -1,471 +1,308 @@
-"""General configuration settings for simulated devices for optimization."""
+"""Device configuration — umbrella module.
 
-import json
-import re
-from typing import Any, Optional, TextIO, cast
+Concepts
+--------
+1. **Pydantic Config Models (mutable, user-facing)**
+   - Read, validate, and document user-provided configuration.
+   - Each device type has a corresponding CommonSettings class defined
+     in ``devices/settings/<device>.py``.
+   - Multiple devices of the same type are represented as a
+     ``dict[str, <Settings>]`` in ``DevicesCommonSettings``, keyed by
+     ``device_id``.  The dict key must match the ``device_id`` field
+     inside the value.
 
-import numpy as np
+2. **Optimizer-specific domain conversion**
+   - Each CommonSettings class exposes ``to_genetic2_param()`` to produce
+     the immutable frozen dataclass required by the GENETIC2 optimizer.
+   - Other optimizers add their own ``to_<optimizer>_param()`` methods to
+     the same CommonSettings classes when needed.
+   - ``DevicesCommonSettings.to_genetic2_params()`` aggregates all devices
+     into a flat ``list[DeviceParam]`` for GENETIC2.
+
+3. **Topology Config**
+   - ``BusConfig`` / ``BusesCommonSettings`` — declare energy buses explicitly.
+   - Each device config carries a ``ports`` field wiring it to buses.
+
+4. **Backward compatibility**
+   - All names previously importable from this module remain importable
+     here. The definitions have moved to ``devices/settings/`` but this
+     file re-exports everything so existing import sites are unaffected.
+
+Usage (GENETIC2)
+----------------
+1. Load ``BusesCommonSettings`` + ``DevicesCommonSettings`` from YAML/JSON.
+2. Pydantic validates all fields and constraints.
+3. ``buses_config.to_domain()``  →  ``list[EnergyBus]``
+4. ``devices_config.to_genetic2_params()``  →  ``list[DeviceParam]``
+5. Instantiate concrete ``EnergyDevice`` objects and pass them to
+   ``EnergySimulationEngine``.
+"""
+
+from typing import Optional
+
 from loguru import logger
-from numpydantic import NDArray, Shape
-from pydantic import Field, computed_field, field_validator, model_validator
+from pydantic import Field, computed_field, model_validator
 
-from akkudoktoreos.config.configabc import SettingsBaseModel, TimeWindowSequence
-from akkudoktoreos.core.cache import CacheFileStore
-from akkudoktoreos.core.coreabc import ConfigMixin, SingletonMixin
-from akkudoktoreos.core.emplan import ResourceStatus
-from akkudoktoreos.core.pydantic import ConfigDict, PydanticBaseModel
-from akkudoktoreos.devices.devicesabc import DevicesBaseSettings
-from akkudoktoreos.utils.datetimeutil import DateTime, to_datetime
+from akkudoktoreos.config.configabc import ConfigScope, SettingsBaseModel
+from akkudoktoreos.devices.devicesabc import DeviceParam, EnergyBus
+from akkudoktoreos.devices.settings.batterysettings import (
+    BatteriesCommonSettings,
+)
+from akkudoktoreos.devices.settings.devicebasesettings import (
+    BusConfig,
+)
+from akkudoktoreos.devices.settings.fixedloadsettings import FixedLoadSettings
+from akkudoktoreos.devices.settings.gridconnectionsettings import GridConnectionSettings
+from akkudoktoreos.devices.settings.heatpumpsettings import HeatPumpCommonSettings
+from akkudoktoreos.devices.settings.homeappliancesettings import (
+    HomeApplianceCommonSettings,
+)
+from akkudoktoreos.devices.settings.invertersettings import InverterCommonSettings
 
-# Default charge rates for battery
-BATTERY_DEFAULT_CHARGE_RATES: list[float] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+# ============================================================
+# Top-level energy bus collection
+# ============================================================
 
 
-class BatteriesCommonSettings(DevicesBaseSettings):
-    """Battery devices base settings."""
+class BusesCommonSettings(SettingsBaseModel):
+    """Configuration for all energy buses in the system.
 
-    capacity_wh: int = Field(
-        default=8000, gt=0, json_schema_extra={"description": "Capacity [Wh].", "examples": [8000]}
-    )
+    Validates that all ``bus_id`` values are unique. Each device's
+    ``ports`` field must reference a ``bus_id`` that exists here —
+    this cross-reference is validated by the engine at construction time,
+    not here (to keep config loading independent of engine instantiation).
 
-    charging_efficiency: float = Field(
-        default=0.88,
-        gt=0,
-        le=1,
+    Call ``to_genetic2_param()`` to obtain the ``list[EnergyBus]`` required by
+    ``EnergySimulationEngine``.
+    """
+
+    buses: list[BusConfig] = Field(
+        default_factory=list,
         json_schema_extra={
-            "description": "Charging efficiency [0.01 ... 1.00].",
-            "examples": [0.88],
-        },
-    )
-
-    discharging_efficiency: float = Field(
-        default=0.88,
-        gt=0,
-        le=1,
-        json_schema_extra={
-            "description": "Discharge efficiency [0.01 ... 1.00].",
-            "examples": [0.88],
-        },
-    )
-
-    levelized_cost_of_storage_kwh: float = Field(
-        default=0.0,
-        json_schema_extra={
-            "description": "Levelized cost of storage (LCOS), the average lifetime cost of delivering one kWh [€/kWh].",
-            "examples": [0.12],
-        },
-    )
-
-    max_charge_power_w: Optional[float] = Field(
-        default=5000,
-        gt=0,
-        json_schema_extra={"description": "Maximum charging power [W].", "examples": [5000]},
-    )
-
-    min_charge_power_w: Optional[float] = Field(
-        default=50,
-        gt=0,
-        json_schema_extra={"description": "Minimum charging power [W].", "examples": [50]},
-    )
-
-    charge_rates: Optional[list[float]] = Field(
-        default=BATTERY_DEFAULT_CHARGE_RATES,
-        json_schema_extra={
-            "description": (
-                "Charge rates as factor of maximum charging power [0.00 ... 1.00]. "
-                "None triggers fallback to default charge-rates."
-            ),
-            "examples": [[0.0, 0.25, 0.5, 0.75, 1.0], None],
-        },
-    )
-
-    min_soc_percentage: int = Field(
-        default=0,
-        ge=0,
-        le=100,
-        json_schema_extra={
-            "description": (
-                "Minimum state of charge (SOC) as percentage of capacity [%]. "
-                "This is the target SoC for charging"
-            ),
-            "examples": [10],
-        },
-    )
-
-    max_soc_percentage: int = Field(
-        default=100,
-        ge=0,
-        le=100,
-        json_schema_extra={
-            "description": "Maximum state of charge (SOC) as percentage of capacity [%].",
-            "examples": [100],
-        },
-    )
-
-    @field_validator("charge_rates", mode="before")
-    def validate_and_sort_charge_rates(cls, v: Any) -> NDArray[Shape["*"], float]:
-        # None means fallback to default values
-        if v is None:
-            return BATTERY_DEFAULT_CHARGE_RATES.copy()
-
-        # Convert to numpy array
-        if isinstance(v, str):
-            # Remove brackets and split by comma or whitespace
-            numbers = re.split(r"[,\s]+", v.strip("[]"))
-
-            # Filter out any empty strings and convert to floats
-            arr = np.array([float(x) for x in numbers if x])
-        else:
-            arr = np.array(v, dtype=float)
-
-        # Must not be empty
-        if arr.size == 0:
-            raise ValueError("charge_rates must contain at least one value.")
-
-        # Enforce bounds: 0.0 ≤ x ≤ 1.0
-        if (arr < 0.0).any() or (arr > 1.0).any():
-            raise ValueError("charge_rates must be within [0.0, 1.0].")
-
-        # Remove duplicates + sort
-        arr = np.unique(arr)
-        arr.sort()
-
-        return arr
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def measurement_key_soc_factor(self) -> str:
-        """Measurement key for the battery state of charge (SoC) as factor of total capacity [0.0 ... 1.0]."""
-        return f"{self.device_id}-soc-factor"
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def measurement_key_power_l1_w(self) -> str:
-        """Measurement key for the L1 power the battery is charged or discharged with [W]."""
-        return f"{self.device_id}-power-l1-w"
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def measurement_key_power_l2_w(self) -> str:
-        """Measurement key for the L2 power the battery is charged or discharged with [W]."""
-        return f"{self.device_id}-power-l2-w"
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def measurement_key_power_l3_w(self) -> str:
-        """Measurement key for the L3 power the battery is charged or discharged with [W]."""
-        return f"{self.device_id}-power-l3-w"
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def measurement_key_power_3_phase_sym_w(self) -> str:
-        """Measurement key for the symmetric 3 phase power the battery is charged or discharged with [W]."""
-        return f"{self.device_id}-power-3-phase-sym-w"
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def measurement_keys(self) -> Optional[list[str]]:
-        """Measurement keys for the battery stati that are measurements."""
-        keys: list[str] = [
-            self.measurement_key_soc_factor,
-            self.measurement_key_power_l1_w,
-            self.measurement_key_power_l2_w,
-            self.measurement_key_power_l3_w,
-            self.measurement_key_power_3_phase_sym_w,
-        ]
-        return keys
-
-
-class InverterCommonSettings(DevicesBaseSettings):
-    """Inverter devices base settings."""
-
-    max_power_w: Optional[float] = Field(
-        default=None,
-        gt=0,
-        json_schema_extra={"description": "Maximum power [W].", "examples": [10000]},
-    )
-
-    battery_id: Optional[str] = Field(
-        default=None,
-        json_schema_extra={
-            "description": "ID of battery controlled by this inverter.",
-            "examples": [None, "battery1"],
-        },
-    )
-
-    ac_to_dc_efficiency: float = Field(
-        default=1.0,
-        ge=0,
-        le=1,
-        json_schema_extra={
-            "description": (
-                "Efficiency of AC to DC conversion for grid-to-battery AC charging (0-1). "
-                "Set to 0 to disable AC charging. Default 1.0 (no additional inverter loss)."
-            ),
-            "examples": [0.95, 1.0, 0.0],
-        },
-    )
-
-    dc_to_ac_efficiency: float = Field(
-        default=1.0,
-        gt=0,
-        le=1,
-        json_schema_extra={
-            "description": (
-                "Efficiency of DC to AC conversion for battery discharging to AC load/grid (0-1). "
-                "Default 1.0 (no additional inverter loss)."
-            ),
-            "examples": [0.95, 1.0],
-        },
-    )
-
-    max_ac_charge_power_w: Optional[float] = Field(
-        default=None,
-        ge=0,
-        json_schema_extra={
-            "description": (
-                "Maximum AC charging power in watts. "
-                "null means no additional limit. Set to 0 to disable AC charging."
-            ),
-            "examples": [None, 0, 5000],
-        },
-    )
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def measurement_keys(self) -> Optional[list[str]]:
-        """Measurement keys for the inverter stati that are measurements."""
-        keys: list[str] = []
-        return keys
-
-
-class HomeApplianceCommonSettings(DevicesBaseSettings):
-    """Home Appliance devices base settings."""
-
-    consumption_wh: int = Field(
-        gt=0, json_schema_extra={"description": "Energy consumption [Wh].", "examples": [2000]}
-    )
-
-    duration_h: int = Field(
-        gt=0,
-        le=24,
-        json_schema_extra={"description": "Usage duration in hours [0 ... 24].", "examples": [1]},
-    )
-
-    time_windows: Optional[TimeWindowSequence] = Field(
-        default=None,
-        json_schema_extra={
-            "description": "Sequence of allowed time windows. Defaults to optimization general time window.",
+            "description": "List of energy buses in the system.",
             "examples": [
-                {
-                    "windows": [
-                        {"start_time": "10:00", "duration": "2 hours"},
-                    ],
-                },
+                [
+                    {"bus_id": "bus_dc", "carrier": "dc"},
+                    {"bus_id": "bus_ac", "carrier": "ac"},
+                ]
             ],
+            "x-scope": [str(ConfigScope.GENETIC2)],
         },
     )
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def measurement_keys(self) -> Optional[list[str]]:
-        """Measurement keys for the home appliance stati that are measurements."""
-        keys: list[str] = []
-        return keys
+    # ------------------------------------------------------------------
+    # GENETIC2 domain conversion
+    # ------------------------------------------------------------------
+
+    # TBD
+
+    @model_validator(mode="after")
+    def _validate_unique_bus_ids(self) -> "BusesCommonSettings":
+        seen: set[str] = set()
+        for bus in self.buses:
+            if bus.bus_id in seen:
+                raise ValueError(f"Duplicate bus_id: '{bus.bus_id}'")
+            seen.add(bus.bus_id)
+        return self
+
+    def to_genetic2_param(self) -> list[EnergyBus]:
+        """Return an immutable list of ``EnergyBus`` domain objects."""
+        return [bus.to_genetic2_param() for bus in self.buses]
+
+
+# ============================================================
+# Top-level device collection
+# ============================================================
 
 
 class DevicesCommonSettings(SettingsBaseModel):
-    """Base configuration for devices simulation settings."""
+    """Configuration for all controllable devices in the simulation.
 
-    batteries: Optional[list[BatteriesCommonSettings]] = Field(
+    Every device collection is a ``dict[str, <Settings>]`` keyed by
+    ``device_id``.  This makes config paths stable regardless of
+    declaration order and lets each device settings class build its own
+    config path from ``self.device_id`` without needing an external index.
+
+    Devices reference buses by ``bus_id`` in their ``ports`` field; the
+    corresponding buses must be declared in a separate ``BusesCommonSettings``
+    that is passed alongside this config when building the engine.
+
+    Call ``to_genetic2_params()`` to obtain a flat ``list[DeviceParam]``
+    for all devices that have a complete GENETIC2 domain class. Device
+    types whose domain class is not yet implemented
+    (``GridConnectionSettings``, ``FixedLoadSettings``) are skipped with
+    a warning.
+    """
+
+    # ---- Batteries ----
+    batteries: Optional[dict[str, BatteriesCommonSettings]] = Field(
         default=None,
         json_schema_extra={
-            "description": "List of battery devices",
-            "examples": [[{"device_id": "battery1", "capacity_wh": 8000}]],
+            "description": "Stationary battery storage devices, keyed by device_id.",
+            "examples": [{"bat0": {"device_id": "bat0", "capacity_wh": 8000, "ports": []}}],
         },
     )
-
     max_batteries: Optional[int] = Field(
         default=None,
         ge=0,
-        json_schema_extra={
-            "description": "Maximum number of batteries that can be set",
-            "examples": [1, 2],
-        },
+        json_schema_extra={"description": "Maximum number of batteries allowed.", "examples": [1]},
     )
 
-    electric_vehicles: Optional[list[BatteriesCommonSettings]] = Field(
+    # ---- Electric vehicles ----
+    electric_vehicles: Optional[dict[str, BatteriesCommonSettings]] = Field(
         default=None,
         json_schema_extra={
-            "description": "List of electric vehicle devices",
-            "examples": [[{"device_id": "battery1", "capacity_wh": 8000}]],
+            "description": "Electric vehicle battery packs, keyed by device_id.",
+            "examples": [{"ev0": {"device_id": "ev0", "capacity_wh": 60000, "ports": []}}],
         },
     )
-
     max_electric_vehicles: Optional[int] = Field(
         default=None,
         ge=0,
+        json_schema_extra={"description": "Maximum number of EVs allowed.", "examples": [1]},
+    )
+
+    # ---- Inverters ----
+    inverters: Optional[dict[str, InverterCommonSettings]] = Field(
+        default=None,
         json_schema_extra={
-            "description": "Maximum number of electric vehicles that can be set",
-            "examples": [1, 2],
+            "description": "Inverter devices, keyed by device_id.",
+            "examples": [{}],
         },
     )
-
-    inverters: Optional[list[InverterCommonSettings]] = Field(
-        default=None, json_schema_extra={"description": "List of inverters", "examples": [[]]}
-    )
-
     max_inverters: Optional[int] = Field(
         default=None,
         ge=0,
+        json_schema_extra={"description": "Maximum number of inverters allowed.", "examples": [1]},
+    )
+
+    # ---- Grid connections ----
+    grid_connections: Optional[dict[str, GridConnectionSettings]] = Field(
+        default=None,
         json_schema_extra={
-            "description": "Maximum number of inverters that can be set",
-            "examples": [1, 2],
+            "description": "Grid connection points, keyed by device_id.",
+            "examples": [{}],
+        },
+    )
+    max_grid_connections: Optional[int] = Field(
+        default=None,
+        ge=0,
+        json_schema_extra={
+            "description": "Maximum number of grid connections allowed.",
+            "examples": [1],
         },
     )
 
-    home_appliances: Optional[list[HomeApplianceCommonSettings]] = Field(
-        default=None, json_schema_extra={"description": "List of home appliances", "examples": [[]]}
+    # ---- Heat pumps ----
+    heat_pumps: Optional[dict[str, HeatPumpCommonSettings]] = Field(
+        default=None,
+        json_schema_extra={
+            "description": "Heat pump devices, keyed by device_id.",
+            "examples": [{}],
+        },
+    )
+    max_heat_pumps: Optional[int] = Field(
+        default=None,
+        ge=0,
+        json_schema_extra={
+            "description": "Maximum number of heat pumps allowed.",
+            "examples": [1],
+        },
     )
 
+    # ---- Fixed loads ----
+    fixed_loads: Optional[dict[str, FixedLoadSettings]] = Field(
+        default=None,
+        json_schema_extra={
+            "description": "Non-controllable fixed household loads, keyed by device_id.",
+            "examples": [
+                {"base_load": {"device_id": "base_load", "peak_power_w": 500, "ports": []}}
+            ],
+        },
+    )
+    max_fixed_loads: Optional[int] = Field(
+        default=None,
+        ge=0,
+        json_schema_extra={
+            "description": "Maximum number of fixed loads allowed.",
+            "examples": [3],
+        },
+    )
+
+    # ---- Controllable home appliances ----
+    home_appliances: dict[str, HomeApplianceCommonSettings] = Field(
+        default_factory=dict,
+        json_schema_extra={
+            "description": "Shiftable home appliance devices, keyed by device_id.",
+            "examples": [
+                {"dishwasher": {"device_id": "dishwasher", "consumption_wh": 1500, "ports": []}}
+            ],
+        },
+    )
     max_home_appliances: Optional[int] = Field(
         default=None,
         ge=0,
         json_schema_extra={
-            "description": "Maximum number of home_appliances that can be set",
-            "examples": [1, 2],
+            "description": "Maximum number of home appliances allowed.",
+            "examples": [3],
         },
     )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def measurement_keys(self) -> Optional[list[str]]:
-        """Return the measurement keys for the resource/ device stati that are measurements."""
+    def measurement_keys(self) -> list[str]:
+        """All measurement keys across all configured devices."""
         keys: list[str] = []
-
-        if self.max_batteries and self.batteries:
-            for battery in self.batteries:
-                keys.extend(battery.measurement_keys)
-        if self.max_electric_vehicles and self.electric_vehicles:
-            for electric_vehicle in self.electric_vehicles:
-                keys.extend(electric_vehicle.measurement_keys)
+        for device_dict in [
+            self.batteries,
+            self.electric_vehicles,
+            self.inverters,
+            self.grid_connections,
+            self.heat_pumps,
+            self.fixed_loads,
+            self.home_appliances,
+        ]:
+            for device in (device_dict or {}).values():
+                keys.extend(device.measurement_keys)
         return keys
 
+    # ------------------------------------------------------------------
+    # GENETIC2 domain conversion
+    # ------------------------------------------------------------------
 
-# Type used for indexing: (resource_id, optional actuator_id)
-class ResourceKey(PydanticBaseModel):
-    """Key identifying a resource and optionally an actuator."""
+    def to_genetic2_params(self) -> list[DeviceParam]:
+        """Return a flat list of GENETIC2 domain objects for all devices.
 
-    resource_id: str
-    actuator_id: Optional[str] = None
-
-    model_config = ConfigDict(frozen=True)
-
-    def __hash__(self) -> int:
-        """Returns a stable hash based on the resource_id and actuator_id.
+        Device types whose domain class is not yet implemented
+        (``GridConnectionSettings``, ``FixedLoadSettings``) are skipped
+        with a warning rather than raising, so a partial system can still
+        be configured and optimised.
 
         Returns:
-            int: Hash value derived from the resource_id and actuator_id.
+            Ordered list of ``DeviceParam`` subclass instances, in the
+            order: batteries, electric_vehicles, inverters, pvs,
+            heat_pumps, home_appliances. Grid connections and fixed loads
+            are skipped until their domain classes exist.
         """
-        return hash(self.resource_id + self.actuator_id if self.actuator_id else "")
+        params: list[DeviceParam] = []
 
-    def as_tuple(self) -> tuple[str, Optional[str]]:
-        """Return the key as a tuple for internal dictionary indexing."""
-        return (self.resource_id, self.actuator_id)
+        def _add(device_dict: Optional[dict]) -> None:
+            for device in (device_dict or {}).values():
+                try:
+                    params.append(device.to_genetic2_param())
+                except NotImplementedError:
+                    logger.warning(
+                        "Skipping device '{}' ({}): to_genetic2_param() not yet implemented.",
+                        device.device_id,
+                        type(device).__name__,
+                    )
 
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, ResourceKey):
-            return NotImplemented
-        return self.resource_id == other.resource_id and self.actuator_id == other.actuator_id
+        # Batteries and EVs not used in GENETIC2 (only GENETIC)
+        # Grid connections and fixed loads skipped until domain classes exist:
+        _add(self.fixed_loads)
+        _add(self.heat_pumps)
+        _add(self.home_appliances)
+        _add(self.inverters)
+        _add(self.grid_connections)
 
-
-class ResourceRegistry(SingletonMixin, ConfigMixin, PydanticBaseModel):
-    """Registry for collecting and retrieving device status reports for simulations.
-
-    Maintains the latest and optionally historical status reports for each resource.
-    """
-
-    keep_history: bool = False
-    history_size: int = 100
-
-    latest: dict[ResourceKey, ResourceStatus] = Field(
-        default_factory=dict,
-        json_schema_extra={
-            "description": "Latest resource status that was reported per resource key.",
-            "example": [],
-        },
-    )
-    history: dict[ResourceKey, list[tuple[DateTime, ResourceStatus]]] = Field(
-        default_factory=dict,
-        json_schema_extra={
-            "description": "History of resource stati that were reported per resource key.",
-            "example": [],
-        },
-    )
-
-    @model_validator(mode="after")
-    def _enforce_history_limits(self) -> "ResourceRegistry":
-        """Ensure history list lengths respect the history_size limit."""
-        if self.keep_history:
-            for key, records in self.history.items():
-                if len(records) > self.history_size:
-                    self.history[key] = records[-self.history_size :]
-        return self
-
-    def update_status(self, key: ResourceKey, status: ResourceStatus) -> None:
-        """Update the latest status and optionally store in history.
-
-        Args:
-            key (ResourceKey): Identifier for the resource.
-            status (ResourceStatus): Status report to store.
-        """
-        self.latest[key] = status
-        if self.keep_history:
-            timestamp = getattr(status, "transition_timestamp", None) or to_datetime()
-            self.history.setdefault(key, []).append((timestamp, status))
-            if len(self.history[key]) > self.history_size:
-                self.history[key] = self.history[key][-self.history_size :]
-
-    def status_latest(self, key: ResourceKey) -> Optional[ResourceStatus]:
-        """Retrieve the most recent status for a resource."""
-        return self.latest.get(key)
-
-    def status_history(self, key: ResourceKey) -> list[tuple[DateTime, ResourceStatus]]:
-        """Retrieve historical status reports for a resource."""
-        if not self.keep_history:
-            raise RuntimeError("History tracking is disabled.")
-        return self.history.get(key, [])
-
-    def status_exists(self, key: ResourceKey) -> bool:
-        """Check if a status report exists for the given resource.
-
-        Args:
-            key (ResourceKey): Identifier for the resource.
-        """
-        return key in self.latest
-
-    def save(self) -> None:
-        """Save the registry to file."""
-        # Make explicit cast to make mypy happy
-        cache_file = cast(
-            TextIO, CacheFileStore().create(key="resource_registry", mode="w+", suffix=".json")
-        )
-        cache_file.seek(0)
-        cache_file.write(self.model_dump_json(indent=4))
-        cache_file.truncate()  # Important to remove leftover data!
-
-    def load(self) -> None:
-        """Load registry state from file and update the current instance."""
-        cache_file = CacheFileStore().get(key="resource_registry")
-        if cache_file:
-            try:
-                cache_file.seek(0)
-                data = json.load(cache_file)
-                loaded = self.__class__.model_validate(data)
-
-                self.keep_history = loaded.keep_history
-                self.history_size = loaded.history_size
-                self.latest = loaded.latest
-                self.history = loaded.history
-            except Exception as e:
-                logger.error("Can not load resource registry: {}", e)
+        return params

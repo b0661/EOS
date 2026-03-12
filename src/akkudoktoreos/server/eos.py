@@ -32,10 +32,9 @@ from akkudoktoreos.core.coreabc import (
     get_ems,
     get_measurement,
     get_prediction,
-    get_resource_registry,
     singletons_init,
 )
-from akkudoktoreos.core.emplan import EnergyManagementPlan, ResourceStatus
+from akkudoktoreos.core.emplan import EnergyManagementPlan
 from akkudoktoreos.core.ems import ems_manage_energy
 from akkudoktoreos.core.emsettings import EnergyManagementMode
 from akkudoktoreos.core.logging import logging_track_config, read_file_log
@@ -46,7 +45,6 @@ from akkudoktoreos.core.pydantic import (
     PydanticDateTimeSeries,
 )
 from akkudoktoreos.core.version import __version__
-from akkudoktoreos.devices.devices import ResourceKey
 from akkudoktoreos.optimization.genetic.geneticparams import (
     GeneticOptimizationParameters,
 )
@@ -75,7 +73,6 @@ from akkudoktoreos.utils.datetimeutil import to_datetime, to_duration
 
 def save_eos_state() -> None:
     """Save EOS state."""
-    get_resource_registry().save()
     get_prediction().save()
     get_measurement().save()
     cache_save()  # keep last
@@ -86,7 +83,6 @@ def load_eos_state() -> None:
     cache_load()  # keep first
     get_measurement().load()
     get_prediction().load()
-    get_resource_registry().load()
 
 
 def terminate_eos() -> None:
@@ -613,50 +609,6 @@ async def fastapi_logging_get_log(
         return JSONResponse(content=logs)
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
-
-@app.get("/v1/resource/status", tags=["resource"])
-def fastapi_devices_status_get(
-    resource_id: Annotated[str, Query(description="Resource ID.")],
-    actuator_id: Annotated[Optional[str], Query(description="Actuator ID.")] = None,
-) -> ResourceStatus:
-    """Get the latest status of a resource/ device.
-
-    Return:
-        latest_status: The latest status of a resource/ device.
-    """
-    key = ResourceKey(resource_id=resource_id, actuator_id=actuator_id)
-    if not get_resource_registry().status_exists(key):
-        raise HTTPException(status_code=404, detail=f"Key '{key}' is not available.")
-    status_latest = get_resource_registry().status_latest(key)
-    if status_latest is None:
-        raise HTTPException(status_code=404, detail=f"Key '{key}' does not have a status.")
-    return status_latest
-
-
-@app.put("/v1/resource/status", tags=["resource"])
-def fastapi_devices_status_put(
-    resource_id: Annotated[str, Query(description="Resource ID.")],
-    status: Annotated[ResourceStatus, Body(description="Resource Status.")],
-    actuator_id: Annotated[Optional[str], Query(description="Actuator ID.")] = None,
-) -> ResourceStatus:
-    """Update the status of a resource/ device.
-
-    Return:
-        latest_status: The latest status of a resource/ device.
-    """
-    key = ResourceKey(resource_id=resource_id, actuator_id=actuator_id)
-    try:
-        get_resource_registry().update_status(key, status)
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Error on resource status update key='{key}', status='{status}': {e}",
-        )
-    status_latest = get_resource_registry().status_latest(key)
-    if status_latest is None:
-        raise HTTPException(status_code=404, detail=f"Key '{key}' does not have a status.")
-    return status_latest
 
 
 @app.get("/v1/measurement/keys", tags=["measurement"])

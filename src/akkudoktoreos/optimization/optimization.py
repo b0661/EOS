@@ -2,7 +2,7 @@ from typing import Optional, Union
 
 from pydantic import Field, computed_field, model_validator
 
-from akkudoktoreos.config.configabc import SettingsBaseModel
+from akkudoktoreos.config.configabc import ConfigScope, SettingsBaseModel
 from akkudoktoreos.core.coreabc import get_ems
 from akkudoktoreos.core.pydantic import (
     PydanticBaseModel,
@@ -20,6 +20,7 @@ class GeneticCommonSettings(SettingsBaseModel):
         json_schema_extra={
             "description": "Number of individuals (solutions) to generate for the (initial) generation [>= 10]. Defaults to 300.",
             "examples": [300],
+            "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
         },
     )
 
@@ -29,6 +30,7 @@ class GeneticCommonSettings(SettingsBaseModel):
         json_schema_extra={
             "description": "Number of generations to evaluate the optimal solution [>= 10]. Defaults to 400.",
             "examples": [400],
+            "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
         },
     )
 
@@ -38,6 +40,7 @@ class GeneticCommonSettings(SettingsBaseModel):
         json_schema_extra={
             "description": "Fixed seed for genetic algorithm. Defaults to 'None' which means random seed.",
             "examples": [None],
+            "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
         },
     )
 
@@ -50,6 +53,9 @@ class GeneticCommonSettings(SettingsBaseModel):
             "description": "A dictionary of penalty function parameters consisting of a penalty function parameter name and the associated value.",
             "examples": [
                 {"ev_soc_miss": 10},
+            ],
+            "x-scope": [
+                str(ConfigScope.GENETIC),
             ],
         },
     )
@@ -108,6 +114,15 @@ class OptimizationCommonSettings(SettingsBaseModel):
             df = optimization_solution.solution.to_dataframe()
             key_list = df.columns.tolist()
         return sorted(set(key_list))
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def horizon(self) -> int:
+        """Number of optimization steps."""
+        if self.interval is None or self.interval == 0 or self.horizon_hours is None:
+            return 0
+        num_steps = int(float(self.horizon_hours * 3600) / self.interval)
+        return num_steps
 
     # Validators
     @model_validator(mode="after")

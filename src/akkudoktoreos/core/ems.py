@@ -18,6 +18,7 @@ from akkudoktoreos.core.coreabc import (
 from akkudoktoreos.core.emplan import EnergyManagementPlan
 from akkudoktoreos.core.emsettings import EnergyManagementMode
 from akkudoktoreos.core.pydantic import PydanticBaseModel
+from akkudoktoreos.optimization.genetic2.genetic2 import Genetic2Optimization
 from akkudoktoreos.optimization.genetic.genetic import GeneticOptimization
 from akkudoktoreos.optimization.genetic.geneticparams import (
     GeneticOptimizationParameters,
@@ -150,8 +151,9 @@ class EnergyManagement(
     @classmethod
     def _run(
         cls,
-        start_datetime: DateTime,
-        mode: EnergyManagementMode,
+        start_datetime: Optional[DateTime] = None,
+        mode: Optional[EnergyManagementMode] = None,
+        algorithm: Optional[str] = None,
         genetic_parameters: Optional[GeneticOptimizationParameters] = None,
         genetic_individuals: Optional[int] = None,
         genetic_seed: Optional[int] = None,
@@ -171,13 +173,21 @@ class EnergyManagement(
                 - "OPTIMIZATION": Runs the optimization process.
                 - "PREDICTION": Updates the forecast without optimization.
                 - "DISABLED": Does not run.
+
+                Defaults to the mode defined in the current configuration.
+            algorithm (str, optional):
+                The algorithm to use. Must be one of:
+                - "GENETIC": Optimization uses the `GENETIC` optimization algorithm.
+                - "GENETIC2": Optimization uses the `GENETIC2` optimization algorithm.
+
+                Defaults to the algorithm defined in the current configuration.
             genetic_parameters (GeneticOptimizationParameters, optional): The
-                parameter set for the genetic algorithm. If not provided, it will
+                parameter set for the `GENETIC` algorithm. If not provided, it will
                 be constructed based on the current configuration and predictions.
             genetic_individuals (int, optional): The number of individuals for the
-                genetic algorithm. Defaults to the algorithm's internal default (400)
+                `GENETIC` algorithm. Defaults to the algorithm's internal default (400)
                 if not specified.
-            genetic_seed (int, optional): The seed for the genetic algorithm. Defaults
+            genetic_seed (int, optional): The seed for the `GENETIC` algorithm. Defaults
                 to the algorithm's internal random seed if not specified.
             force_enable (bool, optional): If True, bypasses any disabled state
                 to force the update process. This is mostly applicable to
@@ -199,7 +209,7 @@ class EnergyManagement(
         cls._stage = EnergyManagementStage.DATA_ACQUISITION
 
         # Remember/ set the start datetime of this energy management run.
-        # None leads
+        # None leads to current time as start datetime
         cls.set_start_datetime(start_datetime)
 
         # Throw away any memory cached results of the last energy management run.
@@ -240,45 +250,64 @@ class EnergyManagement(
         cls._stage = EnergyManagementStage.OPTIMIZATION
         logger.info("Starting energy management optimization.")
 
-        # Take values from config if not given
-        if genetic_individuals is None:
-            genetic_individuals = cls.config.optimization.genetic.individuals
-        if genetic_seed is None:
-            genetic_seed = cls.config.optimization.genetic.seed
+        if algorithm is None:
+            algorithm = cls.config.optimization.algorithm
+        if algorithm == "GENETIC":
+            # Take values from config if not given
+            if genetic_individuals is None:
+                genetic_individuals = cls.config.optimization.genetic.individuals
+            if genetic_seed is None:
+                genetic_seed = cls.config.optimization.genetic.seed
 
-        if cls._start_datetime is None:  # Make mypy happy - already set by us
-            raise RuntimeError("Start datetime not set.")
+            if cls._start_datetime is None:  # Make mypy happy - already set by us
+                raise RuntimeError("Start datetime not set.")
 
-        try:
-            optimization = GeneticOptimization(
-                verbose=bool(cls.config.server.verbose),
-                fixed_seed=genetic_seed,
-            )
-            solution = optimization.optimierung_ems(
-                start_hour=cls._start_datetime.hour,
-                parameters=genetic_parameters,
-                ngen=genetic_individuals,
-            )
-        except:
-            logger.exception("Energy management optimization failed.")
+            try:
+                optimization = GeneticOptimization(
+                    verbose=bool(cls.config.server.verbose),
+                    fixed_seed=genetic_seed,
+                )
+                solution = optimization.optimierung_ems(
+                    start_hour=cls._start_datetime.hour,
+                    parameters=genetic_parameters,
+                    ngen=genetic_individuals,
+                )
+            except Exception:
+                logger.exception(f"Energy management optimization ({algorithm}) failed.")
+                cls._stage = EnergyManagementStage.IDLE
+                return
+
+            cls._stage = EnergyManagementStage.CONTROL_DISPATCH
+
+            # Make genetic solution public
+            cls._genetic_solution = solution
+
+            # Make optimization solution public
+            cls._optimization_solution = solution.optimization_solution()
+
+            # Make plan public
+            cls._plan = solution.energy_management_plan()
+
+            logger.debug("Energy management genetic solution:\n{}", cls._genetic_solution)
+            logger.debug("Energy management optimization solution:\n{}", cls._optimization_solution)
+            logger.debug("Energy management plan:\n{}", cls._plan)
+            logger.info("Energy management run done (optimization updated)")
+
+        elif algorithm == "GENETIC2":
+            genetic2 = Genetic2Optimization()
+
+            try:
+                cls._optimization_solution, cls._plan = genetic2.optimize()
+            except Exception:
+                logger.exception(f"Energy management optimization ({algorithm}) failed.")
+                cls._stage = EnergyManagementStage.IDLE
+                return
+
+            cls._stage = EnergyManagementStage.CONTROL_DISPATCH
+        else:
+            logger.error(f"Unknown optimization algorithm: '{algorithm}'. Skipping.")
             cls._stage = EnergyManagementStage.IDLE
             return
-
-        cls._stage = EnergyManagementStage.CONTROL_DISPATCH
-
-        # Make genetic solution public
-        cls._genetic_solution = solution
-
-        # Make optimization solution public
-        cls._optimization_solution = solution.optimization_solution()
-
-        # Make plan public
-        cls._plan = solution.energy_management_plan()
-
-        logger.debug("Energy management genetic solution:\n{}", cls._genetic_solution)
-        logger.debug("Energy management optimization solution:\n{}", cls._optimization_solution)
-        logger.debug("Energy management plan:\n{}", cls._plan)
-        logger.info("Energy management run done (optimization updated)")
 
         # Do control dispatch by adapters
         try:
@@ -298,6 +327,7 @@ class EnergyManagement(
         self,
         start_datetime: Optional[DateTime] = None,
         mode: Optional[EnergyManagementMode] = None,
+        algorithm: Optional[str] = None,
         genetic_parameters: Optional[GeneticOptimizationParameters] = None,
         genetic_individuals: Optional[int] = None,
         genetic_seed: Optional[int] = None,
@@ -314,18 +344,19 @@ class EnergyManagement(
             start_datetime (DateTime, optional): The starting timestamp
                 of the energy management run. Defaults to the current datetime
                 if not provided.
-            mode (EnergyManagementMode, optional): The management mode to use. Must be one of:
-                - "OPTIMIZATION": Runs the optimization process.
-                - "PREDICTION": Updates the forecast without optimization.
+            algorithm (str, optional):
+                The algorithm to use. Must be one of:
+                - "GENETIC": Optimization uses the `GENETIC` optimization algorithm.
+                - "GENETIC2": Optimization uses the `GENETIC2` optimization algorithm.
 
-                Defaults to the mode defined in the current configuration.
+                Defaults to the algorithm defined in the current configuration.
             genetic_parameters (GeneticOptimizationParameters, optional): The
-                parameter set for the genetic algorithm. If not provided, it will
+                parameter set for the `GENETIC` algorithm. If not provided, it will
                 be constructed based on the current configuration and predictions.
             genetic_individuals (int, optional): The number of individuals for the
-                genetic algorithm. Defaults to the algorithm's internal default (400)
+                `GENETIC` algorithm. Defaults to the algorithm's internal default (400)
                 if not specified.
-            genetic_seed (int, optional): The seed for the genetic algorithm. Defaults
+            genetic_seed (int, optional): The seed for the `GENETIC` algorithm. Defaults
                 to the algorithm's internal random seed if not specified.
             force_enable (bool, optional): If True, bypasses any disabled state
                 to force the update process. This is mostly applicable to
@@ -339,14 +370,11 @@ class EnergyManagement(
         async with self._run_lock:
             loop = get_running_loop()
             # Create a partial function with parameters "baked in"
-            if start_datetime is None:
-                start_datetime = to_datetime()
-            if mode is None:
-                mode = self.config.ems.mode
             func = partial(
                 EnergyManagement._run,
                 start_datetime=start_datetime,
                 mode=mode,
+                algorithm=algorithm,
                 genetic_parameters=genetic_parameters,
                 genetic_individuals=genetic_individuals,
                 genetic_seed=genetic_seed,
