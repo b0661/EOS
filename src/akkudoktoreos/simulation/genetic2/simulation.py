@@ -34,7 +34,7 @@ from akkudoktoreos.core.cache import cache_energy_management
 from akkudoktoreos.core.coreabc import get_config, get_measurement, get_prediction
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class SimulationContext:
     """Run-scoped immutable context injected into all devices during simulation setup.
 
@@ -70,7 +70,7 @@ class SimulationContext:
 
     def __post_init__(self) -> None:
         """Initialize derived attributes after construction."""
-        self.horizon = len(self.step_times)
+        object.__setattr__(self, "horizon", len(self.step_times))
 
     # ------------------------------------------------------------------
     # Generic resolution

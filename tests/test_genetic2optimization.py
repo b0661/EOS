@@ -7,8 +7,8 @@ Module under test
 Test strategy
 -------------
 The pure helper functions — ``_build_devices``, ``_build_topology``,
-``_result_to_solution``, ``_result_to_plan`` — are unit-tested in
-isolation using hand-crafted param instances and ``EnergyBus`` objects.
+``_best_to_solution``, ``_best_to_plan`` — are unit-tested in isolation
+using hand-crafted param instances and ``EnergyBus`` objects.
 
 ``Genetic2Optimization.optimize()`` is integration-tested via a
 lightweight fake config/EMS that injects minimal but complete data
@@ -21,30 +21,52 @@ Fake config structure
 ``optimize()`` traverses this attribute path:
 
     config.optimization.interval           → int (seconds)
-    config.optimization.horizon_hours      → int (hours)
+    config.optimization.horizon            → int (steps, computed)
     config.optimization.genetic.individuals→ int
     config.optimization.genetic.generations→ int
     config.optimization.genetic.seed       → int | None
-    config.buses.to_domain()               → list[EnergyBus]  (root level)
+    config.buses.to_genetic2_param()       → list[EnergyBus]
     config.devices.to_genetic2_params()    → list[DeviceParam]
     ems.start_datetime                     → pendulum.DateTime
 
 The fakes mirror this structure exactly.
 
+Param construction
+------------------
+``GridConnectionParam`` and ``HybridInverterParam`` both inherit from
+``DeviceParam``, which declares ``device_id: str`` and
+``ports: tuple[EnergyPort, ...]`` as the base fields.  There are no
+separate ``port_id`` or ``bus_id`` constructor arguments on the param
+classes themselves — the port identity lives inside the ``EnergyPort``
+objects passed as ``ports``.
+
 Patch targets
 -------------
-``GeneticOptimizer`` and ``EnergySimulationEngine`` are imported into
-``genetic2.py`` by name.  To intercept them the monkeypatch must target
-the name as bound in that module:
+``GeneticOptimizer`` lives in
+``akkudoktoreos.optimization.genetic2.optimizer``, which is where
+``genetic2.py`` imports it from.  To intercept it the monkeypatch must
+target the name as bound in that module:
 
-    akkudoktoreos.optimization.genetic2.genetic2.GeneticOptimizer
-    akkudoktoreos.optimization.genetic2.genetic2.EnergySimulationEngine
+    akkudoktoreos.optimization.genetic2.optimizer.GeneticOptimizer
+
+Likewise ``EnergySimulationEngine``:
+
+    akkudoktoreos.simulation.genetic2.engine.EnergySimulationEngine
 
 Inverter genome size
 --------------------
 ``HybridInverterDevice`` uses two genes per time step, so its schedule
-list has length ``2 * horizon``, not ``horizon``.  Tests that inspect
-schedule lengths account for this.
+contribution in the genome has length ``2 * horizon``, not ``horizon``.
+Tests that inspect schedule lengths account for this.
+
+Return type
+-----------
+``optimize()`` returns ``(OptimizationSolution, EnergyManagementPlan)``.
+``OptimizationSolution`` carries ``fitness_score: set[float]``,
+``total_costs_amt``, ``total_revenues_amt``, and
+``solution: PydanticDateTimeDataFrame`` — *not* a ``schedule`` dict.
+``_best_to_solution`` and ``_best_to_plan`` work from
+``BestIndividualResult``, not from ``OptimizationResult`` slices.
 
 Covers
 ------
@@ -68,19 +90,18 @@ _build_topology
     - port_to_bus dtype is integer
     - Returns VectorizedBusArbitrator
 
-_result_to_solution
-    - Returns Genetic2Solution
-    - cost matches best_scalar_fitness
-    - schedule keys match assembled.slices
-    - schedule values are Python lists with correct gene values
-    - objective_values keys and values match result
-    - generations_run forwarded
-    - Empty slices → empty schedule
+_best_to_solution
+    - Returns OptimizationSolution
+    - fitness_score contains best_scalar_fitness
+    - total_costs_amt comes from BestIndividualResult
+    - total_revenues_amt comes from BestIndividualResult
+    - valid_from equals first step_time
+    - valid_until equals last step_time
+    - solution is PydanticDateTimeDataFrame
 
-_result_to_plan
+_best_to_plan
     - Returns EnergyManagementPlan
-    - extract_best_instructions called with (result, context)
-    - Returned instructions appear in plan.instructions
+    - Instructions from BestIndividualResult appear in plan.instructions
     - No instructions → plan.instructions is empty
 
 Genetic2Optimization.optimize — validation
@@ -104,26 +125,26 @@ Genetic2Optimization.optimize — bus handling
     - DC-only config → AC bus prepended, DC preserved
 
 Genetic2Optimization.optimize — return values (end-to-end)
-    - Returns (Genetic2Solution, EnergyManagementPlan)
-    - cost is finite non-negative float
-    - schedule keys are strings
-    - schedule values are lists
-    - Inverter device schedule length == 2 * horizon
-    - generations_run matches configured generations
-    - objective_values is a dict
+    - Returns (OptimizationSolution, EnergyManagementPlan)
+    - fitness_score is a set of floats
+    - total_costs_amt is a finite float
+    - total_revenues_amt is a finite float
+    - solution is a PydanticDateTimeDataFrame
 
 Genetic2Optimization.optimize — determinism
-    - Same seed → same cost
-    - Same seed → same schedules
+    - Same seed → same fitness_score
+    - Same seed → same total_costs_amt
 """
 
 from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pandas as pd
 import pytest
 from pendulum import Duration
 
@@ -131,6 +152,7 @@ from pendulum import Duration
 # Framework imports
 # ---------------------------------------------------------------------------
 from akkudoktoreos.core.emplan import EnergyManagementPlan, OMBCInstruction
+from akkudoktoreos.core.pydantic import PydanticDateTimeDataFrame
 from akkudoktoreos.devices.devicesabc import (
     EnergyBus,
     EnergyCarrier,
@@ -156,14 +178,17 @@ from akkudoktoreos.devices.genetic2.hybridinverter import (
 # ---------------------------------------------------------------------------
 from akkudoktoreos.optimization.genetic2.genetic2 import (
     Genetic2Optimization,
-    Genetic2Solution,
+    _best_to_plan,
+    _best_to_solution,
     _build_devices,
     _build_topology,
-    _result_to_plan,
-    _result_to_solution,
 )
 from akkudoktoreos.optimization.genetic2.genome import AssembledGenome, GenomeSlice
-from akkudoktoreos.optimization.genetic2.optimizer import OptimizationResult
+from akkudoktoreos.optimization.genetic2.optimizer import (
+    BestIndividualResult,
+    OptimizationResult,
+)
+from akkudoktoreos.optimization.optimization import OptimizationSolution
 from akkudoktoreos.simulation.genetic2.arbitrator import VectorizedBusArbitrator
 from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.utils.datetimeutil import to_datetime
@@ -174,7 +199,6 @@ from akkudoktoreos.utils.datetimeutil import to_datetime
 
 HORIZON = 4
 STEP_INTERVAL_SEC = 3600
-HORIZON_HOURS = 4          # horizon_hours * 3600 / STEP_INTERVAL_SEC == HORIZON
 START_DT = to_datetime("2024-01-01T00:00:00")
 
 AC_BUS = EnergyBus(bus_id="bus_ac", carrier=EnergyCarrier.AC)
@@ -190,10 +214,10 @@ AC_PORT_BIDIR = EnergyPort(
 # ============================================================
 
 def make_grid_param(device_id: str = "grid0", bus_id: str = "bus_ac") -> GridConnectionParam:
+    port = EnergyPort(port_id="p_grid", bus_id=bus_id, direction=PortDirection.BIDIRECTIONAL)
     return GridConnectionParam(
         device_id=device_id,
-        port_id="p_grid",
-        bus_id=bus_id,
+        ports=(port,),
         max_import_power_w=20_000.0,
         max_export_power_w=20_000.0,
         import_cost_per_kwh=0.30,
@@ -221,10 +245,10 @@ def make_inverter_param(
     bus_id: str = "bus_ac",
     inverter_type: InverterType = InverterType.BATTERY,
 ) -> HybridInverterParam:
+    port = EnergyPort(port_id="p_ac", bus_id=bus_id, direction=PortDirection.BIDIRECTIONAL)
     return HybridInverterParam(
         device_id=device_id,
-        port_id="p_ac",
-        bus_id=bus_id,
+        ports=(port,),
         inverter_type=inverter_type,
         off_state_power_consumption_w=0.0,
         on_state_power_consumption_w=0.0,
@@ -264,20 +288,6 @@ class _UnknownParam:
 # ============================================================
 # Fake config / EMS for integration tests
 # ============================================================
-#
-# optimize() reads:
-#   config.optimization.interval            → int seconds
-#   config.optimization.horizon_hours       → int hours
-#   config.optimization.genetic.individuals → int
-#   config.optimization.genetic.generations → int
-#   config.optimization.genetic.seed        → int | None
-#   config.buses.to_domain()               → list[EnergyBus]  ← root level
-#   config.devices.to_genetic2_params()    → list
-#   ems.start_datetime                      → DateTime
-#
-# Note: buses live at config root (config.buses), NOT inside
-# config.devices.  DevicesCommonSettings has no buses attribute.
-
 
 @dataclass
 class _FakeGeneticCfg:
@@ -347,36 +357,62 @@ def _make_instance(
     fake_ems = _FakeEMS()
 
     class _TestOptimization(Genetic2Optimization):
-        @property  # type: ignore[override]
-        def config(self):  # type: ignore[override]
+        @property
+        def config(self):
             return cfg
 
-        @property  # type: ignore[override]
-        def ems(self):  # type: ignore[override]
+        @property
+        def ems(self):
             return fake_ems
 
     return object.__new__(_TestOptimization)
 
 
 # ============================================================
-# OptimizationResult / SimulationContext helpers
+# BestIndividualResult helper
 # ============================================================
 
+def _make_best_result(
+    total_costs_amt: float = 5.0,
+    total_revenues_amt: float = 1.0,
+    instructions: dict | None = None,
+) -> BestIndividualResult:
+    """Build a minimal BestIndividualResult for unit tests."""
+    step_index = pd.DatetimeIndex(
+        [START_DT.add(seconds=i * STEP_INTERVAL_SEC) for i in range(HORIZON)]
+    )
+    solution_df = pd.DataFrame(
+        {
+            "grid_energy_wh": np.zeros(HORIZON),
+            "costs_amt": np.zeros(HORIZON),
+            "revenue_amt": np.zeros(HORIZON),
+            "load_energy_wh": np.zeros(HORIZON),
+            "losses_energy_wh": np.zeros(HORIZON),
+        },
+        index=step_index,
+    )
+    return BestIndividualResult(
+        instructions=instructions if instructions is not None else {},
+        solution_df=solution_df,
+        total_costs_amt=total_costs_amt,
+        total_revenues_amt=total_revenues_amt,
+    )
+
+
 def _make_opt_result(
-    genome: np.ndarray,
-    slices: dict[str, GenomeSlice],
-    objective_names: list[str],
-    fitness_vector: np.ndarray | None = None,
     generations_run: int = 3,
+    objective_names: list[str] | None = None,
+    best_scalar_fitness: float = 0.0,
 ) -> OptimizationResult:
+    """Build a minimal OptimizationResult for unit tests."""
+    if objective_names is None:
+        objective_names = ["energy_cost_eur"]
     assembled = MagicMock(spec=AssembledGenome)
-    assembled.slices = slices
-    if fitness_vector is None:
-        fitness_vector = np.zeros(len(objective_names))
+    assembled.slices = {}
     return OptimizationResult(
-        best_genome=genome,
-        best_fitness_vector=fitness_vector,
-        best_scalar_fitness=float(fitness_vector.sum()),
+        best_genome=np.zeros(0),
+        best_fitness_vector=np.array([best_scalar_fitness]),
+        best_scalar_fitness=best_scalar_fitness,
         objective_names=objective_names,
         generations_run=generations_run,
         history=[],
@@ -453,12 +489,12 @@ class TestBuildDevices:
         assert devices[0]._port_index == 0
 
     def test_unknown_param_emits_user_warning(self):
-        stub = _UnknownParam(device_id="x", ports=(AC_PORT_BIDIR,))
+        stub = cast(GridConnectionParam, _UnknownParam(device_id="x", ports=(AC_PORT_BIDIR,)))
         with pytest.warns(UserWarning, match="Unknown DeviceParam type"):
             _build_devices([stub], [AC_BUS])
 
     def test_unknown_param_is_skipped(self):
-        stub = _UnknownParam(device_id="x", ports=(AC_PORT_BIDIR,))
+        stub = cast(GridConnectionParam, _UnknownParam(device_id="x", ports=(AC_PORT_BIDIR,)))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             devices, _ = _build_devices([stub], [AC_BUS])
@@ -481,7 +517,7 @@ class TestBuildDevices:
 
     def test_unknown_param_port_counter_still_advances(self):
         """Unknown param (1 port) skipped → next device gets port_index 1."""
-        stub = _UnknownParam(device_id="x", ports=(AC_PORT_BIDIR,))
+        stub = cast(GridConnectionParam, _UnknownParam(device_id="x", ports=(AC_PORT_BIDIR,)))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             devices, _ = _build_devices([stub, make_grid_param()], [AC_BUS])
@@ -558,134 +594,114 @@ class TestBuildTopology:
 
 
 # ============================================================
-# TestResultToSolution
+# TestBestToSolution
 # ============================================================
 
+# _best_to_solution constructs an OptimizationSolution via its Pydantic model.
+# OptimizationSolution.prediction is a required non-optional field, so any
+# call that omits or nulls it will raise a ValidationError.  We therefore
+# capture the keyword arguments passed to the constructor rather than letting
+# Pydantic validate them, which lets us test the mapping logic without needing
+# a fully populated prediction DataFrame.
+_SOLUTION_CLS_PATCH = (
+    "akkudoktoreos.optimization.genetic2.genetic2.OptimizationSolution"
+)
 
-class TestResultToSolution:
 
-    def test_returns_genetic2_solution(self):
-        slc = GenomeSlice(start=0, size=HORIZON,
-                          lower_bound=np.full(HORIZON, -100.0),
-                          upper_bound=np.full(HORIZON, 100.0))
-        result = _make_opt_result(np.zeros(HORIZON), {"dev0": slc}, ["cost"])
-        assert isinstance(_result_to_solution(result, _make_context()), Genetic2Solution)
+class TestBestToSolution:
+    """Unit-tests for _best_to_solution argument-passing logic.
 
-    def test_cost_matches_best_scalar_fitness(self):
-        slc = GenomeSlice(start=0, size=HORIZON,
-                          lower_bound=np.full(HORIZON, -100.0),
-                          upper_bound=np.full(HORIZON, 100.0))
-        result = _make_opt_result(np.zeros(HORIZON), {"dev0": slc},
-                                  ["cost"], fitness_vector=np.array([42.0]))
-        assert _result_to_solution(result, _make_context()).cost == pytest.approx(42.0)
+    All tests patch ``OptimizationSolution`` with a ``MagicMock`` so that Pydantic
+    validation is bypassed.  We assert on the keyword arguments forwarded to the
+    constructor, not on the resulting model instance.
+    """
 
-    def test_schedule_keys_match_slices(self):
-        genome = np.arange(6.0)
-        s0 = GenomeSlice(start=0, size=3, lower_bound=np.zeros(3), upper_bound=np.full(3, 10.0))
-        s1 = GenomeSlice(start=3, size=3, lower_bound=np.zeros(3), upper_bound=np.full(3, 10.0))
-        result = _make_opt_result(genome, {"grid0": s0, "inv0": s1}, ["cost"])
-        sol = _result_to_solution(result, _make_context())
-        assert set(sol.schedule.keys()) == {"grid0", "inv0"}
+    def _call(self, best, result, ctx):
+        """Call _best_to_solution and return (mock_cls, return_value)."""
+        with patch(_SOLUTION_CLS_PATCH) as mock_cls:
+            mock_cls.return_value = MagicMock(spec=OptimizationSolution)
+            retval = _best_to_solution(best, result, ctx)
+        return mock_cls, retval
 
-    def test_schedule_values_correct(self):
-        genome = np.array([10.0, 20.0, 30.0, 40.0])
-        slc = GenomeSlice(start=0, size=4, lower_bound=np.zeros(4), upper_bound=np.full(4, 100.0))
-        result = _make_opt_result(genome, {"dev0": slc}, ["cost"])
-        sol = _result_to_solution(result, _make_context())
-        assert sol.schedule["dev0"] == pytest.approx([10.0, 20.0, 30.0, 40.0])
+    def test_calls_optimization_solution_constructor(self):
+        mock_cls, _ = self._call(_make_best_result(), _make_opt_result(), _make_context())
+        mock_cls.assert_called_once()
 
-    def test_schedule_values_are_python_list(self):
-        slc = GenomeSlice(start=0, size=HORIZON,
-                          lower_bound=np.full(HORIZON, -100.0),
-                          upper_bound=np.full(HORIZON, 100.0))
-        result = _make_opt_result(np.ones(HORIZON), {"dev0": slc}, ["cost"])
-        sol = _result_to_solution(result, _make_context())
-        assert isinstance(sol.schedule["dev0"], list)
+    def test_fitness_score_contains_best_scalar_fitness(self):
+        result = _make_opt_result(best_scalar_fitness=99.5)
+        mock_cls, _ = self._call(_make_best_result(), result, _make_context())
+        kwargs = mock_cls.call_args.kwargs
+        assert 99.5 in kwargs["fitness_score"]
 
-    def test_objective_values_keys_match_names(self):
-        slc = GenomeSlice(start=0, size=HORIZON,
-                          lower_bound=np.full(HORIZON, -100.0),
-                          upper_bound=np.full(HORIZON, 100.0))
-        result = _make_opt_result(np.zeros(HORIZON), {"dev0": slc},
-                                  ["energy_cost_eur", "peak_import_kw"],
-                                  fitness_vector=np.array([5.0, 2.0]))
-        sol = _result_to_solution(result, _make_context())
-        assert set(sol.objective_values.keys()) == {"energy_cost_eur", "peak_import_kw"}
+    def test_total_costs_amt_comes_from_best_result(self):
+        best = _make_best_result(total_costs_amt=12.34)
+        mock_cls, _ = self._call(best, _make_opt_result(), _make_context())
+        assert mock_cls.call_args.kwargs["total_costs_amt"] == pytest.approx(12.34)
 
-    def test_objective_values_correct(self):
-        slc = GenomeSlice(start=0, size=HORIZON,
-                          lower_bound=np.full(HORIZON, -100.0),
-                          upper_bound=np.full(HORIZON, 100.0))
-        result = _make_opt_result(np.zeros(HORIZON), {"dev0": slc},
-                                  ["energy_cost_eur", "peak_import_kw"],
-                                  fitness_vector=np.array([5.5, 2.2]))
-        sol = _result_to_solution(result, _make_context())
-        assert sol.objective_values["energy_cost_eur"] == pytest.approx(5.5)
-        assert sol.objective_values["peak_import_kw"] == pytest.approx(2.2)
+    def test_total_revenues_amt_comes_from_best_result(self):
+        best = _make_best_result(total_revenues_amt=3.21)
+        mock_cls, _ = self._call(best, _make_opt_result(), _make_context())
+        assert mock_cls.call_args.kwargs["total_revenues_amt"] == pytest.approx(3.21)
 
-    def test_generations_run_forwarded(self):
-        slc = GenomeSlice(start=0, size=HORIZON,
-                          lower_bound=np.full(HORIZON, -100.0),
-                          upper_bound=np.full(HORIZON, 100.0))
-        result = _make_opt_result(np.zeros(HORIZON), {"dev0": slc}, ["cost"],
-                                  generations_run=17)
-        sol = _result_to_solution(result, _make_context())
-        assert sol.generations_run == 17
+    def test_valid_from_equals_first_step_time(self):
+        ctx = _make_context()
+        mock_cls, _ = self._call(_make_best_result(), _make_opt_result(), ctx)
+        assert mock_cls.call_args.kwargs["valid_from"] == ctx.step_times[0]
 
-    def test_empty_slices_produces_empty_schedule(self):
-        result = _make_opt_result(np.zeros(0), {}, ["cost"],
-                                  fitness_vector=np.array([0.0]))
-        sol = _result_to_solution(result, _make_context())
-        assert sol.schedule == {}
+    def test_valid_until_equals_last_step_time(self):
+        ctx = _make_context()
+        mock_cls, _ = self._call(_make_best_result(), _make_opt_result(), ctx)
+        assert mock_cls.call_args.kwargs["valid_until"] == ctx.step_times[-1]
+
+    def test_total_losses_energy_wh_is_zero(self):
+        mock_cls, _ = self._call(_make_best_result(), _make_opt_result(), _make_context())
+        assert mock_cls.call_args.kwargs["total_losses_energy_wh"] == pytest.approx(0.0)
 
 
 # ============================================================
-# TestResultToPlan
+# TestBestToPlan
 # ============================================================
 
 
-class TestResultToPlan:
+class TestBestToPlan:
 
     def test_returns_energy_management_plan(self):
-        optimizer = MagicMock()
-        optimizer.extract_best_instructions.return_value = {}
-        result = _make_opt_result(np.zeros(0), {}, ["cost"],
-                                  fitness_vector=np.array([0.0]))
-        plan = _result_to_plan(optimizer, result, _make_context())
-        assert isinstance(plan, EnergyManagementPlan)
-
-    def test_extract_best_instructions_called_with_result_and_context(self):
-        optimizer = MagicMock()
-        optimizer.extract_best_instructions.return_value = {}
-        result = _make_opt_result(np.zeros(0), {}, ["cost"],
-                                  fitness_vector=np.array([0.0]))
-        ctx = _make_context()
-        _result_to_plan(optimizer, result, ctx)
-        optimizer.extract_best_instructions.assert_called_once_with(result, ctx)
+        best = _make_best_result()
+        assert isinstance(_best_to_plan(best), EnergyManagementPlan)
 
     def test_instructions_appear_in_plan(self):
-        """Instructions returned by extract_best_instructions land in plan.instructions."""
         instr = OMBCInstruction(
             resource_id="dev0",
             execution_time=START_DT,
             operation_mode_id="mode0",
             operation_mode_factor=0.5,
         )
-        optimizer = MagicMock()
-        optimizer.extract_best_instructions.return_value = {"dev0": [instr]}
-        result = _make_opt_result(np.zeros(0), {}, ["cost"],
-                                  fitness_vector=np.array([0.0]))
-        plan = _result_to_plan(optimizer, result, _make_context())
+        best = _make_best_result(instructions={"dev0": [instr]})
+        plan = _best_to_plan(best)
         assert instr in plan.instructions
 
     def test_no_instructions_returns_empty_plan(self):
-        optimizer = MagicMock()
-        optimizer.extract_best_instructions.return_value = {}
-        result = _make_opt_result(np.zeros(0), {}, ["cost"],
-                                  fitness_vector=np.array([0.0]))
-        plan = _result_to_plan(optimizer, result, _make_context())
+        plan = _best_to_plan(_make_best_result(instructions={}))
         assert isinstance(plan, EnergyManagementPlan)
         assert plan.instructions == []
+
+    def test_multiple_devices_all_instructions_collected(self):
+        instr1 = OMBCInstruction(
+            resource_id="dev0",
+            execution_time=START_DT,
+            operation_mode_id="mode0",
+            operation_mode_factor=1.0,
+        )
+        instr2 = OMBCInstruction(
+            resource_id="dev1",
+            execution_time=START_DT,
+            operation_mode_id="mode1",
+            operation_mode_factor=0.0,
+        )
+        best = _make_best_result(instructions={"dev0": [instr1], "dev1": [instr2]})
+        plan = _best_to_plan(best)
+        assert instr1 in plan.instructions
+        assert instr2 in plan.instructions
 
 
 # ============================================================
@@ -725,7 +741,7 @@ class TestOptimizeValidation:
             instance.optimize()
 
     def test_only_unknown_params_raises(self):
-        stub = _UnknownParam(device_id="x", ports=(AC_PORT_BIDIR,))
+        stub = cast(GridConnectionParam, _UnknownParam(device_id="x", ports=(AC_PORT_BIDIR,)))
         instance = _make_instance([stub])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -737,9 +753,40 @@ class TestOptimizeValidation:
 # TestOptimizeContext
 # ============================================================
 
-# GeneticOptimizer is imported by name into genetic2.py, so the patch
-# target is the binding inside that module, not the original module.
 _OPTIMIZER_PATCH = "akkudoktoreos.optimization.genetic2.optimizer.GeneticOptimizer"
+
+# resolve_measurement / resolve_prediction are wrapped by @cache_energy_management
+# and call get_measurement() / get_prediction() singletons not initialised in tests.
+# Patching the names as bound in the simulation module is the only reliable approach
+# that works regardless of how the decorator caches or wraps the original function.
+_GET_MEASUREMENT_PATCH = "akkudoktoreos.simulation.genetic2.simulation.get_measurement"
+_GET_PREDICTION_PATCH = "akkudoktoreos.simulation.genetic2.simulation.get_prediction"
+
+
+def _make_fake_measurement_store(value: float = 0.5):
+    """Return a minimal measurement-store stub whose key_to_value returns value."""
+    store = MagicMock()
+    store.key_to_value.return_value = value
+    return store
+
+
+def _make_fake_prediction_store(horizon: int, fill: float = 0.0):
+    """Return a minimal prediction-store stub whose key_to_array returns zeros."""
+    store = MagicMock()
+    store.key_to_array.return_value = np.full(horizon, fill)
+    return store
+
+
+def _patch_context_resolution(monkeypatch) -> None:
+    """Stub out the data-store singletons called by SimulationContext resolution."""
+    monkeypatch.setattr(
+        _GET_MEASUREMENT_PATCH,
+        lambda: _make_fake_measurement_store(),
+    )
+    monkeypatch.setattr(
+        _GET_PREDICTION_PATCH,
+        lambda: _make_fake_prediction_store(HORIZON),
+    )
 
 
 class TestOptimizeContext:
@@ -747,6 +794,7 @@ class TestOptimizeContext:
 
     @pytest.fixture()
     def captured_context(self, monkeypatch) -> SimulationContext:
+        _patch_context_resolution(monkeypatch)
         contexts: list[SimulationContext] = []
 
         class _CapturingOptimizer:
@@ -755,30 +803,28 @@ class TestOptimizeContext:
 
             def optimize(self, ctx: SimulationContext) -> OptimizationResult:
                 contexts.append(ctx)
-                # Return a minimal valid result so the rest of optimize() proceeds.
-                slc = GenomeSlice(
-                    start=0, size=HORIZON,
-                    lower_bound=np.zeros(HORIZON),
-                    upper_bound=np.ones(HORIZON),
-                )
                 assembled = MagicMock(spec=AssembledGenome)
-                assembled.slices = {"grid0": slc}
+                assembled.slices = {}
                 return OptimizationResult(
-                    best_genome=np.zeros(HORIZON),
+                    best_genome=np.zeros(0),
                     best_fitness_vector=np.array([0.0]),
                     best_scalar_fitness=0.0,
-                    objective_names=["cost"],
+                    objective_names=["energy_cost_eur"],
                     generations_run=3,
                     history=[],
                     assembled=assembled,
                 )
 
-            def extract_best_instructions(self, result, ctx):
-                return {}
+            def extract_best_result(self, result, ctx):
+                return _make_best_result()
 
         monkeypatch.setattr(_OPTIMIZER_PATCH, _CapturingOptimizer)
-        instance = _make_instance([make_grid_param()])
-        instance.optimize()
+
+        with patch(_SOLUTION_CLS_PATCH) as mock_sol_cls:
+            mock_sol_cls.return_value = MagicMock(spec=OptimizationSolution)
+            instance = _make_instance([make_grid_param()])
+            instance.optimize()
+
         return contexts[0]
 
     def test_step_times_length_equals_horizon(self, captured_context):
@@ -805,7 +851,6 @@ class TestOptimizeContext:
 # TestOptimizeBusHandling
 # ============================================================
 
-# EnergySimulationEngine is imported by name into genetic2.py.
 _ENGINE_PATCH = "akkudoktoreos.simulation.genetic2.engine.EnergySimulationEngine"
 
 
@@ -820,14 +865,16 @@ class TestOptimizeBusHandling:
         captured: list[list[EnergyBus]] = []
 
         class _CapEngine:
-            """Stub that captures buses without running topology validation."""
             def __init__(self, registry, buses_, arb):
                 captured.append(list(buses_))
 
+        _patch_context_resolution(monkeypatch)
         monkeypatch.setattr(_ENGINE_PATCH, _CapEngine)
         instance = _make_instance([make_grid_param()], buses=buses)
         try:
-            instance.optimize()
+            with patch(_SOLUTION_CLS_PATCH) as mock_sol_cls:
+                mock_sol_cls.return_value = MagicMock(spec=OptimizationSolution)
+                instance.optimize()
         except Exception:
             pass
         return captured[0] if captured else []
@@ -862,8 +909,9 @@ class TestOptimizeBusHandling:
 class TestOptimizeReturnValues:
     """Full pipeline run: HybridInverterDevice (BATTERY) + GridConnectionDevice."""
 
-    @pytest.fixture(scope="class")
-    def result_pair(self):
+    @pytest.fixture()
+    def result_pair(self, monkeypatch):
+        _patch_context_resolution(monkeypatch)
         inv = make_inverter_param()
         grid = make_grid_param()
         opt_cfg = _FakeOptCfg(
@@ -872,53 +920,36 @@ class TestOptimizeReturnValues:
             genetic=_FakeGeneticCfg(individuals=4, generations=3, seed=7),
         )
         instance = _make_instance([inv, grid], buses=[AC_BUS], opt_cfg=opt_cfg)
-
-        with patch(
-            "akkudoktoreos.simulation.genetic2.simulation.SimulationContext.resolve_measurement",
-            return_value=0.5,
-        ), patch(
-            "akkudoktoreos.simulation.genetic2.simulation.SimulationContext.resolve_prediction",
-            return_value=np.zeros(HORIZON),
-        ):
-            return instance.optimize()
+        return instance.optimize()
 
     def test_returns_tuple_of_two(self, result_pair):
         assert len(result_pair) == 2
 
-    def test_first_element_is_genetic2_solution(self, result_pair):
-        assert isinstance(result_pair[0], Genetic2Solution)
+    def test_first_element_is_optimization_solution(self, result_pair):
+        assert isinstance(result_pair[0], OptimizationSolution)
 
     def test_second_element_is_energy_management_plan(self, result_pair):
         assert isinstance(result_pair[1], EnergyManagementPlan)
 
-    def test_cost_is_finite_float(self, result_pair):
-        cost = result_pair[0].cost
+    def test_fitness_score_is_set(self, result_pair):
+        assert isinstance(result_pair[0].fitness_score, set)
+
+    def test_total_costs_amt_is_finite_float(self, result_pair):
+        cost = result_pair[0].total_costs_amt
         assert isinstance(cost, float)
         assert np.isfinite(cost)
 
-    def test_cost_is_non_negative(self, result_pair):
-        # Energy cost objective is always >= 0.
-        assert result_pair[0].cost >= 0.0
+    def test_total_revenues_amt_is_finite_float(self, result_pair):
+        rev = result_pair[0].total_revenues_amt
+        assert isinstance(rev, float)
+        assert np.isfinite(rev)
 
-    def test_schedule_keys_are_strings(self, result_pair):
-        for key in result_pair[0].schedule:
-            assert isinstance(key, str)
+    def test_solution_has_horizon_rows(self, result_pair):
+        df = result_pair[0].solution.to_dataframe()
+        assert len(df) == HORIZON
 
-    def test_schedule_values_are_lists(self, result_pair):
-        for val in result_pair[0].schedule.values():
-            assert isinstance(val, list)
-
-    def test_inverter_schedule_length_is_2x_horizon(self, result_pair):
-        # HybridInverterDevice uses 2 genes per step → genome size = 2 * horizon.
-        inv_schedule = result_pair[0].schedule.get("inv0")
-        assert inv_schedule is not None, "Expected 'inv0' in schedule"
-        assert len(inv_schedule) == 2 * HORIZON
-
-    def test_generations_run_matches_config(self, result_pair):
-        assert result_pair[0].generations_run == 3
-
-    def test_objective_values_is_dict(self, result_pair):
-        assert isinstance(result_pair[0].objective_values, dict)
+    def test_solution_is_pydantic_datetime_dataframe(self, result_pair):
+        assert isinstance(result_pair[0].solution, PydanticDateTimeDataFrame)
 
 
 # ============================================================
@@ -927,8 +958,17 @@ class TestOptimizeReturnValues:
 
 
 class TestOptimizeDeterminism:
+    """Verify that identical seeds produce identical GA results."""
 
-    def _run(self, seed: int) -> Genetic2Solution:
+    def _run(self, seed: int, monkeypatch) -> tuple[float, dict]:
+        """Return (best_scalar_fitness, best_genome_by_device_id)."""
+        # Import the real GeneticOptimizer BEFORE the patch is applied so that
+        # _CapturingOptimizer.__init__ gets the original class, not the mock.
+        from akkudoktoreos.optimization.genetic2.optimizer import (
+            GeneticOptimizer as _RealOptimizer,
+        )
+
+        _patch_context_resolution(monkeypatch)
         inv = make_inverter_param()
         grid = make_grid_param()
         opt_cfg = _FakeOptCfg(
@@ -938,25 +978,46 @@ class TestOptimizeDeterminism:
         )
         instance = _make_instance([inv, grid], buses=[AC_BUS], opt_cfg=opt_cfg)
 
-        with patch(
-            "akkudoktoreos.simulation.genetic2.simulation.SimulationContext.resolve_measurement",
-            return_value=0.5,
-        ), patch(
-            "akkudoktoreos.simulation.genetic2.simulation.SimulationContext.resolve_prediction",
-            return_value=np.zeros(HORIZON),
-        ):
-            solution, _ = instance.optimize()
-        return solution
+        captured_results: list[OptimizationResult] = []
 
-    def test_same_seed_same_cost(self):
-        assert self._run(seed=99).cost == pytest.approx(self._run(seed=99).cost)
+        class _CapturingOptimizer:
+            def __init__(self, engine, population_size, generations, random_seed):
+                self._real = _RealOptimizer(
+                    engine=engine,
+                    population_size=population_size,
+                    generations=generations,
+                    random_seed=random_seed,
+                )
 
-    def test_same_seed_same_schedules(self):
-        s1 = self._run(seed=99)
-        s2 = self._run(seed=99)
-        for device_id in s1.schedule:
+            def optimize(self, ctx):
+                result = self._real.optimize(ctx)
+                captured_results.append(result)
+                return result
+
+            def extract_best_result(self, result, ctx):
+                return self._real.extract_best_result(result, ctx)
+
+        with patch(_OPTIMIZER_PATCH, _CapturingOptimizer):
+            instance.optimize()
+
+        opt_result = captured_results[0]
+        genome_by_device: dict[str, np.ndarray] = {
+            dev_id: opt_result.best_genome[slc.start : slc.end]
+            for dev_id, slc in opt_result.assembled.slices.items()
+        }
+        return opt_result.best_scalar_fitness, genome_by_device
+
+    def test_same_seed_same_fitness(self, monkeypatch):
+        f1, _ = self._run(seed=99, monkeypatch=monkeypatch)
+        f2, _ = self._run(seed=99, monkeypatch=monkeypatch)
+        assert f1 == pytest.approx(f2)
+
+    def test_same_seed_same_genome(self, monkeypatch):
+        _, g1 = self._run(seed=99, monkeypatch=monkeypatch)
+        _, g2 = self._run(seed=99, monkeypatch=monkeypatch)
+        for device_id in g1:
             np.testing.assert_array_almost_equal(
-                s1.schedule[device_id],
-                s2.schedule[device_id],
-                err_msg=f"Schedule for {device_id!r} differs between identical-seed runs",
+                g1[device_id],
+                g2[device_id],
+                err_msg=f"Genome for {device_id!r} differs between identical-seed runs",
             )

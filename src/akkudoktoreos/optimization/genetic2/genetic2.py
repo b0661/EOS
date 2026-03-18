@@ -213,7 +213,7 @@ def _best_to_solution(
         total_losses_energy_wh=0.0,
         fitness_score={result.best_scalar_fitness},
         solution=PydanticDateTimeDataFrame.from_dataframe(best.solution_df),
-        prediction=None,
+        prediction=PydanticDateTimeDataFrame(data={}, dtypes={}, datetime_columns=[]),
     )
 
 

@@ -440,7 +440,12 @@ class HybridInverterDevice(EnergyDevice):
             The mutated ``genome_batch``.
         """
         pv_power_w = self._pv_power_w
-        if pv_power_w is None or self._step_interval_sec is None:
+        if self._step_interval_sec is None:
+            raise RuntimeError("Call setup_run() before apply_genome_batch().")
+        if pv_power_w is None and self.param.inverter_type in (
+            InverterType.SOLAR,
+            InverterType.HYBRID,
+        ):
             raise RuntimeError("Call setup_run() before apply_genome_batch().")
         p = self.param
 
