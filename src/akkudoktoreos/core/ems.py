@@ -199,6 +199,8 @@ class EnergyManagement(
             None
         """
         # Ensure there is only one optimization/ energy management run at a time
+        if mode is None:
+            mode = cls.config.ems.mode
         if not mode in EnergyManagementMode._value2member_map_:
             raise ValueError(f"Unknown energy management mode {mode}.")
         if mode == EnergyManagementMode.DISABLED:

@@ -306,7 +306,7 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
             (the inverter curtails automatically, but this makes intent clear).
           - Discharge: blocked when SOC is at or below min SOC.
         """
-        bat_list = self.config.devices.batteries
+        bat_list = list(self.config.devices.batteries.values())
         if not bat_list:
             return ac_charge, dc_charge, discharge_allowed
 
@@ -323,7 +323,7 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
             if headroom_wh <= 0.0:
                 effective_ac = 0.0
             else:
-                inv_list = self.config.devices.inverters
+                inv_list = list(self.config.devices.inverters.values())
                 ac_to_dc_eff = float(inv_list[0].ac_to_dc_efficiency) if inv_list else 1.0
                 max_ac_cp_w = (
                     float(inv_list[0].max_ac_charge_power_w)
@@ -438,8 +438,8 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
                 eff_ac, eff_dc, eff_dis
             )
             for mode in BatteryOperationMode:
-                mode_key = f"{battery_device_id}_{mode.lower()}_op_mode"
-                factor_key = f"{battery_device_id}_{mode.lower()}_op_factor"
+                mode_key = f"{battery_device_id}_{str(mode).lower()}_op_mode"
+                factor_key = f"{battery_device_id}_{str(mode).lower()}_op_factor"
                 if mode_key not in operation.keys():
                     operation[mode_key] = []
                     operation[factor_key] = []
@@ -470,8 +470,8 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
                 # operation modes
                 operation_mode = BatteryOperationMode.IDLE
                 for mode in BatteryOperationMode:
-                    mode_key = f"{ev_device_id}_{mode.lower()}_op_mode"
-                    factor_key = f"{ev_device_id}_{mode.lower()}_op_factor"
+                    mode_key = f"{ev_device_id}_{str(mode).lower()}_op_mode"
+                    factor_key = f"{ev_device_id}_{str(mode).lower()}_op_factor"
                     if mode == operation_mode:
                         solution[mode_key] = [1.0] * n_points
                         solution[factor_key] = [1.0] * n_points
@@ -495,8 +495,8 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
                         rate, 0.0, False
                     )
                     for mode in BatteryOperationMode:
-                        mode_key = f"{ev_device_id}_{mode.lower()}_op_mode"
-                        factor_key = f"{ev_device_id}_{mode.lower()}_op_factor"
+                        mode_key = f"{ev_device_id}_{str(mode).lower()}_op_mode"
+                        factor_key = f"{ev_device_id}_{str(mode).lower()}_op_factor"
                         if mode_key not in operation.keys():
                             operation[mode_key] = []
                             operation[factor_key] = []

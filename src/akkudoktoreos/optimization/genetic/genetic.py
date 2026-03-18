@@ -1112,8 +1112,8 @@ class GeneticOptimization(OptimizationBase):
                 self.ev_possible_charge_values = parameters.eauto.charge_rates
             elif (
                 self.config.devices.electric_vehicles
-                and self.config.devices.electric_vehicles[0]
-                and self.config.devices.electric_vehicles[0].charge_rates is not None
+                and len(self.config.devices.electric_vehicles) > 0
+                and list(self.config.devices.electric_vehicles.values())[0].charge_rates is not None
             ):
                 self.ev_possible_charge_values = self.config.devices.electric_vehicles[
                     0
@@ -1146,11 +1146,11 @@ class GeneticOptimization(OptimizationBase):
             ] or [1.0]
         elif (
             self.config.devices.batteries
-            and self.config.devices.batteries[0]
-            and self.config.devices.batteries[0].charge_rates
+            and len(self.config.devices.batteries) > 0
+            and list(self.config.devices.batteries.values())[0].charge_rates
         ):
             self.bat_possible_charge_values = [
-                r for r in self.config.devices.batteries[0].charge_rates if r > 0.0
+                r for r in list(self.config.devices.batteries.values())[0].charge_rates if r > 0.0
             ] or [1.0]
         else:
             self.bat_possible_charge_values = [1.0]

@@ -3,7 +3,6 @@
 import calendar
 import os
 import sys
-
 from enum import StrEnum
 from typing import Any, ClassVar, Iterator, Optional, Union
 
