@@ -7,41 +7,28 @@ import requests
 from loguru import logger
 from monsterui.franken import (
     H3,
-    H4,
     Card,
     CardTitle,
-    Details,
     Div,
     DividerLine,
-    DivLAligned,
-    DivRAligned,
-    Form,
     Grid,
-    Input,
     LabelCheckboxX,
-    P,
-    Summary,
-    UkIcon,
 )
 from pydantic.fields import ComputedFieldInfo, FieldInfo
 from pydantic_core import PydanticUndefined
 
 from akkudoktoreos.config.config import ConfigEOS
 from akkudoktoreos.core.pydantic import PydanticBaseModel
-from akkudoktoreos.prediction.pvforecast import PVForecastPlaneSetting
 from akkudoktoreos.server.dash.components import (
     ConfigCard,
-    JsonView,
-    TextView,
-    make_config_update_list_form,
-    make_config_update_map_form,
-    make_config_update_time_windows_windows_form,
-    make_config_update_value_form,
 )
 from akkudoktoreos.server.dash.context import request_url_for
 from akkudoktoreos.server.dash.itemscard import ConfigItemsCard
 from akkudoktoreos.server.dash.mapcard import ConfigMapCard
-from akkudoktoreos.server.dash.uihints import UiHint, UI_HINTS, resolve_form_factory, resolve_item_model, hint_for_indexed_field
+from akkudoktoreos.server.dash.uihints import (
+    UI_HINTS,
+    resolve_form_factory,
+)
 
 T = TypeVar("T")
 
@@ -197,7 +184,6 @@ def get_default_value(field_info: Union[FieldInfo, ComputedFieldInfo], regular_f
         ``None``) representing the field default, or ``"N/A"`` when no
         meaningful default exists.
     """
-    import enum
     import pathlib
 
     if not regular_field:

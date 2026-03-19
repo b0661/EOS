@@ -516,7 +516,6 @@ def make_config_update_time_windows_windows_form(
     Returns:
         A factory ``(config_name: str, value: str) -> Grid``.
     """
-
     DOW_LABELS = [
         "0 – Monday",
         "1 – Tuesday",
@@ -572,14 +571,16 @@ def make_config_update_time_windows_windows_form(
         # ----------------------------------------------------------------
         window_rows = []
         for idx, win in enumerate(current_windows):
-            wid         = f"{config_id}_w{idx}"
-            remaining   = [w for i, w in enumerate(current_windows) if i != idx]
-            rem_json    = json.dumps(json.dumps(remaining))
+            wid = f"{config_id}_w{idx}"
+            remaining = [w for i, w in enumerate(current_windows) if i != idx]
+            rem_json = json.dumps(json.dumps(remaining))
 
             # --- Two-click delete ---
             delete_ctrl = Details(
                 Summary(
-                    UkIcon("trash-2", cls="text-muted-foreground hover:text-destructive cursor-pointer"),
+                    UkIcon(
+                        "trash-2", cls="text-muted-foreground hover:text-destructive cursor-pointer"
+                    ),
                     cls="list-none",
                 ),
                 Div(
@@ -599,8 +600,12 @@ def make_config_update_time_windows_windows_form(
 
             # --- Save-edit JS: build updated list with this window replaced ---
             before_json = json.dumps(current_windows[:idx])
-            after_json  = json.dumps(current_windows[idx + 1:])
-            val_js_read  = f"const val = parseFloat(document.querySelector(\"[name='{wid}_value']\").value);" if value_description is not None else ""
+            after_json = json.dumps(current_windows[idx + 1 :])
+            val_js_read = (
+                f"const val = parseFloat(document.querySelector(\"[name='{wid}_value']\").value);"
+                if value_description is not None
+                else ""
+            )
             val_js_guard = "isNaN(val)" if value_description is not None else "false"
             val_js_field = "value: val," if value_description is not None else ""
 
@@ -700,36 +705,64 @@ def make_config_update_time_windows_windows_form(
         add_wid = f"{config_id}_new"
 
         header_cols = [
-            P("start_time *",       cls="text-xs text-muted-foreground font-semibold"),
-            P("duration *",         cls="text-xs text-muted-foreground font-semibold"),
+            P("start_time *", cls="text-xs text-muted-foreground font-semibold"),
+            P("duration *", cls="text-xs text-muted-foreground font-semibold"),
         ]
         add_input_cols = [
-            Input(placeholder="e.g. 08:00 Europe/Berlin", name=f"{add_wid}_start_time", cls="border rounded px-2 py-1 text-sm"),
-            Input(placeholder="e.g. 8 hours",             name=f"{add_wid}_duration",   cls="border rounded px-2 py-1 text-sm"),
+            Input(
+                placeholder="e.g. 08:00 Europe/Berlin",
+                name=f"{add_wid}_start_time",
+                cls="border rounded px-2 py-1 text-sm",
+            ),
+            Input(
+                placeholder="e.g. 8 hours",
+                name=f"{add_wid}_duration",
+                cls="border rounded px-2 py-1 text-sm",
+            ),
         ]
         if value_description is not None:
-            header_cols.append(P(f"{value_description} *", cls="text-xs text-muted-foreground font-semibold"))
+            header_cols.append(
+                P(f"{value_description} *", cls="text-xs text-muted-foreground font-semibold")
+            )
             add_input_cols.append(
-                Input(placeholder="e.g. 0.288", name=f"{add_wid}_value", type="number", step="0.001", cls="border rounded px-2 py-1 text-sm")
+                Input(
+                    placeholder="e.g. 0.288",
+                    name=f"{add_wid}_value",
+                    type="number",
+                    step="0.001",
+                    cls="border rounded px-2 py-1 text-sm",
+                )
             )
         header_cols += [
-            P("day_of_week",        cls="text-xs text-muted-foreground font-semibold"),
-            P("date (YYYY-MM-DD)",  cls="text-xs text-muted-foreground font-semibold"),
-            P("locale",             cls="text-xs text-muted-foreground font-semibold"),
+            P("day_of_week", cls="text-xs text-muted-foreground font-semibold"),
+            P("date (YYYY-MM-DD)", cls="text-xs text-muted-foreground font-semibold"),
+            P("locale", cls="text-xs text-muted-foreground font-semibold"),
         ]
         add_input_cols += [
             _dow_select(f"{add_wid}_dow", None),
-            Input(placeholder="e.g. 2025-12-24", name=f"{add_wid}_date",   cls="border rounded px-2 py-1 text-sm"),
-            Input(placeholder="e.g. de",         name=f"{add_wid}_locale", cls="border rounded px-2 py-1 text-sm"),
+            Input(
+                placeholder="e.g. 2025-12-24",
+                name=f"{add_wid}_date",
+                cls="border rounded px-2 py-1 text-sm",
+            ),
+            Input(
+                placeholder="e.g. de",
+                name=f"{add_wid}_locale",
+                cls="border rounded px-2 py-1 text-sm",
+            ),
         ]
 
         current_json = json.dumps(json.dumps(current_windows))
-        add_val_js_read  = f"const val = parseFloat(document.querySelector(\"[name='{add_wid}_value']\").value);" if value_description is not None else ""
+        add_val_js_read = (
+            f"const val = parseFloat(document.querySelector(\"[name='{add_wid}_value']\").value);"
+            if value_description is not None
+            else ""
+        )
         add_val_js_guard = "isNaN(val)" if value_description is not None else "false"
         add_val_js_field = "value: val," if value_description is not None else ""
 
         add_section = Grid(
-            Grid(*header_cols,    cols=num_cols),
+            Grid(*header_cols, cols=num_cols),
             Grid(*add_input_cols, cols=num_cols),
             ConfigButton(
                 UkIcon("plus"),
@@ -783,6 +816,7 @@ def make_config_update_time_windows_windows_form(
         )
 
     return ConfigUpdateTimeWindowsWindowsForm
+
 
 def ConfigCard(
     config_name: str,

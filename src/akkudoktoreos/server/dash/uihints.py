@@ -37,19 +37,20 @@ from akkudoktoreos.server.dash.components import (
 # ---------------------------------------------------------------------------
 
 UiFormType = Literal[
-    "text",          # plain text input (default)
-    "select",        # single-value dropdown
-    "select_list",   # add/delete multi-value list
-    "map",           # key/value pair editor
+    "text",  # plain text input (default)
+    "select",  # single-value dropdown
+    "select_list",  # add/delete multi-value list
+    "map",  # key/value pair editor
     "time_windows",  # time-window sequence editor
-    "items",         # expandable list of sub-model cards
-    "map_items",     # expandable map of sub-model cards
+    "items",  # expandable list of sub-model cards
+    "map_items",  # expandable map of sub-model cards
 ]
 
 
 # ---------------------------------------------------------------------------
 # UiHint dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class UiHint:
@@ -124,7 +125,6 @@ class UiHint:
 # ---------------------------------------------------------------------------
 
 UI_HINTS: dict[str, UiHint] = {
-
     # ------------------------------------------------------------------
     # EMS
     # ------------------------------------------------------------------
@@ -132,7 +132,6 @@ UI_HINTS: dict[str, UiHint] = {
         form="select",
         options=["OPTIMIZATION", "PREDICTION", "None"],
     ),
-
     # ------------------------------------------------------------------
     # PV forecast — planes
     # item_model is populated lazily by _ensure_item_models() below.
@@ -142,7 +141,6 @@ UI_HINTS: dict[str, UiHint] = {
         item_path="pvforecast.planes",
         max_items_from="pvforecast.max_planes",
     ),
-
     # Per-plane sub-fields; resolved by hint_for_indexed_field()
     "pvforecast.planes.pvtechchoice": UiHint(
         form="select",
@@ -152,7 +150,6 @@ UI_HINTS: dict[str, UiHint] = {
         form="select",
         options=["free", "building"],
     ),
-
     # ------------------------------------------------------------------
     # Prediction providers — single value
     # ------------------------------------------------------------------
@@ -176,7 +173,6 @@ UI_HINTS: dict[str, UiHint] = {
         options_from="load.providers",
         append_none=True,
     ),
-
     # Prediction providers — list value
     "pvforecast.providers": UiHint(
         form="select_list",
@@ -194,7 +190,6 @@ UI_HINTS: dict[str, UiHint] = {
         form="select_list",
         options_from="load.providers",
     ),
-
     # ------------------------------------------------------------------
     # Home Assistant adapter
     # ------------------------------------------------------------------
@@ -231,7 +226,6 @@ UI_HINTS: dict[str, UiHint] = {
         form="select_list",
         options_from="adapter.homeassistant.eos_solution_entity_ids",
     ),
-
     # ------------------------------------------------------------------
     # Devices
     # ------------------------------------------------------------------
@@ -255,7 +249,6 @@ UI_HINTS: dict[str, UiHint] = {
         form="time_windows",
         value_description="cycle index (0-based)",
     ),
-
     # ------------------------------------------------------------------
     # Electricity price — fixed time windows
     # ------------------------------------------------------------------
@@ -280,19 +273,31 @@ def _ensure_item_models() -> None:
     ``uihints`` early in the boot sequence does not trigger circular imports.
     """
     if UI_HINTS["pvforecast.planes"].item_model is None:
-        from akkudoktoreos.prediction.pvforecast import PVForecastPlaneSetting  # noqa: PLC0415
+        from akkudoktoreos.prediction.pvforecast import (  # noqa: PLC0415
+            PVForecastPlaneSetting,
+        )
+
         UI_HINTS["pvforecast.planes"].item_model = PVForecastPlaneSetting
 
     if UI_HINTS["devices.batteries"].item_model is None:
-        from akkudoktoreos.devices.settings.batterysettings import BatteriesCommonSettings
+        from akkudoktoreos.devices.settings.batterysettings import (
+            BatteriesCommonSettings,
+        )
+
         UI_HINTS["devices.batteries"].item_model = BatteriesCommonSettings
 
     if UI_HINTS["devices.electric_vehicles"].item_model is None:
-        from akkudoktoreos.devices.settings.batterysettings import BatteriesCommonSettings
+        from akkudoktoreos.devices.settings.batterysettings import (
+            BatteriesCommonSettings,
+        )
+
         UI_HINTS["devices.electric_vehicles"].item_model = BatteriesCommonSettings
 
     if UI_HINTS["devices.home_appliances"].item_model is None:
-        from akkudoktoreos.devices.settings.homeappliancesettings import HomeApplianceCommonSettings
+        from akkudoktoreos.devices.settings.homeappliancesettings import (
+            HomeApplianceCommonSettings,
+        )
+
         UI_HINTS["devices.home_appliances"].item_model = HomeApplianceCommonSettings
 
 
@@ -315,6 +320,7 @@ def resolve_item_model(hint: UiHint) -> Optional[Any]:
 # ---------------------------------------------------------------------------
 # Resolver
 # ---------------------------------------------------------------------------
+
 
 def resolve_form_factory(
     hint: UiHint,
@@ -388,6 +394,7 @@ def resolve_form_factory(
 # Suffix-based lookup for indexed sub-model fields
 # ---------------------------------------------------------------------------
 
+
 def hint_for_indexed_field(field_name: str, list_path: str) -> Optional[UiHint]:
     """Return the UiHint for a sub-field inside an 'items' or 'map_items' list.
 
@@ -409,7 +416,7 @@ def hint_for_indexed_field(field_name: str, list_path: str) -> Optional[UiHint]:
     prefix = list_path + "."
     if not field_name.startswith(prefix):
         return None
-    remainder = field_name[len(prefix):]   # e.g. "2.mountingplace" or "dishwasher1.time_windows"
+    remainder = field_name[len(prefix) :]  # e.g. "2.mountingplace" or "dishwasher1.time_windows"
     parts = remainder.split(".", 1)
     if len(parts) < 2:
         return None

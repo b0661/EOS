@@ -30,6 +30,7 @@ from typing import Any, Callable, Optional
 
 from loguru import logger
 from monsterui.franken import (
+    H4,
     Card,
     Details,
     Div,
@@ -38,7 +39,6 @@ from monsterui.franken import (
     DivRAligned,
     Form,
     Grid,
-    H4,
     Input,
     Kbd,
     P,
@@ -52,7 +52,6 @@ from akkudoktoreos.server.dash.components import (
     ConfigCard,
     JsonView,
     UpdateError,
-    make_config_update_form,
 )
 from akkudoktoreos.server.dash.context import request_url_for
 from akkudoktoreos.server.dash.markdown import Markdown
@@ -63,10 +62,10 @@ from akkudoktoreos.server.dash.uihints import (
     resolve_item_model,
 )
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _item_model_defaults(item_model: Any) -> dict:
     """Build a default-value dict from a Pydantic model's field definitions.
@@ -116,9 +115,7 @@ def _delete_control(config_name: str, items_list: list, index: int) -> Details:
     Returns:
         A ``Details`` component implementing the two-click confirm pattern.
     """
-    remaining_json = json.dumps(json.dumps(
-        [w for j, w in enumerate(items_list) if j != index]
-    ))
+    remaining_json = json.dumps(json.dumps([w for j, w in enumerate(items_list) if j != index]))
     return Details(
         Summary(
             UkIcon("trash-2", cls="text-muted-foreground hover:text-destructive cursor-pointer"),
@@ -309,6 +306,7 @@ def _outer_card(
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def ConfigItemsCard(
     config: dict,
     hint: UiHint,
@@ -390,17 +388,17 @@ def ConfigItemsCard(
     """
     config_name = config["name"]
     config_type = config["type"]
-    read_only   = config["read-only"]
-    value       = config["value"]
-    default     = config["default"]
+    read_only = config["read-only"]
+    value = config["value"]
+    default = config["default"]
     description = config["description"]
 
     item_model = resolve_item_model(hint)
-    item_path  = hint.item_path        # e.g. "pvforecast.planes"
+    item_path = hint.item_path  # e.g. "pvforecast.planes"
     path_parts = item_path.split(".")  # e.g. ["pvforecast", "planes"]
 
     items_list = json.loads(value) or []
-    num_items  = len(items_list)
+    num_items = len(items_list)
 
     # Synthetic wrapper dict so create_config_details can traverse the value:
     #   e.g. {"pvforecast": {"planes": [...]}}
@@ -411,20 +409,24 @@ def ConfigItemsCard(
     # Outer card update state — resolved once before the inner loop
     items_update_error = config_update_latest.get(config_name, {}).get("error")
     items_update_value = config_update_latest.get(config_name, {}).get("value") or value
-    items_update_open  = config_update_latest.get(config_name, {}).get("open") or False
+    items_update_open = config_update_latest.get(config_name, {}).get("open") or False
 
     # Add button: appends one new item pre-filled with model defaults
     new_item_defaults = _item_model_defaults(item_model)
-    appended_json     = json.dumps(json.dumps(items_list + [new_item_defaults]))
-    add_button = ConfigButton(
-        UkIcon("plus"),
-        " Add item",
-        hx_put=request_url_for("/eosdash/configuration"),
-        hx_target="#page-content",
-        hx_swap="innerHTML",
-        hx_vals=f'js:{{ action: "update", key: "{config_name}", value: {appended_json} }}',
-        cls="ml-4 px-3 py-1 text-sm",
-    ) if read_only == "rw" else None
+    appended_json = json.dumps(json.dumps(items_list + [new_item_defaults]))
+    add_button = (
+        ConfigButton(
+            UkIcon("plus"),
+            " Add item",
+            hx_put=request_url_for("/eosdash/configuration"),
+            hx_target="#page-content",
+            hx_swap="innerHTML",
+            hx_vals=f'js:{{ action: "update", key: "{config_name}", value: {appended_json} }}',
+            cls="ml-4 px-3 py-1 text-sm",
+        )
+        if read_only == "rw"
+        else None
+    )
 
     # Build inner cards
     rows = []
@@ -434,19 +436,19 @@ def ConfigItemsCard(
             wrapped,
             values_prefix=path_parts + [str(i)],
         )
-        item_rows        = []
+        item_rows = []
         item_update_open = False
-        item_value       = json.dumps(items_list[i]) if items_list[i] is not None else json.dumps(None)
-        is_empty         = not items_list[i]
+        item_value = json.dumps(items_list[i]) if items_list[i] is not None else json.dumps(None)
+        is_empty = not items_list[i]
 
         for field_key in sorted(item_config.keys()):
-            sub          = item_config[field_key]
+            sub = item_config[field_key]
             update_error = config_update_latest.get(sub["name"], {}).get("error")
             update_value = config_update_latest.get(sub["name"], {}).get("value")
-            update_open  = config_update_latest.get(sub["name"], {}).get("open")
+            update_open = config_update_latest.get(sub["name"], {}).get("open")
             if update_open:
                 items_update_open = True  # bubble up to outer card
-                item_update_open  = True
+                item_update_open = True
             # Make mypy happy — should never trigger
             if (
                 not isinstance(update_error, (str, type(None)))
@@ -456,7 +458,7 @@ def ConfigItemsCard(
                 error_msg = "update_error or update_value or update_open of wrong type."
                 logger.error(error_msg)
                 raise TypeError(error_msg)
-            sub_hint            = hint_for_indexed_field(sub["name"], item_path)
+            sub_hint = hint_for_indexed_field(sub["name"], item_path)
             update_form_factory = resolve_form_factory(sub_hint, {}) if sub_hint else None
             item_rows.append(
                 ConfigCard(
@@ -477,32 +479,33 @@ def ConfigItemsCard(
 
         rows.append(
             _inner_card(
-                config_name    = config_name,
-                item_path      = item_path,
-                path_parts     = path_parts,
-                index          = i,
-                item_value     = item_value,
-                is_empty       = is_empty,
-                read_only      = read_only,
-                item_rows      = item_rows,
-                item_update_open = item_update_open,
-                delete_control = _delete_control(config_name, items_list, i)
-                                 if read_only == "rw" else None,
+                config_name=config_name,
+                item_path=item_path,
+                path_parts=path_parts,
+                index=i,
+                item_value=item_value,
+                is_empty=is_empty,
+                read_only=read_only,
+                item_rows=item_rows,
+                item_update_open=item_update_open,
+                delete_control=_delete_control(config_name, items_list, i)
+                if read_only == "rw"
+                else None,
             )
         )
 
     return _outer_card(
-        config_name        = config_name,
-        config_type        = config_type,
-        read_only          = read_only,
-        value              = value,
-        default            = default,
-        description        = description,
-        scope              = config.get("scope"),
-        num_items          = num_items,
-        add_button         = add_button,
-        items_update_value = items_update_value,
-        items_update_error = items_update_error,
-        items_update_open  = items_update_open,
-        rows               = rows,
+        config_name=config_name,
+        config_type=config_type,
+        read_only=read_only,
+        value=value,
+        default=default,
+        description=description,
+        scope=config.get("scope"),
+        num_items=num_items,
+        add_button=add_button,
+        items_update_value=items_update_value,
+        items_update_error=items_update_error,
+        items_update_open=items_update_open,
+        rows=rows,
     )

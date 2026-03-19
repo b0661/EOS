@@ -85,7 +85,6 @@ class SimulationContext:
     # Generic resolution
     # ------------------------------------------------------------------
 
-
     def resolve_prediction(self, key: str) -> np.ndarray:
         """Resolve an arbitrary prediction key aligned to this run.
 

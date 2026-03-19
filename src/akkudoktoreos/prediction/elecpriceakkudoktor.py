@@ -174,7 +174,9 @@ class ElecPriceAkkudoktor(ElecPriceProvider):
 
         # Generate history array for prediction
         history = self.key_to_array(
-            key="elecprice_marketprice_amt_wh", end_datetime=highest_orig_datetime, fill_method="linear"
+            key="elecprice_marketprice_amt_wh",
+            end_datetime=highest_orig_datetime,
+            fill_method="linear",
         )
 
         amount_datasets = len(self.records)

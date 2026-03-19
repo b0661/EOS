@@ -189,9 +189,7 @@ def _collect_predictions(context: SimulationContext) -> PydanticDateTimeDataFram
     predictions = context.resolved_predictions()
     logger.debug("Resolved predictions keys: {}", list(predictions.keys()))
 
-    step_index = pd.DatetimeIndex(
-        [pd.Timestamp(dt.isoformat()) for dt in context.step_times]
-    )
+    step_index = pd.DatetimeIndex([pd.Timestamp(dt.isoformat()) for dt in context.step_times])
 
     df = pd.DataFrame(predictions, index=step_index)
     df.index.name = None

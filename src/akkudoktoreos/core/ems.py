@@ -332,7 +332,6 @@ class EnergyManagement(
         # energy management run finished
         cls._stage = EnergyManagementStage.IDLE
 
-
     async def run(
         self,
         start_datetime: Optional[DateTime] = None,

@@ -40,6 +40,7 @@ from typing import Any, Callable, Optional
 
 from loguru import logger
 from monsterui.franken import (
+    H4,
     Card,
     Details,
     Div,
@@ -48,7 +49,6 @@ from monsterui.franken import (
     DivRAligned,
     Form,
     Grid,
-    H4,
     Input,
     Kbd,
     P,
@@ -72,10 +72,10 @@ from akkudoktoreos.server.dash.uihints import (
     resolve_item_model,
 )
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _item_model_defaults(item_model: Any) -> dict:
     """Build a default-value dict from a Pydantic model's field definitions.
@@ -172,7 +172,7 @@ def _add_control(
     Returns:
         A ``Grid`` containing the key input and Add button.
     """
-    current_json  = json.dumps(items_map)
+    current_json = json.dumps(items_map)
     defaults_json = json.dumps(new_entry_defaults)
     return Grid(
         Input(
@@ -371,6 +371,7 @@ def _outer_card(
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def ConfigMapCard(
     config: dict,
     hint: UiHint,
@@ -451,32 +452,36 @@ def ConfigMapCard(
     """
     config_name = config["name"]
     config_type = config["type"]
-    read_only   = config["read-only"]
-    value       = config["value"]
-    default     = config["default"]
+    read_only = config["read-only"]
+    value = config["value"]
+    default = config["default"]
     description = config["description"]
-    config_id   = config_name.lower().replace(".", "-")
+    config_id = config_name.lower().replace(".", "-")
 
     item_model = resolve_item_model(hint)
-    item_path  = hint.item_path        # e.g. "devices.batteries"
+    item_path = hint.item_path  # e.g. "devices.batteries"
     path_parts = item_path.split(".")  # e.g. ["devices", "batteries"]
 
-    items_map   = json.loads(value) or {}
+    items_map = json.loads(value) or {}
     num_entries = len(items_map)
 
     # Outer card update state — resolved once before the inner loop
     items_update_error = config_update_latest.get(config_name, {}).get("error")
     items_update_value = config_update_latest.get(config_name, {}).get("value") or value
-    items_update_open  = config_update_latest.get(config_name, {}).get("open") or False
+    items_update_open = config_update_latest.get(config_name, {}).get("open") or False
 
     # Add entry control (key input + button) shown at the bottom of the card
     new_entry_defaults = _item_model_defaults(item_model)
-    add_control = _add_control(
-        config_name       = config_name,
-        items_map         = items_map,
-        new_entry_defaults = new_entry_defaults,
-        config_id         = config_id,
-    ) if read_only == "rw" else None
+    add_control = (
+        _add_control(
+            config_name=config_name,
+            items_map=items_map,
+            new_entry_defaults=new_entry_defaults,
+            config_id=config_id,
+        )
+        if read_only == "rw"
+        else None
+    )
 
     # Build inner cards — one per map key, sorted for stable ordering
     rows = []
@@ -494,19 +499,19 @@ def ConfigMapCard(
             values_prefix=path_parts + [key],
         )
 
-        item_rows        = []
+        item_rows = []
         item_update_open = False
-        item_value       = json.dumps(entry) if entry is not None else json.dumps(None)
-        is_empty         = not entry
+        item_value = json.dumps(entry) if entry is not None else json.dumps(None)
+        is_empty = not entry
 
         for field_key in sorted(item_config.keys()):
-            sub          = item_config[field_key]
+            sub = item_config[field_key]
             update_error = config_update_latest.get(sub["name"], {}).get("error")
             update_value = config_update_latest.get(sub["name"], {}).get("value")
-            update_open  = config_update_latest.get(sub["name"], {}).get("open")
+            update_open = config_update_latest.get(sub["name"], {}).get("open")
             if update_open:
                 items_update_open = True  # bubble up to outer card
-                item_update_open  = True
+                item_update_open = True
             # Make mypy happy — should never trigger
             if (
                 not isinstance(update_error, (str, type(None)))
@@ -516,7 +521,7 @@ def ConfigMapCard(
                 error_msg = "update_error or update_value or update_open of wrong type."
                 logger.error(error_msg)
                 raise TypeError(error_msg)
-            sub_hint            = hint_for_indexed_field(sub["name"], item_path)
+            sub_hint = hint_for_indexed_field(sub["name"], item_path)
             update_form_factory = resolve_form_factory(sub_hint, {}) if sub_hint else None
             item_rows.append(
                 ConfigCard(
@@ -537,31 +542,32 @@ def ConfigMapCard(
 
         rows.append(
             _inner_card(
-                config_name      = config_name,
-                item_path        = item_path,
-                key              = key,
-                item_value       = item_value,
-                is_empty         = is_empty,
-                read_only        = read_only,
-                item_rows        = item_rows,
-                item_update_open = item_update_open,
-                delete_control   = _delete_control(config_name, items_map, key)
-                                   if read_only == "rw" else None,
+                config_name=config_name,
+                item_path=item_path,
+                key=key,
+                item_value=item_value,
+                is_empty=is_empty,
+                read_only=read_only,
+                item_rows=item_rows,
+                item_update_open=item_update_open,
+                delete_control=_delete_control(config_name, items_map, key)
+                if read_only == "rw"
+                else None,
             )
         )
 
     return _outer_card(
-        config_name        = config_name,
-        config_type        = config_type,
-        read_only          = read_only,
-        value              = value,
-        default            = default,
-        description        = description,
-        scope              = config.get("scope"),
-        num_entries        = num_entries,
-        items_update_value = items_update_value,
-        items_update_error = items_update_error,
-        items_update_open  = items_update_open,
-        rows               = rows,
-        add_control        = add_control,
+        config_name=config_name,
+        config_type=config_type,
+        read_only=read_only,
+        value=value,
+        default=default,
+        description=description,
+        scope=config.get("scope"),
+        num_entries=num_entries,
+        items_update_value=items_update_value,
+        items_update_error=items_update_error,
+        items_update_open=items_update_open,
+        rows=rows,
+        add_control=add_control,
     )
