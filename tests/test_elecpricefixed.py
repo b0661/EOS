@@ -131,14 +131,14 @@ class TestElecPriceFixed:
 
         # First 8 hours should be night rate (0.288 kWh = 0.000288 Wh)
         for i in range(8):
-            assert abs(records[i].elecprice_marketprice_wh - 0.000288) < 1e-6
+            assert abs(records[i].elecprice_marketprice_amt_wh - 0.000288) < 1e-6
             # Verify timestamps are on hour boundaries
             assert records[i].date_time.minute == 0
             assert records[i].date_time.second == 0
 
         # Next 16 hours should be day rate (0.34 kWh = 0.00034 Wh)
         for i in range(8, 24):
-            assert abs(records[i].elecprice_marketprice_wh - 0.00034) < 1e-6
+            assert abs(records[i].elecprice_marketprice_amt_wh - 0.00034) < 1e-6
 
     def test_update_data_15min_intervals(self, provider, config_eos):
         """Test updating data with 15-minute intervals (900s)."""
@@ -163,14 +163,14 @@ class TestElecPriceFixed:
 
         # First 32 intervals: 00:00–08:00, night rate (8h * 4 = 32)
         for i in range(32):
-            assert abs(records[i].elecprice_marketprice_wh - 0.000288) < 1e-6, (
-                f"Expected night rate at interval {i}, got {records[i].elecprice_marketprice_wh}"
+            assert abs(records[i].elecprice_marketprice_amt_wh - 0.000288) < 1e-6, (
+                f"Expected night rate at interval {i}, got {records[i].elecprice_marketprice_amt_wh}"
             )
 
         # Remaining 8 intervals: 08:00–10:00, day rate (2h * 4 = 8)
         for i in range(32, 40):
-            assert abs(records[i].elecprice_marketprice_wh - 0.00034) < 1e-6, (
-                f"Expected day rate at interval {i}, got {records[i].elecprice_marketprice_wh}"
+            assert abs(records[i].elecprice_marketprice_amt_wh - 0.00034) < 1e-6, (
+                f"Expected day rate at interval {i}, got {records[i].elecprice_marketprice_amt_wh}"
             )
 
     def test_update_data_30min_intervals(self, provider, config_eos):
@@ -196,14 +196,14 @@ class TestElecPriceFixed:
 
         # First 16 intervals: 00:00–08:00, night rate (8h * 2 = 16)
         for i in range(16):
-            assert abs(records[i].elecprice_marketprice_wh - 0.000288) < 1e-6, (
-                f"Expected night rate at interval {i}, got {records[i].elecprice_marketprice_wh}"
+            assert abs(records[i].elecprice_marketprice_amt_wh - 0.000288) < 1e-6, (
+                f"Expected night rate at interval {i}, got {records[i].elecprice_marketprice_amt_wh}"
             )
 
         # Remaining 4 intervals: 08:00–10:00, day rate (2h * 2 = 4)
         for i in range(16, 20):
-            assert abs(records[i].elecprice_marketprice_wh - 0.00034) < 1e-6, (
-                f"Expected day rate at interval {i}, got {records[i].elecprice_marketprice_wh}"
+            assert abs(records[i].elecprice_marketprice_amt_wh - 0.00034) < 1e-6, (
+                f"Expected day rate at interval {i}, got {records[i].elecprice_marketprice_amt_wh}"
             )
 
     def test_update_data_without_config(self, provider, config_eos):
@@ -237,7 +237,7 @@ class TestElecPriceFixed:
 
         # Get data as hourly array (original)
         hourly_array = provider.key_to_array(
-            key="elecprice_marketprice_wh",
+            key="elecprice_marketprice_amt_wh",
             start_datetime=start_dt,
             end_datetime=start_dt.add(hours=24)
         )
@@ -248,7 +248,7 @@ class TestElecPriceFixed:
 
         # Resample to 15-minute intervals
         quarter_hour_array = provider.key_to_array(
-            key="elecprice_marketprice_wh",
+            key="elecprice_marketprice_amt_wh",
             start_datetime=start_dt,
             end_datetime=start_dt.add(hours=24),
             interval="15 minutes"
@@ -261,7 +261,7 @@ class TestElecPriceFixed:
 
         # Resample to 30-minute intervals
         half_hour_array = provider.key_to_array(
-            key="elecprice_marketprice_wh",
+            key="elecprice_marketprice_amt_wh",
             start_datetime=start_dt,
             end_datetime=start_dt.add(hours=24),
             interval="30 minutes"

@@ -75,7 +75,7 @@
                    "min_soc_percentage": 0,
                    "max_soc_percentage": 100,
                    "operation_modes": [
-                       "BatteryOperationMode.SELF_CONSUMPTION"
+                       "SELF_CONSUMPTION"
                    ]
                }
            },
@@ -105,7 +105,7 @@
                    "min_soc_percentage": 0,
                    "max_soc_percentage": 100,
                    "operation_modes": [
-                       "BatteryOperationMode.SELF_CONSUMPTION"
+                       "SELF_CONSUMPTION"
                    ]
                }
            },
@@ -176,9 +176,12 @@
        },
        "feedintariff": {
            "provider": "FeedInTariffFixed",
-           "provider_settings": {
-               "FeedInTariffFixed": null,
-               "FeedInTariffImport": null
+           "feedintarifffixed": {
+               "feed_in_tariff_amt_kwh": 0.0
+           },
+           "feedintariffimport": {
+               "import_file_path": null,
+               "import_json": null
            }
        },
        "general": {

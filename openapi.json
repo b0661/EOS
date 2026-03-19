@@ -8,7 +8,7 @@
       "name": "Apache 2.0",
       "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
     },
-    "version": "v0.3.0.dev2603191088291006"
+    "version": "v0.3.0.dev2603192046247783"
   },
   "paths": {
     "/v1/admin/cache/clear": {
@@ -1586,7 +1586,7 @@
           "prediction"
         ],
         "summary": "Fastapi Strompreis",
-        "description": "Deprecated: Electricity Market Price Prediction per Wh (\u20ac/Wh).\n\nElectricity prices start at 00.00.00 today and are provided for 48 hours.\nIf no prices are available the missing ones at the start of the series are\nfilled with the first available price.\n\nNote:\n    Electricity price charges are added.\n\nNote:\n    Set ElecPriceAkkudoktor as provider, then update data with\n    '/v1/prediction/update'\n    and then request data with\n    '/v1/prediction/list?key=elecprice_marketprice_wh' or\n    '/v1/prediction/list?key=elecprice_marketprice_kwh' instead.",
+        "description": "Deprecated: Electricity Market Price Prediction per Wh (\u20ac/Wh).\n\nElectricity prices start at 00.00.00 today and are provided for 48 hours.\nIf no prices are available the missing ones at the start of the series are\nfilled with the first available price.\n\nNote:\n    Electricity price charges are added.\n\nNote:\n    Set ElecPriceAkkudoktor as provider, then update data with\n    '/v1/prediction/update'\n    and then request data with\n    '/v1/prediction/list?key=elecprice_marketprice_amt_wh' or\n    '/v1/prediction/list?key=elecprice_marketprice_amt_kwh' instead.",
         "operationId": "fastapi_strompreis_strompreis_get",
         "responses": {
           "200": {
@@ -2909,6 +2909,9 @@
                   "ports": []
                 }
               }
+            ],
+            "x-scope": [
+              "GENETIC"
             ]
           },
           "max_batteries": {
@@ -2949,6 +2952,9 @@
                   "ports": []
                 }
               }
+            ],
+            "x-scope": [
+              "GENETIC"
             ]
           },
           "max_electric_vehicles": {
@@ -2983,6 +2989,10 @@
             "description": "Inverter devices, keyed by device_id.",
             "examples": [
               {}
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
             ]
           },
           "max_inverters": {
@@ -3017,6 +3027,9 @@
             "description": "Grid connection points, keyed by device_id.",
             "examples": [
               {}
+            ],
+            "x-scope": [
+              "GENETIC2"
             ]
           },
           "max_grid_connections": {
@@ -3051,6 +3064,9 @@
             "description": "Heat pump devices, keyed by device_id.",
             "examples": [
               {}
+            ],
+            "x-scope": [
+              "GENETIC2"
             ]
           },
           "max_heat_pumps": {
@@ -3097,6 +3113,9 @@
                   ]
                 }
               }
+            ],
+            "x-scope": [
+              "GENETIC2"
             ]
           },
           "max_fixed_loads": {
@@ -3137,6 +3156,10 @@
                   ]
                 }
               }
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
             ]
           },
           "max_home_appliances": {
@@ -3184,6 +3207,9 @@
                   "ports": []
                 }
               }
+            ],
+            "x-scope": [
+              "GENETIC"
             ]
           },
           "max_batteries": {
@@ -3224,6 +3250,9 @@
                   "ports": []
                 }
               }
+            ],
+            "x-scope": [
+              "GENETIC"
             ]
           },
           "max_electric_vehicles": {
@@ -3258,6 +3287,10 @@
             "description": "Inverter devices, keyed by device_id.",
             "examples": [
               {}
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
             ]
           },
           "max_inverters": {
@@ -3292,6 +3325,9 @@
             "description": "Grid connection points, keyed by device_id.",
             "examples": [
               {}
+            ],
+            "x-scope": [
+              "GENETIC2"
             ]
           },
           "max_grid_connections": {
@@ -3326,6 +3362,9 @@
             "description": "Heat pump devices, keyed by device_id.",
             "examples": [
               {}
+            ],
+            "x-scope": [
+              "GENETIC2"
             ]
           },
           "max_heat_pumps": {
@@ -3372,6 +3411,9 @@
                   ]
                 }
               }
+            ],
+            "x-scope": [
+              "GENETIC2"
             ]
           },
           "max_fixed_loads": {
@@ -3412,6 +3454,10 @@
                   ]
                 }
               }
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
             ]
           },
           "max_home_appliances": {
@@ -3696,7 +3742,7 @@
             "title": "Import Json",
             "description": "JSON string, dictionary of electricity price forecast value lists.",
             "examples": [
-              "{\"elecprice_marketprice_wh\": [0.0003384, 0.0003318, 0.0003284]}"
+              "{\"elecprice_marketprice_amt_wh\": [0.0003384, 0.0003318, 0.0003284]}"
             ]
           }
         },
@@ -4162,41 +4208,6 @@
         "title": "FRBCInstruction",
         "description": "Instruction for Fill Rate Based Control (FRBC).\n\nContains information about when and how to activate a specific operation mode\nfor an actuator. Used to command resources to change their operation at a specified time."
       },
-      "FeedInTariffCommonProviderSettings": {
-        "properties": {
-          "FeedInTariffFixed": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/FeedInTariffFixedCommonSettings"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "FeedInTariffFixed settings",
-            "examples": [
-              null
-            ]
-          },
-          "FeedInTariffImport": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/FeedInTariffImportCommonSettings"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "FeedInTariffImport settings",
-            "examples": [
-              null
-            ]
-          }
-        },
-        "type": "object",
-        "title": "FeedInTariffCommonProviderSettings",
-        "description": "Feed In Tariff Prediction Provider Configuration."
-      },
       "FeedInTariffCommonSettings-Input": {
         "properties": {
           "provider": {
@@ -4215,12 +4226,13 @@
               "FeedInTarifImport"
             ]
           },
-          "provider_settings": {
-            "$ref": "#/components/schemas/FeedInTariffCommonProviderSettings",
-            "description": "Provider settings",
-            "examples": [
-              {}
-            ]
+          "feedintarifffixed": {
+            "$ref": "#/components/schemas/FeedInTariffFixedCommonSettings",
+            "description": "Fixed feed in tariff provider settings."
+          },
+          "feedintariffimport": {
+            "$ref": "#/components/schemas/FeedInTariffImportCommonSettings",
+            "description": "Feed in tarif import provider settings."
           }
         },
         "type": "object",
@@ -4245,12 +4257,13 @@
               "FeedInTarifImport"
             ]
           },
-          "provider_settings": {
-            "$ref": "#/components/schemas/FeedInTariffCommonProviderSettings",
-            "description": "Provider settings",
-            "examples": [
-              {}
-            ]
+          "feedintarifffixed": {
+            "$ref": "#/components/schemas/FeedInTariffFixedCommonSettings",
+            "description": "Fixed feed in tariff provider settings."
+          },
+          "feedintariffimport": {
+            "$ref": "#/components/schemas/FeedInTariffImportCommonSettings",
+            "description": "Feed in tarif import provider settings."
           },
           "providers": {
             "items": {
@@ -4271,18 +4284,12 @@
       },
       "FeedInTariffFixedCommonSettings": {
         "properties": {
-          "feed_in_tariff_kwh": {
-            "anyOf": [
-              {
-                "type": "number",
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Feed In Tariff Kwh",
-            "description": "Electricity price feed in tariff [\u20ac/kWH].",
+          "feed_in_tariff_amt_kwh": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Feed In Tariff Amt Kwh",
+            "description": "Electricity feed in tariff [Amt./kWH].",
+            "default": 0.0,
             "examples": [
               0.078
             ]
@@ -6404,11 +6411,7 @@
             "x-scope": [
               "GENETIC",
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "W",
-              "widget": "number"
-            }
+            ]
           },
           "ac_to_dc_efficiency": {
             "type": "number",
@@ -6425,11 +6428,7 @@
             "x-scope": [
               "GENETIC",
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "dc_to_ac_efficiency": {
             "type": "number",
@@ -6445,11 +6444,7 @@
             "x-scope": [
               "GENETIC",
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "max_ac_charge_power_w": {
             "anyOf": [
@@ -6547,11 +6542,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "pv_to_battery_efficiency": {
             "type": "number",
@@ -6566,11 +6557,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "pv_max_power_w": {
             "anyOf": [
@@ -6702,11 +6689,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_max_charge_rate": {
             "type": "number",
@@ -6721,11 +6704,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_min_discharge_rate": {
             "type": "number",
@@ -6740,11 +6719,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_max_discharge_rate": {
             "type": "number",
@@ -6759,11 +6734,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_min_soc_factor": {
             "type": "number",
@@ -6778,11 +6749,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_max_soc_factor": {
             "type": "number",
@@ -6797,11 +6764,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_initial_soc_factor_key": {
             "type": "string",
@@ -6885,11 +6848,7 @@
             "x-scope": [
               "GENETIC",
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "W",
-              "widget": "number"
-            }
+            ]
           },
           "ac_to_dc_efficiency": {
             "type": "number",
@@ -6906,11 +6865,7 @@
             "x-scope": [
               "GENETIC",
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "dc_to_ac_efficiency": {
             "type": "number",
@@ -6926,11 +6881,7 @@
             "x-scope": [
               "GENETIC",
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "max_ac_charge_power_w": {
             "anyOf": [
@@ -7028,11 +6979,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "pv_to_battery_efficiency": {
             "type": "number",
@@ -7047,11 +6994,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "pv_max_power_w": {
             "anyOf": [
@@ -7183,11 +7126,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_max_charge_rate": {
             "type": "number",
@@ -7202,11 +7141,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_min_discharge_rate": {
             "type": "number",
@@ -7221,11 +7156,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_max_discharge_rate": {
             "type": "number",
@@ -7240,11 +7171,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_min_soc_factor": {
             "type": "number",
@@ -7259,11 +7186,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_max_soc_factor": {
             "type": "number",
@@ -7278,11 +7201,7 @@
             ],
             "x-scope": [
               "GENETIC2"
-            ],
-            "x-ui": {
-              "unit": "",
-              "widget": "number"
-            }
+            ]
           },
           "battery_initial_soc_factor_key": {
             "type": "string",

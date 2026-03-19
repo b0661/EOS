@@ -132,7 +132,7 @@
        "elecprice": {
            "elecpriceimport": {
                "import_file_path": null,
-               "import_json": "{\"elecprice_marketprice_wh\": [0.0003384, 0.0003318, 0.0003284]}"
+               "import_json": "{\"elecprice_marketprice_amt_wh\": [0.0003384, 0.0003318, 0.0003284]}"
            }
        }
    }

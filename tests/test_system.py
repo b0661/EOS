@@ -130,7 +130,7 @@ class TestSystem:
             result = requests.post(f"{server}/v1/prediction/update/ElecPriceAkkudoktor")
             assert result.status_code == HTTPStatus.OK
 
-            result = requests.get(f"{server}/v1/prediction/series?key=elecprice_marketprice_wh")
+            result = requests.get(f"{server}/v1/prediction/series?key=elecprice_marketprice_amt_wh")
             assert result.status_code == HTTPStatus.OK
 
             data = result.json()

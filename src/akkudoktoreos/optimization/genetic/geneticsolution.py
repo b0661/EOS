@@ -576,7 +576,7 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
                 power_to_energy_per_interval_factor,
             ),
             (
-                "elecprice_marketprice_wh",
+                "elecprice_marketprice_amt_wh",
                 "ffill",
                 "elec_price_amt_kwh",
                 1000.0,

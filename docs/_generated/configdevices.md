@@ -73,7 +73,7 @@ a warning.
                    "min_soc_percentage": 0,
                    "max_soc_percentage": 100,
                    "operation_modes": [
-                       "BatteryOperationMode.SELF_CONSUMPTION"
+                       "SELF_CONSUMPTION"
                    ]
                }
            },
@@ -103,7 +103,7 @@ a warning.
                    "min_soc_percentage": 0,
                    "max_soc_percentage": 100,
                    "operation_modes": [
-                       "BatteryOperationMode.SELF_CONSUMPTION"
+                       "SELF_CONSUMPTION"
                    ]
                }
            },
@@ -187,7 +187,7 @@ a warning.
                    "min_soc_percentage": 0,
                    "max_soc_percentage": 100,
                    "operation_modes": [
-                       "BatteryOperationMode.SELF_CONSUMPTION"
+                       "SELF_CONSUMPTION"
                    ],
                    "measurement_key_soc_factor": "bat0-soc-factor",
                    "measurement_key_power_l1_w": "bat0-power-l1-w",
@@ -229,7 +229,7 @@ a warning.
                    "min_soc_percentage": 0,
                    "max_soc_percentage": 100,
                    "operation_modes": [
-                       "BatteryOperationMode.SELF_CONSUMPTION"
+                       "SELF_CONSUMPTION"
                    ],
                    "measurement_key_soc_factor": "ev0-soc-factor",
                    "measurement_key_power_l1_w": "ev0-power-l1-w",

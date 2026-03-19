@@ -65,16 +65,16 @@ class FeedInTariffImport(FeedInTariffProvider, PredictionImportProvider):
         return "FeedInTariffImport"
 
     def _update_data(self, force_update: Optional[bool] = False) -> None:
-        if self.config.feedintariff.provider_settings.FeedInTariffImport is None:
+        if self.config.feedintariff.feedintariffimport is None:
             logger.debug(f"{self.provider_id()} data update without provider settings.")
             return
-        if self.config.feedintariff.provider_settings.FeedInTariffImport.import_file_path:
+        if self.config.feedintariff.feedintariffimport.import_file_path:
             self.import_from_file(
-                self.config.provider_settings.FeedInTariffImport.import_file_path,
+                self.config.feedintariff.feedintariffimport.import_file_path,
                 key_prefix="feedintariff",
             )
-        if self.config.feedintariff.provider_settings.FeedInTariffImport.import_json:
+        if self.config.feedintariff.feedintariffimport.import_json:
             self.import_from_json(
-                self.config.feedintariff.provider_settings.FeedInTariffImport.import_json,
+                self.config.feedintariff.feedintariffimport.import_json,
                 key_prefix="feedintariff",
             )

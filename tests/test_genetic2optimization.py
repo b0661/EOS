@@ -989,3 +989,123 @@ class TestOptimizeDeterminism:
                 g2[device_id],
                 err_msg=f"Genome for {device_id!r} differs between identical-seed runs",
             )
+
+
+# ============================================================
+# TestSimulationContextPredictionTracking
+# ============================================================
+
+
+from akkudoktoreos.core.cache import CacheEnergyManagementStore
+from akkudoktoreos.simulation.genetic2.simulation import _prediction_key_tracker
+
+
+class TestSimulationContextPredictionTracking:
+
+    def setup_method(self):
+        """Clear cache and tracker before each test."""
+        CacheEnergyManagementStore().clear()
+        _prediction_key_tracker.clear()
+
+    @pytest.fixture()
+    def context(self) -> SimulationContext:
+        return _make_context()
+
+    def test_resolved_prediction_keys_empty_on_init(self, context):
+        assert _prediction_key_tracker.get(id(context), set()) == set()
+
+    def test_resolve_prediction_records_key(self, monkeypatch):
+        context = _make_context()
+        monkeypatch.setattr(
+            _GET_PREDICTION_PATCH,
+            lambda: _make_fake_prediction_store(HORIZON),
+        )
+        context.resolve_prediction("pv_forecast_w")
+        assert "pv_forecast_w" in _prediction_key_tracker.get(id(context), set())
+
+    def test_resolve_prediction_records_multiple_keys(self, monkeypatch):
+        context = _make_context()
+        monkeypatch.setattr(
+            _GET_PREDICTION_PATCH,
+            lambda: _make_fake_prediction_store(HORIZON),
+        )
+        context.resolve_prediction("pv_forecast_w")
+        context.resolve_prediction("elec_price_amt_kwh")
+        keys = _prediction_key_tracker.get(id(context), set())
+        assert "pv_forecast_w" in keys
+        assert "elec_price_amt_kwh" in keys
+
+    def test_resolve_prediction_same_key_recorded_once(self, monkeypatch):
+        context = _make_context()
+        monkeypatch.setattr(
+            _GET_PREDICTION_PATCH,
+            lambda: _make_fake_prediction_store(HORIZON),
+        )
+        context.resolve_prediction("pv_forecast_w")
+        context.resolve_prediction("pv_forecast_w")
+        assert len(_prediction_key_tracker.get(id(context), set())) == 1
+
+    def test_resolved_predictions_returns_dict(self, monkeypatch):
+        context = _make_context()
+        monkeypatch.setattr(
+            _GET_PREDICTION_PATCH,
+            lambda: _make_fake_prediction_store(HORIZON),
+        )
+        context.resolve_prediction("pv_forecast_w")
+        result = context.resolved_predictions()
+        assert isinstance(result, dict)
+
+    def test_resolved_predictions_contains_resolved_keys(self, monkeypatch):
+        context = _make_context()
+        monkeypatch.setattr(
+            _GET_PREDICTION_PATCH,
+            lambda: _make_fake_prediction_store(HORIZON),
+        )
+        context.resolve_prediction("pv_forecast_w")
+        context.resolve_prediction("elec_price_amt_kwh")
+        result = context.resolved_predictions()
+        assert "pv_forecast_w" in result
+        assert "elec_price_amt_kwh" in result
+
+    def test_resolved_predictions_values_are_numpy_arrays(self, monkeypatch):
+        context = _make_context()
+        monkeypatch.setattr(
+            _GET_PREDICTION_PATCH,
+            lambda: _make_fake_prediction_store(HORIZON),
+        )
+        context.resolve_prediction("pv_forecast_w")
+        result = context.resolved_predictions()
+        assert isinstance(result["pv_forecast_w"], np.ndarray)
+
+    def test_resolved_predictions_array_length_equals_horizon(self, monkeypatch):
+        context = _make_context()
+        monkeypatch.setattr(
+            _GET_PREDICTION_PATCH,
+            lambda: _make_fake_prediction_store(HORIZON),
+        )
+        context.resolve_prediction("pv_forecast_w")
+        result = context.resolved_predictions()
+        assert len(result["pv_forecast_w"]) == HORIZON
+
+    def test_resolved_predictions_empty_when_no_keys_resolved(self):
+        context = _make_context()
+        assert context.resolved_predictions() == {}
+
+    def test_new_context_instance_has_independent_tracking(self, monkeypatch):
+        monkeypatch.setattr(
+            _GET_PREDICTION_PATCH,
+            lambda: _make_fake_prediction_store(HORIZON),
+        )
+        ctx1 = _make_context()
+        ctx2 = _make_context()
+        ctx1.resolve_prediction("pv_forecast_w")
+        assert "pv_forecast_w" not in _prediction_key_tracker.get(id(ctx2), set())
+
+    def test_measurement_resolution_does_not_pollute_prediction_keys(self, monkeypatch):
+        context = _make_context()
+        monkeypatch.setattr(
+            _GET_MEASUREMENT_PATCH,
+            lambda: _make_fake_measurement_store(),
+        )
+        context.resolve_measurement("battery_soc")
+        assert "battery_soc" not in _prediction_key_tracker.get(id(context), set())

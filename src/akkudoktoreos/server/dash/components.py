@@ -502,11 +502,58 @@ def make_config_update_time_windows_windows_form(
 ) -> Callable[[str, str], Grid]:
     """Factory for a form that edits the windows field of a TimeWindowSequence.
 
+    Renders one collapsible row per existing window with inline edit inputs
+    pre-filled with the current values, a two-click delete control (trash icon
+    arms on first click, red confirm button on second), and an "Add window"
+    section at the bottom for appending new entries.
+
     Args:
-        value_description: If given, a numeric value field is included in the form
-            and shown in the column header (e.g. "electricity_price_kwh [Amt/kWh]").
-            If None, no value field is rendered.
+        value_description: If given, a numeric value field is included in
+            both the edit rows and the add section, labelled with this string
+            (e.g. ``"electricity_price_kwh [Amt/kWh]"``).  When ``None`` no
+            value field is rendered.
+
+    Returns:
+        A factory ``(config_name: str, value: str) -> Grid``.
     """
+
+    DOW_LABELS = [
+        "0 – Monday",
+        "1 – Tuesday",
+        "2 – Wednesday",
+        "3 – Thursday",
+        "4 – Friday",
+        "5 – Saturday",
+        "6 – Sunday",
+    ]
+
+    def _dow_select(name: str, current: Optional[int]) -> Select:
+        """Render a day-of-week dropdown pre-selected to *current*."""
+        return Select(
+            Option("— any day —", value="", selected=(current is None)),
+            *[
+                Option(lbl, value=str(i), selected=(current == i))
+                for i, lbl in enumerate(DOW_LABELS)
+            ],
+            name=name,
+            cls="border rounded px-2 py-1 text-sm",
+        )
+
+    def _window_summary(win: dict) -> str:
+        """One-line human-readable label for an existing window."""
+        parts = [win.get("start_time", ""), win.get("duration", "")]
+        if value_description is not None:
+            parts.append(str(win.get("value", "")))
+        dow = win.get("day_of_week")
+        if dow is not None:
+            parts.append(f"dow={dow}")
+        date_val = win.get("date")
+        if date_val:
+            parts.append(f"date={date_val}")
+        locale_val = win.get("locale")
+        if locale_val:
+            parts.append(f"locale={locale_val}")
+        return "  |  ".join(p for p in parts if p)
 
     def ConfigUpdateTimeWindowsWindowsForm(config_name: str, value: str) -> Grid:
         config_id = config_name.lower().replace(".", "-")
@@ -517,125 +564,173 @@ def make_config_update_time_windows_windows_form(
         except (json.JSONDecodeError, AttributeError):
             current_windows = []
 
-        DOW_LABELS = [
-            "0 – Monday",
-            "1 – Tuesday",
-            "2 – Wednesday",
-            "3 – Thursday",
-            "4 – Friday",
-            "5 – Saturday",
-            "6 – Sunday",
-        ]
+        num_cols = 5 + (1 if value_description is not None else 0)
 
-        # ---- Existing windows rows ----
+        # ----------------------------------------------------------------
+        # Existing window rows — each is a collapsible <details> with
+        # pre-filled edit inputs and a two-click delete control.
+        # ----------------------------------------------------------------
         window_rows = []
         for idx, win in enumerate(current_windows):
-            start_time = win.get("start_time", "")
-            duration = win.get("duration", "")
-            dow = win.get("day_of_week")
-            date_val = win.get("date")
-            locale_val = win.get("locale")
+            wid         = f"{config_id}_w{idx}"
+            remaining   = [w for i, w in enumerate(current_windows) if i != idx]
+            rem_json    = json.dumps(json.dumps(remaining))
 
-            dow_str = f"  dow={dow}" if dow is not None else ""
-            date_str = f"  date={date_val}" if date_val else ""
-            locale_str = f"  locale={locale_val}" if locale_val else ""
-
-            if value_description is not None:
-                val = win.get("value", "")
-                val_str = f"  |  {val} {value_description}"
-            else:
-                val_str = ""
-
-            label = f"{start_time}  |  {duration}{val_str}{dow_str}{date_str}{locale_str}"
-
-            remaining = [w for i, w in enumerate(current_windows) if i != idx]
-            remaining_json = json.dumps(json.dumps(remaining))
-            window_rows.append(
-                DivHStacked(
+            # --- Two-click delete ---
+            delete_ctrl = Details(
+                Summary(
+                    UkIcon("trash-2", cls="text-muted-foreground hover:text-destructive cursor-pointer"),
+                    cls="list-none",
+                ),
+                Div(
                     ConfigButton(
                         UkIcon("trash-2"),
+                        " Confirm delete",
                         hx_put=request_url_for("/eosdash/configuration"),
                         hx_target="#page-content",
                         hx_swap="innerHTML",
-                        hx_vals=f'js:{{ action: "update", key: "{config_name}", value: {remaining_json} }}',
-                        cls="px-2 py-1",
+                        hx_vals=f'js:{{ action: "update", key: "{config_name}", value: {rem_json} }}',
+                        cls="px-3 py-1 text-sm bg-destructive text-destructive-foreground hover:bg-destructive/90",
                     ),
-                    P(label, cls="ml-2 text-sm font-mono"),
+                    cls="absolute z-10 mt-1 p-2 rounded-md border bg-background shadow-md",
+                ),
+                cls="relative",
+            )
+
+            # --- Save-edit JS: build updated list with this window replaced ---
+            before_json = json.dumps(current_windows[:idx])
+            after_json  = json.dumps(current_windows[idx + 1:])
+            val_js_read  = f"const val = parseFloat(document.querySelector(\"[name='{wid}_value']\").value);" if value_description is not None else ""
+            val_js_guard = "isNaN(val)" if value_description is not None else "false"
+            val_js_field = "value: val," if value_description is not None else ""
+
+            save_button = ConfigButton(
+                UkIcon("save"),
+                " Save",
+                hx_put=request_url_for("/eosdash/configuration"),
+                hx_target="#page-content",
+                hx_swap="innerHTML",
+                hx_vals=f"""js:{{
+                    action: "update",
+                    key: "{config_name}",
+                    value: (() => {{
+                        const start  = document.querySelector("[name='{wid}_start_time']").value.trim();
+                        const dur    = document.querySelector("[name='{wid}_duration']").value.trim();
+                        {val_js_read}
+                        const dowRaw = document.querySelector("[name='{wid}_dow']").value;
+                        const date   = document.querySelector("[name='{wid}_date']").value.trim();
+                        const locale = document.querySelector("[name='{wid}_locale']").value.trim();
+                        if (!start || !dur || {val_js_guard}) return {json.dumps(json.dumps(current_windows))};
+                        const edited = {{
+                            start_time: start,
+                            duration:   dur,
+                            {val_js_field}
+                            day_of_week: dowRaw !== "" ? parseInt(dowRaw) : null,
+                            date:        date   !== "" ? date             : null,
+                            locale:      locale !== "" ? locale           : null,
+                        }};
+                        const updated = [...{before_json}, edited, ...{after_json}];
+                        return JSON.stringify(updated);
+                    }})()
+                }}""",
+            )
+
+            # --- Edit inputs pre-filled from current window ---
+            edit_cols = [
+                Input(
+                    value=win.get("start_time", ""),
+                    name=f"{wid}_start_time",
+                    placeholder="e.g. 08:00",
+                    cls="border rounded px-2 py-1 text-sm",
+                ),
+                Input(
+                    value=win.get("duration", ""),
+                    name=f"{wid}_duration",
+                    placeholder="e.g. 8 hours",
+                    cls="border rounded px-2 py-1 text-sm",
+                ),
+            ]
+            if value_description is not None:
+                edit_cols.append(
+                    Input(
+                        value=str(win.get("value", "")),
+                        name=f"{wid}_value",
+                        type="number",
+                        step="0.001",
+                        cls="border rounded px-2 py-1 text-sm",
+                    )
+                )
+            edit_cols += [
+                _dow_select(f"{wid}_dow", win.get("day_of_week")),
+                Input(
+                    value=win.get("date") or "",
+                    name=f"{wid}_date",
+                    placeholder="YYYY-MM-DD",
+                    cls="border rounded px-2 py-1 text-sm",
+                ),
+                Input(
+                    value=win.get("locale") or "",
+                    name=f"{wid}_locale",
+                    placeholder="e.g. de",
+                    cls="border rounded px-2 py-1 text-sm",
+                ),
+            ]
+
+            window_rows.append(
+                Details(
+                    Summary(
+                        DivHStacked(
+                            delete_ctrl,
+                            P(_window_summary(win), cls="ml-2 text-sm font-mono cursor-pointer"),
+                        ),
+                        cls="list-none",
+                    ),
+                    Grid(
+                        Grid(*edit_cols, cols=num_cols, cls="gap-2 mt-2"),
+                        save_button,
+                        cols=1,
+                        cls="gap-2 mt-1 p-2 border rounded-md bg-muted/30",
+                    ),
                 )
             )
 
-        # ---- Column headers and inputs ----
-        num_cols = 5 + (1 if value_description is not None else 0)
+        # ----------------------------------------------------------------
+        # Add new window section
+        # ----------------------------------------------------------------
+        add_wid = f"{config_id}_new"
 
         header_cols = [
-            P("start_time *", cls="text-xs text-muted-foreground font-semibold"),
-            P("duration *", cls="text-xs text-muted-foreground font-semibold"),
+            P("start_time *",       cls="text-xs text-muted-foreground font-semibold"),
+            P("duration *",         cls="text-xs text-muted-foreground font-semibold"),
         ]
-        input_cols = [
-            Input(
-                placeholder="e.g. 08:00 Europe/Berlin",
-                name=f"{config_id}_tw_start_time",
-                cls="border rounded px-2 py-1 text-sm",
-            ),
-            Input(
-                placeholder="e.g. 8 hours",
-                name=f"{config_id}_tw_duration",
-                cls="border rounded px-2 py-1 text-sm",
-            ),
+        add_input_cols = [
+            Input(placeholder="e.g. 08:00 Europe/Berlin", name=f"{add_wid}_start_time", cls="border rounded px-2 py-1 text-sm"),
+            Input(placeholder="e.g. 8 hours",             name=f"{add_wid}_duration",   cls="border rounded px-2 py-1 text-sm"),
         ]
-
         if value_description is not None:
-            header_cols.append(
-                P(f"{value_description} *", cls="text-xs text-muted-foreground font-semibold")
+            header_cols.append(P(f"{value_description} *", cls="text-xs text-muted-foreground font-semibold"))
+            add_input_cols.append(
+                Input(placeholder="e.g. 0.288", name=f"{add_wid}_value", type="number", step="0.001", cls="border rounded px-2 py-1 text-sm")
             )
-            input_cols.append(
-                Input(
-                    placeholder="e.g. 0.288",
-                    name=f"{config_id}_tw_value",
-                    type="number",
-                    step="0.001",
-                    cls="border rounded px-2 py-1 text-sm",
-                )
-            )
-
         header_cols += [
-            P("day_of_week", cls="text-xs text-muted-foreground font-semibold"),
-            P("date (YYYY-MM-DD)", cls="text-xs text-muted-foreground font-semibold"),
-            P("locale", cls="text-xs text-muted-foreground font-semibold"),
+            P("day_of_week",        cls="text-xs text-muted-foreground font-semibold"),
+            P("date (YYYY-MM-DD)",  cls="text-xs text-muted-foreground font-semibold"),
+            P("locale",             cls="text-xs text-muted-foreground font-semibold"),
         ]
-        input_cols += [
-            Select(
-                Option("— any day —", value="", selected=True),
-                *[Option(lbl, value=str(i)) for i, lbl in enumerate(DOW_LABELS)],
-                name=f"{config_id}_tw_dow",
-                cls="border rounded px-2 py-1 text-sm",
-            ),
-            Input(
-                placeholder="e.g. 2025-12-24",
-                name=f"{config_id}_tw_date",
-                cls="border rounded px-2 py-1 text-sm",
-            ),
-            Input(
-                placeholder="e.g. de",
-                name=f"{config_id}_tw_locale",
-                cls="border rounded px-2 py-1 text-sm",
-            ),
+        add_input_cols += [
+            _dow_select(f"{add_wid}_dow", None),
+            Input(placeholder="e.g. 2025-12-24", name=f"{add_wid}_date",   cls="border rounded px-2 py-1 text-sm"),
+            Input(placeholder="e.g. de",         name=f"{add_wid}_locale", cls="border rounded px-2 py-1 text-sm"),
         ]
 
-        # ---- JS for Add button ----
         current_json = json.dumps(json.dumps(current_windows))
-        if value_description is not None:
-            val_js_read = f"const val = parseFloat(document.querySelector(\"[name='{config_id}_tw_value']\").value);"
-            val_js_guard = "isNaN(val)"
-            val_js_field = "value: val,"
-        else:
-            val_js_read = ""
-            val_js_guard = "false"
-            val_js_field = ""
+        add_val_js_read  = f"const val = parseFloat(document.querySelector(\"[name='{add_wid}_value']\").value);" if value_description is not None else ""
+        add_val_js_guard = "isNaN(val)" if value_description is not None else "false"
+        add_val_js_field = "value: val," if value_description is not None else ""
 
         add_section = Grid(
-            Grid(*header_cols, cols=num_cols),
-            Grid(*input_cols, cols=num_cols),
+            Grid(*header_cols,    cols=num_cols),
+            Grid(*add_input_cols, cols=num_cols),
             ConfigButton(
                 UkIcon("plus"),
                 " Add window",
@@ -646,17 +741,17 @@ def make_config_update_time_windows_windows_form(
                     action: "update",
                     key: "{config_name}",
                     value: (() => {{
-                        const start  = document.querySelector("[name='{config_id}_tw_start_time']").value.trim();
-                        const dur    = document.querySelector("[name='{config_id}_tw_duration']").value.trim();
-                        {val_js_read}
-                        const dowRaw = document.querySelector("[name='{config_id}_tw_dow']").value;
-                        const date   = document.querySelector("[name='{config_id}_tw_date']").value.trim();
-                        const locale = document.querySelector("[name='{config_id}_tw_locale']").value.trim();
-                        if (!start || !dur || {val_js_guard}) return {current_json};
+                        const start  = document.querySelector("[name='{add_wid}_start_time']").value.trim();
+                        const dur    = document.querySelector("[name='{add_wid}_duration']").value.trim();
+                        {add_val_js_read}
+                        const dowRaw = document.querySelector("[name='{add_wid}_dow']").value;
+                        const date   = document.querySelector("[name='{add_wid}_date']").value.trim();
+                        const locale = document.querySelector("[name='{add_wid}_locale']").value.trim();
+                        if (!start || !dur || {add_val_js_guard}) return {current_json};
                         const newWin = {{
                             start_time: start,
-                            duration: dur,
-                            {val_js_field}
+                            duration:   dur,
+                            {add_val_js_field}
                             day_of_week: dowRaw !== "" ? parseInt(dowRaw) : null,
                             date:        date   !== "" ? date             : null,
                             locale:      locale !== "" ? locale           : null,
@@ -677,7 +772,7 @@ def make_config_update_time_windows_windows_form(
                 *window_rows,
                 P("Add new window", cls="text-sm font-semibold mt-3 mb-1"),
                 P(
-                    "* required  |  day_of_week: overridden by date if both set",
+                    "* required  |  day_of_week overridden by date if both set",
                     cls="text-xs text-muted-foreground mb-1",
                 ),
                 add_section,
@@ -688,7 +783,6 @@ def make_config_update_time_windows_windows_form(
         )
 
     return ConfigUpdateTimeWindowsWindowsForm
-
 
 def ConfigCard(
     config_name: str,

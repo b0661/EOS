@@ -142,6 +142,7 @@ class DevicesCommonSettings(SettingsBaseModel):
         json_schema_extra={
             "description": "Stationary battery storage devices, keyed by device_id.",
             "examples": [{"bat0": {"device_id": "bat0", "capacity_wh": 8000, "ports": []}}],
+            "x-scope": [str(ConfigScope.GENETIC)],
         },
     )
     max_batteries: Optional[int] = Field(
@@ -156,6 +157,7 @@ class DevicesCommonSettings(SettingsBaseModel):
         json_schema_extra={
             "description": "Electric vehicle battery packs, keyed by device_id.",
             "examples": [{"ev0": {"device_id": "ev0", "capacity_wh": 60000, "ports": []}}],
+            "x-scope": [str(ConfigScope.GENETIC)],
         },
     )
     max_electric_vehicles: Optional[int] = Field(
@@ -170,6 +172,7 @@ class DevicesCommonSettings(SettingsBaseModel):
         json_schema_extra={
             "description": "Inverter devices, keyed by device_id.",
             "examples": [{}],
+            "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
         },
     )
     max_inverters: Optional[int] = Field(
@@ -184,6 +187,7 @@ class DevicesCommonSettings(SettingsBaseModel):
         json_schema_extra={
             "description": "Grid connection points, keyed by device_id.",
             "examples": [{}],
+            "x-scope": [str(ConfigScope.GENETIC2)],
         },
     )
     max_grid_connections: Optional[int] = Field(
@@ -201,6 +205,7 @@ class DevicesCommonSettings(SettingsBaseModel):
         json_schema_extra={
             "description": "Heat pump devices, keyed by device_id.",
             "examples": [{}],
+            "x-scope": [str(ConfigScope.GENETIC2)],
         },
     )
     max_heat_pumps: Optional[int] = Field(
@@ -226,6 +231,7 @@ class DevicesCommonSettings(SettingsBaseModel):
                     }
                 }
             ],
+            "x-scope": [str(ConfigScope.GENETIC2)],
         },
     )
     max_fixed_loads: Optional[int] = Field(
@@ -252,6 +258,7 @@ class DevicesCommonSettings(SettingsBaseModel):
                     }
                 }
             ],
+            "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
         },
     )
     max_home_appliances: Optional[int] = Field(

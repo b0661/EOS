@@ -149,7 +149,7 @@ def prepare_optimization_real_parameters() -> GeneticOptimizationParameters:
 
     # Electricity Price (in Euro per Wh)
     strompreis_euro_pro_wh = prediction_eos.key_to_array(
-        key="elecprice_marketprice_wh",
+        key="elecprice_marketprice_amt_wh",
         start_datetime=prediction_eos.ems_start_datetime,
         end_datetime=prediction_eos.end_datetime,
     )

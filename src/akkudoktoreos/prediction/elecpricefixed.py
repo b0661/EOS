@@ -106,6 +106,6 @@ class ElecPriceFixed(ElecPriceProvider):
         # Convert kWh → Wh and store one entry per interval step.
         for idx, price_kwh in enumerate(prices_kwh):
             current_dt = start_datetime.add(seconds=idx * interval_seconds)
-            self.update_value(current_dt, "elecprice_marketprice_wh", price_kwh / 1000.0)
+            self.update_value(current_dt, "elecprice_marketprice_amt_wh", price_kwh / 1000.0)
 
         logger.debug(f"Successfully generated {len(prices_kwh)} fixed electricity price entries")

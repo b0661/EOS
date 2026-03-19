@@ -50,6 +50,7 @@ import uuid
 from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
+from loguru import logger
 from pendulum import Duration
 from pendulum import now as pendulum_now
 
@@ -181,6 +182,28 @@ def _build_topology(
 # ---------------------------------------------------------------------------
 
 
+def _collect_predictions(context: SimulationContext) -> PydanticDateTimeDataFrame:
+    """Collect all the predictions that were used in the simulation."""
+    import pandas as pd
+
+    predictions = context.resolved_predictions()
+    logger.debug("Resolved predictions keys: {}", list(predictions.keys()))
+
+    step_index = pd.DatetimeIndex(
+        [pd.Timestamp(dt.isoformat()) for dt in context.step_times]
+    )
+
+    df = pd.DataFrame(predictions, index=step_index)
+    df.index.name = None
+
+    if df.empty:
+        # No predictions resolved — return a minimal valid DataFrame
+        # with at least one placeholder column so the dashboard doesn't crash
+        df["no_prediction_data"] = 0.0
+
+    return PydanticDateTimeDataFrame.from_dataframe(df)
+
+
 def _best_to_solution(
     best: BestIndividualResult,
     result: OptimizationResult,
@@ -213,7 +236,7 @@ def _best_to_solution(
         total_losses_energy_wh=0.0,
         fitness_score={result.best_scalar_fitness},
         solution=PydanticDateTimeDataFrame.from_dataframe(best.solution_df),
-        prediction=PydanticDateTimeDataFrame(data={}, dtypes={}, datetime_columns=[]),
+        prediction=_collect_predictions(context),
     )
 
 

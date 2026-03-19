@@ -1044,8 +1044,8 @@ async def fastapi_strompreis() -> list[float]:
         Set ElecPriceAkkudoktor as provider, then update data with
         '/v1/prediction/update'
         and then request data with
-        '/v1/prediction/list?key=elecprice_marketprice_wh' or
-        '/v1/prediction/list?key=elecprice_marketprice_kwh' instead.
+        '/v1/prediction/list?key=elecprice_marketprice_amt_wh' or
+        '/v1/prediction/list?key=elecprice_marketprice_amt_kwh' instead.
     """
     settings = SettingsEOS(
         elecprice=ElecPriceCommonSettings(
@@ -1073,7 +1073,7 @@ async def fastapi_strompreis() -> list[float]:
         elecprice = (
             get_prediction()
             .key_to_array(
-                key="elecprice_marketprice_wh",
+                key="elecprice_marketprice_amt_wh",
                 start_datetime=start_datetime,
                 end_datetime=end_datetime,
             )

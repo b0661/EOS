@@ -22,6 +22,7 @@ Typical usage:
 
 from __future__ import annotations
 
+# Module-level tracking dict — weak so it doesn't prevent GC
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -32,6 +33,8 @@ from pendulum import DateTime, Duration
 
 from akkudoktoreos.core.cache import cache_energy_management
 from akkudoktoreos.core.coreabc import get_config, get_measurement, get_prediction
+
+_prediction_key_tracker: dict[int, set[str]] = {}
 
 
 @dataclass(slots=True, frozen=True)
@@ -71,17 +74,26 @@ class SimulationContext:
     def __post_init__(self) -> None:
         """Initialize derived attributes after construction."""
         object.__setattr__(self, "horizon", len(self.step_times))
+        # Register a fresh tracking set for this instance
+        _prediction_key_tracker[id(self)] = set()
+
+    def __del__(self) -> None:
+        """Clean up tracking set when context is garbage collected."""
+        _prediction_key_tracker.pop(id(self), None)
 
     # ------------------------------------------------------------------
     # Generic resolution
     # ------------------------------------------------------------------
 
-    @cache_energy_management
+
     def resolve_prediction(self, key: str) -> np.ndarray:
         """Resolve an arbitrary prediction key aligned to this run.
 
         This method is intended to be called by devices during
         ``setup_run()`` to extract required forecast data.
+
+        The key is recorded to later be able to get all predictions that
+        were used in the simulation
 
         Args:
             key: Unique identifier of the prediction time-series.
@@ -93,15 +105,27 @@ class SimulationContext:
             KeyError: If the key does not exist in the store.
             ValueError: If alignment to the horizon fails.
         """
+        _prediction_key_tracker.get(id(self), set()).add(key)
+        return self._resolve_prediction_cached(key)
+
+    @cache_energy_management
+    def _resolve_prediction_cached(self, key: str) -> np.ndarray:
         return get_prediction().key_to_array(
             key=key,
             start_datetime=self.step_times[0],
-            end_datetime=self.step_times[-1] + self.step_interval,  # exclusive
+            end_datetime=self.step_times[-1] + self.step_interval,
             interval=self.step_interval,
             dropna=True,
             boundary="context",
             align_to_interval=True,
         )
+
+    def resolved_predictions(self) -> dict[str, np.ndarray]:
+        """Return all prediction arrays that were requested during this run."""
+        return {
+            key: self.resolve_prediction(key)
+            for key in _prediction_key_tracker.get(id(self), set())
+        }
 
     @cache_energy_management
     def resolve_measurement(self, key: str) -> Optional[float]:

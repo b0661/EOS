@@ -49,18 +49,18 @@ def ElectricityPriceForecast(
     plot = figure(
         x_axis_type="datetime",
         y_range=Range1d(
-            predictions["elecprice_marketprice_kwh"].min() - 0.1,
-            predictions["elecprice_marketprice_kwh"].max() + 0.1,
+            predictions["elecprice_marketprice_amt_kwh"].min() - 0.1,
+            predictions["elecprice_marketprice_amt_kwh"].max() + 0.1,
         ),
         title=f"Electricity Price Prediction ({provider})",
         x_axis_label=f"Datetime [localtime {date_time_tz}]",
-        y_axis_label="Price [€/kWh]",
+        y_axis_label="Price [Amt./kWh]",
         sizing_mode="stretch_width",
         height=400,
     )
     plot.vbar(
         x="date_time",
-        top="elecprice_marketprice_kwh",
+        top="elecprice_marketprice_amt_kwh",
         source=source,
         width=BAR_WIDTH_1HOUR * 0.8,
         legend_label="Market Price",
@@ -225,7 +225,7 @@ def Prediction(eos_host: str, eos_port: Union[str, int], data: Optional[dict] = 
         params = {
             "keys": [
                 "pvforecast_ac_power",
-                "elecprice_marketprice_kwh",
+                "elecprice_marketprice_amt_kwh",
                 "weather_relative_humidity",
                 "weather_temp_air",
                 "weather_ghi",

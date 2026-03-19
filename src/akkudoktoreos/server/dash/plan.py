@@ -25,6 +25,7 @@ from akkudoktoreos.core.emplan import (
     EnergyManagementInstruction,
     EnergyManagementPlan,
     FRBCInstruction,
+    OMBCInstruction,
 )
 from akkudoktoreos.optimization.optimization import OptimizationSolution
 from akkudoktoreos.server.dash.bokeh import Bokeh, bokey_apply_theme_to_plot
@@ -143,7 +144,7 @@ def SolutionCard(solution: OptimizationSolution, config: SettingsEOS, data: Opti
     solution_columns = [x for x in solution_columns if x not in instruction_columns]
 
     prediction_df = solution.prediction.to_dataframe()
-    if prediction_df.empty or len(prediction_df.columns) <= 1:
+    if prediction_df.empty:
         raise ValueError(
             f"Prediction DataFrame is empty or missing plottable columns: {list(prediction_df.columns)}"
         )
@@ -151,10 +152,12 @@ def SolutionCard(solution: OptimizationSolution, config: SettingsEOS, data: Opti
         raise ValueError(
             f"Prediction DataFrame is missing column 'date_time': {list(prediction_df.columns)}"
         )
-    prediction_columns = list(prediction_df.columns)
-
-    prediction_columns_to_join = prediction_df.columns.difference(df.columns)
-    df = df.join(prediction_df[prediction_columns_to_join], how="inner")
+    # Only plot if there are actual data columns beyond date_time
+    prediction_columns = [c for c in prediction_df.columns if c != "date_time"]
+    # No prediction data to plot — skip prediction section silently
+    if prediction_columns:
+        prediction_columns_to_join = prediction_df.columns.difference(df.columns)
+        df = df.join(prediction_df[prediction_columns_to_join], how="inner")
 
     # Exclude columns that currently do not have a value
     excludes = solution_excludes
@@ -374,7 +377,9 @@ def SolutionCard(solution: OptimizationSolution, config: SettingsEOS, data: Opti
                     y_range_name="amt",
                 )
             else:
-                raise ValueError(f"Unexpected column name: {col}")
+                # Skip columns with unrecognized suffix rather than raising
+                logger.warning(f"Skipping column with unrecognized suffix: {col}")
+                r = None
 
         else:
             r = None
@@ -543,9 +548,18 @@ def InstructionCard(
         icon = "washing-machine"
     else:
         icon = "play"
-    if isinstance(instruction, (DDBCInstruction, FRBCInstruction)):
+
+    # Initialize defaults so all code paths are covered
+    summary = summary or ""
+    summary_detail = ""
+
+    if isinstance(instruction, OMBCInstruction):
+        summary = f"{instruction.operation_mode_id}"
+        summary_detail = f"{instruction.operation_mode_factor:.2f}"
+    elif isinstance(instruction, (DDBCInstruction, FRBCInstruction)):
         summary = f"{instruction.operation_mode_id}"
         summary_detail = f"{instruction.operation_mode_factor}"
+
     return Card(
         Details(
             Summary(

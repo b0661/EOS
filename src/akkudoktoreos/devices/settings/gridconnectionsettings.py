@@ -75,8 +75,8 @@ class GridConnectionSettings(PortsMixin, DevicesBaseSettings):
             max_export_power_w=self.max_export_power_w,
             import_cost_per_kwh=self.import_cost_per_kwh,
             export_revenue_per_kwh=self.export_revenue_per_kwh,
-            import_price_key="elecprice_marketprice_kwh",
-            export_price_key="feed_in_tariff_kwh",
+            import_price_key="elecprice_marketprice_amt_kwh",
+            export_price_key="feed_in_tariff_amt_kwh",
             include_peak_power_objective=True,
         )
 

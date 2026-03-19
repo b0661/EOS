@@ -287,7 +287,7 @@
     "provider": "FeedInTariffFixed",
     "provider_settings": {
       "FeedInTariffFixed": {
-        "feed_in_tariff_kwh": 0.078
+        "feed_in_tariff_amt_kwh": 0.078
       },
       "FeedInTariffImport": null
     },

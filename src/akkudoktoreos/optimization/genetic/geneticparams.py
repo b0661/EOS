@@ -299,8 +299,8 @@ class GeneticOptimizationParameters(
                 # Retry
                 continue
             try:
-                elecprice_marketprice_wh = cls.prediction.key_to_array(
-                    key="elecprice_marketprice_wh",
+                elecprice_marketprice_amt_wh = cls.prediction.key_to_array(
+                    key="elecprice_marketprice_amt_wh",
                     start_datetime=parameter_start_datetime,
                     end_datetime=parameter_end_datetime,
                     interval=interval,
@@ -340,8 +340,8 @@ class GeneticOptimizationParameters(
                 # Retry
                 continue
             try:
-                feed_in_tariff_wh = cls.prediction.key_to_array(
-                    key="feed_in_tariff_wh",
+                feed_in_tariff_amt_wh = cls.prediction.key_to_array(
+                    key="feed_in_tariff_amt_wh",
                     start_datetime=parameter_start_datetime,
                     end_datetime=parameter_end_datetime,
                     interval=interval,
@@ -356,10 +356,8 @@ class GeneticOptimizationParameters(
                     {
                         "feedintariff": {
                             "provider": "FeedInTariffFixed",
-                            "provider_settings": {
-                                "FeedInTariffFixed": {
-                                    "feed_in_tariff_kwh": 0.078,
-                                },
+                            "feedintarifffixed": {
+                                "feed_in_tariff_amt_kwh": 0.078,
                             },
                         },
                     }
@@ -601,8 +599,8 @@ class GeneticOptimizationParameters(
                 oparams = GeneticOptimizationParameters(
                     ems=GeneticEnergyManagementParameters(
                         pv_prognose_wh=pvforecast_ac_power,
-                        strompreis_euro_pro_wh=elecprice_marketprice_wh,
-                        einspeiseverguetung_euro_pro_wh=feed_in_tariff_wh,
+                        strompreis_euro_pro_wh=elecprice_marketprice_amt_wh,
+                        einspeiseverguetung_euro_pro_wh=feed_in_tariff_amt_wh,
                         gesamtlast=loadforecast_power_w,
                         preis_euro_pro_wh_akku=battery_lcos_kwh / 1000,
                     ),

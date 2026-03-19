@@ -218,7 +218,7 @@ class ElecPriceEnergyCharts(ElecPriceProvider):
         past_days = 35
         if self.highest_orig_datetime:
             history_series = self.key_to_series(
-                key="elecprice_marketprice_wh", start_datetime=self.ems_start_datetime
+                key="elecprice_marketprice_amt_wh", start_datetime=self.ems_start_datetime
             )
             # If history lower, then start_datetime
             if history_series.index.min() <= self.ems_start_datetime:
@@ -244,7 +244,7 @@ class ElecPriceEnergyCharts(ElecPriceProvider):
             # Parse and store data
             series_data = self._parse_data(energy_charts_data)
             self.highest_orig_datetime = series_data.index.max()
-            self.key_from_series("elecprice_marketprice_wh", series_data)
+            self.key_from_series("elecprice_marketprice_amt_wh", series_data)
         else:
             logger.info(
                 f"No Update ElecPriceEnergyCharts is needed, last in history: {self.highest_orig_datetime}"
@@ -252,7 +252,7 @@ class ElecPriceEnergyCharts(ElecPriceProvider):
 
         # Generate history array for prediction
         history = self.key_to_array(
-            key="elecprice_marketprice_wh",
+            key="elecprice_marketprice_amt_wh",
             end_datetime=self.highest_orig_datetime,
             fill_method="linear",
         )
@@ -293,4 +293,4 @@ class ElecPriceEnergyCharts(ElecPriceProvider):
                 for i in range(len(prediction))
             ],
         )
-        self.key_from_series("elecprice_marketprice_wh", prediction_series)
+        self.key_from_series("elecprice_marketprice_amt_wh", prediction_series)

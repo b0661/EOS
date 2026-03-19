@@ -31,7 +31,7 @@ class ElecPriceImportCommonSettings(SettingsBaseModel):
         default=None,
         json_schema_extra={
             "description": "JSON string, dictionary of electricity price forecast value lists.",
-            "examples": ['{"elecprice_marketprice_wh": [0.0003384, 0.0003318, 0.0003284]}'],
+            "examples": ['{"elecprice_marketprice_amt_wh": [0.0003384, 0.0003318, 0.0003284]}'],
         },
     )
 

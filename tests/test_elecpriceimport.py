@@ -84,7 +84,7 @@ def test_invalid_provider(provider, config_eos):
 )
 def test_import(provider, sample_import_1_json, start_datetime, from_file, config_eos):
     """Test fetching forecast from Import."""
-    key = "elecprice_marketprice_wh"
+    key = "elecprice_marketprice_amt_wh"
     ems_eos = get_ems()
     ems_eos.set_start_datetime(to_datetime(start_datetime, in_timezone="Europe/Berlin"))
     if from_file:

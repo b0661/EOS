@@ -54,7 +54,7 @@ from __future__ import annotations
 
 from abc import ABC
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -105,7 +105,7 @@ class InstructionContext:
 # ============================================================
 
 
-class BatteryOperationMode(Enum):
+class BatteryOperationMode(StrEnum):
     """Operating modes of a battery in a home energy management simulation.
 
     These modes express *intent* — which strategy the battery should follow.
@@ -159,7 +159,7 @@ class BatteryOperationMode(Enum):
     FAULT = "FAULT"
 
 
-class ApplianceOperationMode(Enum):
+class ApplianceOperationMode(StrEnum):
     """Operating modes for a controllable appliance.
 
     Modes
@@ -201,7 +201,7 @@ class ApplianceOperationMode(Enum):
 # ============================================================
 
 
-class EnergyCarrier(Enum):
+class EnergyCarrier(StrEnum):
     """Energy carrier type used for bus topology validation."""
 
     AC = "ac"
@@ -209,7 +209,7 @@ class EnergyCarrier(Enum):
     HEAT = "heat"
 
 
-class PortDirection(Enum):
+class PortDirection(StrEnum):
     """Energy flow direction of a port relative to its owning device.
 
     The direction is defined from the perspective of the device, not the bus:

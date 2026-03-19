@@ -150,7 +150,7 @@ to `DISABLED` in the configuration.
 - Unit: €/Wh
 - Time Range: 48 hours (00:00 today to 23:00 tomorrow)
 - Format: Array of hourly values
-- Data Source: `GET /v1/prediction/list?key=elecprice_marketprice_wh`
+- Data Source: `GET /v1/prediction/list?key=elecprice_marketprice_amt_wh`
 
 Verify prices against your local tariffs.
 

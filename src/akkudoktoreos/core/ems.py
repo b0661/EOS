@@ -250,6 +250,7 @@ class EnergyManagement(
             return
 
         cls._stage = EnergyManagementStage.OPTIMIZATION
+        optimization_start = to_datetime()
         logger.info("Starting energy management optimization.")
 
         if algorithm is None:
@@ -291,9 +292,6 @@ class EnergyManagement(
             cls._plan = solution.energy_management_plan()
 
             logger.debug("Energy management genetic solution:\n{}", cls._genetic_solution)
-            logger.debug("Energy management optimization solution:\n{}", cls._optimization_solution)
-            logger.debug("Energy management plan:\n{}", cls._plan)
-            logger.info("Energy management run done (optimization updated)")
 
         elif algorithm == "GENETIC2":
             genetic2 = Genetic2Optimization()
@@ -304,14 +302,23 @@ class EnergyManagement(
                 logger.exception(f"Energy management optimization ({algorithm}) failed.")
                 cls._stage = EnergyManagementStage.IDLE
                 return
-
-            cls._stage = EnergyManagementStage.CONTROL_DISPATCH
         else:
             logger.error(f"Unknown optimization algorithm: '{algorithm}'. Skipping.")
             cls._stage = EnergyManagementStage.IDLE
             return
 
+        optimization_duration = to_datetime() - optimization_start
+        logger.info(
+            "Energy management optimization ({}) completed in {:.1f} seconds.",
+            algorithm,
+            optimization_duration.total_seconds(),
+        )
+
+        logger.debug("Energy management optimization solution:\n{}", cls._optimization_solution)
+        logger.debug("Energy management plan:\n{}", cls._plan)
+
         # Do control dispatch by adapters
+        cls._stage = EnergyManagementStage.CONTROL_DISPATCH
         try:
             cls.adapter.update_data(force_enable)
         except Exception as e:
@@ -324,6 +331,7 @@ class EnergyManagement(
 
         # energy management run finished
         cls._stage = EnergyManagementStage.IDLE
+
 
     async def run(
         self,

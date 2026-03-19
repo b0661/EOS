@@ -112,8 +112,8 @@ the **PUT** `/v1/config` endpoint. You may save your configuration to the EOS co
 
 Prediction keys:
 
-- `elecprice_marketprice_wh`: Electricity market price per Wh (€/Wh).
-- `elecprice_marketprice_kwh`: Electricity market price per kWh (€/kWh).
+- `elecprice_marketprice_amt_wh`: Electricity market price per Wh (Amt./Wh).
+- `elecprice_marketprice_amt_kwh`: Electricity market price per kWh (Amt./kWh).
 
 Configuration options:
 
@@ -172,7 +172,7 @@ becomes available.
 
 The prediction key for the electricity price forecast data is:
 
-- `elecprice_marketprice_wh`: Electricity market price per Wh (€/Wh).
+- `elecprice_marketprice_amt_wh`: Electricity market price per Wh (Amt./Wh).
 
 The electricity proce forecast data must be provided in one of the formats described in
 <project:#prediction-import-providers>. The data source can be given in the
@@ -197,9 +197,9 @@ Configuration options:
     - `FeedInTariffFixed`: Provides fixed feed in tariff values.
     - `FeedInTariffImport`: Imports from a file or JSON string.
 
-  - `provider_settings.feed_in_tariff_kwh`: Fixed feed in tariff (€/kWh).
-  - `provider_settings.import_file_path`: Path to the file to import feed in tariff forecast data from.
-  - `provider_settings.import_json`: JSON string, dictionary of feed in tariff value lists.
+  - `feedintariffixed.feed_in_tariff_amt_kwh`: Fixed feed in tariff (Amt./kWh).
+  - `feedintarifimport.import_file_path`: Path to the file to import feed in tariff forecast data from.
+  - `feedintarifimport.import_json`: JSON string, dictionary of feed in tariff value lists.
 
 ## Load Prediction
 

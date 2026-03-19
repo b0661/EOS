@@ -170,11 +170,11 @@ class ElecPriceAkkudoktor(ElecPriceProvider):
             series_data.at[orig_datetime] = price_wh
 
         # Update values using key_from_series
-        self.key_from_series("elecprice_marketprice_wh", series_data)
+        self.key_from_series("elecprice_marketprice_amt_wh", series_data)
 
         # Generate history array for prediction
         history = self.key_to_array(
-            key="elecprice_marketprice_wh", end_datetime=highest_orig_datetime, fill_method="linear"
+            key="elecprice_marketprice_amt_wh", end_datetime=highest_orig_datetime, fill_method="linear"
         )
 
         amount_datasets = len(self.records)
@@ -213,9 +213,9 @@ class ElecPriceAkkudoktor(ElecPriceProvider):
                 for i in range(len(prediction))
             ],
         )
-        self.key_from_series("elecprice_marketprice_wh", prediction_series)
+        self.key_from_series("elecprice_marketprice_amt_wh", prediction_series)
 
-        # history2 = self.key_to_array(key="elecprice_marketprice_wh", fill_method="linear") + 0.0002
+        # history2 = self.key_to_array(key="elecprice_marketprice_amt_wh", fill_method="linear") + 0.0002
         # return history, history2, prediction  # for debug main
 
 

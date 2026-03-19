@@ -13,11 +13,11 @@ from akkudoktoreos.utils.datetimeutil import to_datetime
 class FeedInTariffFixedCommonSettings(SettingsBaseModel):
     """Common settings for elecprice fixed price."""
 
-    feed_in_tariff_kwh: Optional[float] = Field(
-        default=None,
+    feed_in_tariff_amt_kwh: float = Field(
+        default=0.0,
         ge=0,
         json_schema_extra={
-            "description": "Electricity price feed in tariff [€/kWH].",
+            "description": "Electricity feed in tariff [Amt./kWH].",
             "examples": [0.078],
         },
     )
@@ -37,14 +37,14 @@ class FeedInTariffFixed(FeedInTariffProvider):
     def _update_data(self, force_update: Optional[bool] = False) -> None:
         error_msg = "Feed in tariff not provided"
         try:
-            feed_in_tariff = (
-                self.config.feedintariff.provider_settings.FeedInTariffFixed.feed_in_tariff_kwh
+            feed_in_tariff_amt_kwh = (
+                self.config.feedintariff.feedintarifffixed.feed_in_tariff_amt_kwh
             )
         except:
             logger.exception(error_msg)
             raise ValueError(error_msg)
-        if feed_in_tariff is None:
+        if feed_in_tariff_amt_kwh is None:
             logger.error(error_msg)
             raise ValueError(error_msg)
-        feed_in_tariff_wh = feed_in_tariff / 1000
-        self.update_value(to_datetime(), "feed_in_tariff_wh", feed_in_tariff_wh)
+        feed_in_tariff_amt_wh = feed_in_tariff_amt_kwh / 1000
+        self.update_value(to_datetime(), "feed_in_tariff_amt_wh", feed_in_tariff_amt_wh)

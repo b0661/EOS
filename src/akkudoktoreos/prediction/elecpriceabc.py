@@ -20,21 +20,21 @@ class ElecPriceDataRecord(PredictionRecord):
 
     """
 
-    elecprice_marketprice_wh: Optional[float] = Field(
-        None, json_schema_extra={"description": "Electricity market price per Wh (€/Wh)"}
+    elecprice_marketprice_amt_wh: Optional[float] = Field(
+        None, json_schema_extra={"description": "Electricity market price per Wh [Amt./Wh]"}
     )
 
     # Computed fields
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def elecprice_marketprice_kwh(self) -> Optional[float]:
+    def elecprice_marketprice_amt_kwh(self) -> Optional[float]:
         """Electricity market price per kWh (€/kWh).
 
-        Convenience attribute calculated from `elecprice_marketprice_wh`.
+        Convenience attribute calculated from `elecprice_marketprice_amt_wh`.
         """
-        if self.elecprice_marketprice_wh is None:
+        if self.elecprice_marketprice_amt_wh is None:
             return None
-        return self.elecprice_marketprice_wh * 1000.0
+        return self.elecprice_marketprice_amt_wh * 1000.0
 
 
 class ElecPriceProvider(PredictionProvider):

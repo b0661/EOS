@@ -20,21 +20,21 @@ class FeedInTariffDataRecord(PredictionRecord):
 
     """
 
-    feed_in_tariff_wh: Optional[float] = Field(
-        None, json_schema_extra={"description": "Feed in tariff per Wh (€/Wh)"}
+    feed_in_tariff_amt_wh: Optional[float] = Field(
+        None, json_schema_extra={"description": "Feed in tariff per Wh [Amt./Wh]"}
     )
 
     # Computed fields
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def feed_in_tariff_kwh(self) -> Optional[float]:
+    def feed_in_tariff_amt_kwh(self) -> Optional[float]:
         """Feed in tariff per kWh (€/kWh).
 
         Convenience attribute calculated from `feed_in_tariff_wh`.
         """
-        if self.feed_in_tariff_wh is None:
+        if self.feed_in_tariff_amt_wh is None:
             return None
-        return self.feed_in_tariff_wh * 1000.0
+        return self.feed_in_tariff_amt_wh * 1000.0
 
 
 class FeedInTariffProvider(PredictionProvider):

@@ -1,3 +1,4 @@
+import enum
 import json
 from collections.abc import Sequence
 from typing import Any, Dict, List, Optional, TypeVar, Union
@@ -38,6 +39,9 @@ from akkudoktoreos.server.dash.components import (
     make_config_update_value_form,
 )
 from akkudoktoreos.server.dash.context import request_url_for
+from akkudoktoreos.server.dash.itemscard import ConfigItemsCard
+from akkudoktoreos.server.dash.mapcard import ConfigMapCard
+from akkudoktoreos.server.dash.uihints import UiHint, UI_HINTS, resolve_form_factory, resolve_item_model, hint_for_indexed_field
 
 T = TypeVar("T")
 
@@ -172,22 +176,62 @@ def get_scope(
 
 
 def get_default_value(field_info: Union[FieldInfo, ComputedFieldInfo], regular_field: bool) -> Any:
-    """Retrieve the default value of a field.
+    """Retrieve the default value of a field as a JSON-safe Python object.
+
+    Handles both ``default`` and ``default_factory`` fields, and converts the
+    resulting value to a JSON-safe representation before returning.  This
+    covers all non-primitive default types encountered in the EOS config
+    models: Pydantic model instances, lists of models, enums, ``Path``
+    objects, and anything else that plain ``json.dumps`` would reject.
+
+    For computed fields or fields with no default of any kind, a sentinel
+    string is returned instead.
 
     Args:
-        field_info (Union[FieldInfo, ComputedFieldInfo]): The field metadata from Pydantic.
-        regular_field (bool): Indicates if the field is a regular field.
+        field_info: The field metadata from Pydantic.
+        regular_field: ``True`` for a ``FieldInfo`` (regular field),
+            ``False`` for a ``ComputedFieldInfo``.
 
     Returns:
-        Any: The default value of the field or "N/A" if not a regular field.
+        A JSON-safe Python object (dict, list, str, int, float, bool, or
+        ``None``) representing the field default, or ``"N/A"`` when no
+        meaningful default exists.
     """
-    default_value = ""
-    if regular_field:
-        if (val := field_info.default) is not PydanticUndefined:
-            default_value = val
+    import enum
+    import pathlib
+
+    if not regular_field:
+        return "N/A"
+
+    # Resolve the raw default — prefer plain default, fall back to factory
+    if field_info.default is not PydanticUndefined:
+        val = field_info.default
+    elif field_info.default_factory is not None:
+        try:
+            val = field_info.default_factory()
+        except Exception:
+            return ""
     else:
-        default_value = "N/A"
-    return default_value
+        return ""
+
+    def _to_json_safe(v: Any) -> Any:
+        """Recursively convert a value to a JSON-safe type."""
+        if v is None or isinstance(v, (bool, int, float, str)):
+            return v
+        if isinstance(v, PydanticBaseModel):
+            return v.model_dump(mode="json")
+        if isinstance(v, enum.Enum):
+            return v.value
+        if isinstance(v, pathlib.PurePath):
+            return str(v)
+        if isinstance(v, dict):
+            return {str(k): _to_json_safe(w) for k, w in v.items()}
+        if isinstance(v, (list, tuple, set, frozenset)):
+            return [_to_json_safe(item) for item in v]
+        # Last resort: str() — at minimum json.dumps won't crash
+        return str(v)
+
+    return _to_json_safe(val)
 
 
 def resolve_nested_types(field_type: Any, parent_types: list[str]) -> list[tuple[Any, list[str]]]:
@@ -321,197 +365,6 @@ def get_config(eos_host: str, eos_port: Union[str, int]) -> dict[str, Any]:
         logger.warning(warning_msg)
 
     return config
-
-
-def ConfigPlanesCard(
-    config_name: str,
-    config_type: str,
-    read_only: str,
-    value: str,
-    default: str,
-    description: str,
-    max_planes: int,
-    update_error: Optional[str],
-    update_value: Optional[str],
-    update_open: Optional[bool],
-) -> Card:
-    """Creates a styled configuration card for PV planes.
-
-    This function generates a configuration card that is displayed in the UI with
-    various sections such as configuration name, type, description, default value,
-    current value, and error details. It supports both read-only and editable modes.
-
-    Args:
-        config_name (str): The name of the PV planes configuration.
-        config_type (str): The type of the PV planes configuration.
-        read_only (str): Indicates if the PV planes configuration is read-only ("rw" for read-write,
-                         any other value indicates read-only).
-        value (str): The current value of the PV planes configuration.
-        default (str): The default value of the PV planes configuration.
-        description (str): A description of the PV planes configuration.
-        max_planes (int): Maximum number of planes that can be set
-        update_error (Optional[str]): The error message, if any, during the update process.
-        update_value (Optional[str]): The value to be updated, if different from the current value.
-        update_open (Optional[bool]): A flag indicating whether the update section of the card
-                                      should be initially expanded.
-
-    Returns:
-        Card: A styled Card component containing the PV planes configuration details.
-    """
-    config_id = config_name.replace(".", "-")
-    # Remember overall planes update status
-    planes_update_error = update_error
-    planes_update_value = update_value
-    if not planes_update_value:
-        planes_update_value = value
-    planes_update_open = update_open
-    if not planes_update_open:
-        planes_update_open = False
-    # Create EOS planes configuration
-    eos_planes = json.loads(value)
-    eos_planes_config = {
-        "pvforecast": {
-            "planes": eos_planes,
-        },
-    }
-    # Create cards for all planes
-    rows = []
-    for i in range(0, max_planes):
-        plane_config = create_config_details(
-            PVForecastPlaneSetting(),
-            eos_planes_config,
-            values_prefix=["pvforecast", "planes", str(i)],
-        )
-        plane_rows = []
-        plane_update_open = False
-        if eos_planes and len(eos_planes) > i:
-            plane_value = json.dumps(eos_planes[i])
-        else:
-            plane_value = json.dumps(None)
-        for config_key in sorted(plane_config.keys()):
-            config = plane_config[config_key]
-            update_error = config_update_latest.get(config["name"], {}).get("error")  # type: ignore
-            update_value = config_update_latest.get(config["name"], {}).get("value")  # type: ignore
-            update_open = config_update_latest.get(config["name"], {}).get("open")  # type: ignore
-            update_form_factory = None
-            if update_open:
-                planes_update_open = True
-                plane_update_open = True
-            # Make mypy happy - should never trigger
-            if (
-                not isinstance(update_error, (str, type(None)))
-                or not isinstance(update_value, (str, type(None)))
-                or not isinstance(update_open, (bool, type(None)))
-            ):
-                error_msg = "update_error or update_value or update_open of wrong type."
-                logger.error(error_msg)
-                raise TypeError(error_msg)
-            if config["name"].endswith("pvtechchoice"):
-                update_form_factory = make_config_update_value_form(
-                    ["crystSi", "CIS", "CdTe", "Unknown"]
-                )
-            elif config["name"].endswith("mountingplace"):
-                update_form_factory = make_config_update_value_form(["free", "building"])
-            plane_rows.append(
-                ConfigCard(
-                    config["name"],
-                    config["type"],
-                    config["read-only"],
-                    config["value"],
-                    config["default"],
-                    config["description"],
-                    config["deprecated"],
-                    config["scope"],
-                    update_error,
-                    update_value,
-                    update_open,
-                    update_form_factory,
-                )
-            )
-        rows.append(
-            Card(
-                Details(
-                    Summary(
-                        Grid(
-                            Grid(
-                                DivLAligned(
-                                    UkIcon(icon="play"),
-                                    H4(f"pvforecast.planes.{i}"),
-                                ),
-                                DivRAligned(
-                                    P(read_only),
-                                ),
-                            ),
-                            JsonView(json.loads(plane_value)),
-                        ),
-                        cls="list-none",
-                    ),
-                    *plane_rows,
-                    cls="space-y-4 gap-4",
-                    open=plane_update_open,
-                ),
-                cls="w-full",
-            )
-        )
-
-    return Card(
-        Details(
-            Summary(
-                Grid(
-                    Grid(
-                        DivLAligned(
-                            UkIcon(icon="play"),
-                            P(config_name),
-                        ),
-                        DivRAligned(
-                            P(read_only),
-                        ),
-                    ),
-                    JsonView(json.loads(value)),
-                ),
-                cls="list-none",
-            ),
-            Grid(
-                TextView(description),
-                P(config_type),
-            ),
-            # Default
-            Grid(
-                DivRAligned(P("default")),
-                P(default),
-            )
-            if read_only == "rw"
-            else None,
-            # Set value
-            Grid(
-                DivRAligned(P("update")),
-                Grid(
-                    Form(
-                        Input(value="update", type="hidden", id="action"),
-                        Input(value=config_name, type="hidden", id="key"),
-                        Input(value=planes_update_value, type="text", id="value"),
-                        hx_put=request_url_for("/eosdash/configuration"),
-                        hx_target="#page-content",
-                        hx_swap="innerHTML",
-                    ),
-                ),
-            )
-            if read_only == "rw"
-            else None,
-            # Last error
-            Grid(
-                DivRAligned(P("update error")),
-                TextView(planes_update_error),
-            )
-            if planes_update_error
-            else None,
-            # Now come the single element configs
-            *rows,
-            cls="space-y-4 gap-4",
-            open=planes_update_open,
-        ),
-        cls="w-full",
-    )
 
 
 def Configuration(
@@ -682,77 +535,29 @@ def Configuration(
         ):
             # Do not display read only values
             continue
-        if (
-            config["type"]
-            == "Optional[list[akkudoktoreos.prediction.pvforecast.PVForecastPlaneSetting]]"
-            and not config["deprecated"]
-        ):
-            # Special configuration for PV planes
+        hint = UI_HINTS.get(config["name"])
+        if hint and hint.form == "items" and not config["deprecated"]:
             rows.append(
-                ConfigPlanesCard(
-                    config["name"],
-                    config["type"],
-                    config["read-only"],
-                    config["value"],
-                    config["default"],
-                    config["description"],
-                    max_planes,
-                    update_error,
-                    update_value,
-                    update_open,
+                ConfigItemsCard(
+                    config=config,
+                    hint=hint,
+                    config_details=config_details,
+                    config_update_latest=config_update_latest,
+                    create_config_details=create_config_details,
+                )
+            )
+        if hint and hint.form == "map_items" and not config["deprecated"]:
+            rows.append(
+                ConfigMapCard(
+                    config=config,
+                    hint=hint,
+                    config_details=config_details,
+                    config_update_latest=config_update_latest,
+                    create_config_details=create_config_details,
                 )
             )
         elif not config["deprecated"]:
-            update_form_factory = None
-            if config["name"].endswith(".provider"):
-                # Special configuration for prediction provider setting
-                try:
-                    provider_ids = json.loads(config_details[config["name"] + "s"]["value"])
-                except:
-                    provider_ids = []
-                if config["type"].startswith("Optional[list"):
-                    update_form_factory = make_config_update_list_form(provider_ids)
-                else:
-                    provider_ids.append("None")
-                    update_form_factory = make_config_update_value_form(provider_ids)
-            elif config["name"].startswith("adapter.homeassistant.config_entity_ids"):
-                # Home Assistant adapter config entities
-                update_form_factory = make_config_update_map_form(None, homeassistant_entity_ids)
-            elif config["name"].startswith("adapter.homeassistant.load_emr_entity_ids"):
-                # Home Assistant adapter load energy meter readings entities
-                update_form_factory = make_config_update_list_form(homeassistant_entity_ids)
-            elif config["name"].startswith("adapter.homeassistant.grid_export_emr_entity_ids"):
-                # Home Assistant adapter grid export energy meter readings entities
-                update_form_factory = make_config_update_list_form(homeassistant_entity_ids)
-            elif config["name"].startswith("adapter.homeassistant.grid_import_emr_entity_ids"):
-                # Home Assistant adapter grid import energy meter readings entities
-                update_form_factory = make_config_update_list_form(homeassistant_entity_ids)
-            elif config["name"].startswith("adapter.homeassistant.pv_production_emr_entity_ids"):
-                # Home Assistant adapter pv energy meter readings entities
-                update_form_factory = make_config_update_list_form(homeassistant_entity_ids)
-            elif config["name"].startswith("adapter.homeassistant.device_measurement_entity_ids"):
-                # Home Assistant adapter device measurement entities
-                update_form_factory = make_config_update_map_form(
-                    devices_measurement_keys, homeassistant_entity_ids
-                )
-            elif config["name"].startswith("adapter.homeassistant.device_instruction_entity_ids"):
-                # Home Assistant adapter device instruction entities
-                update_form_factory = make_config_update_list_form(
-                    eos_device_instruction_entity_ids
-                )
-            elif config["name"].startswith("adapter.homeassistant.solution_entity_ids"):
-                # Home Assistant adapter optimization solution entities
-                update_form_factory = make_config_update_list_form(eos_solution_entity_ids)
-            elif config["name"].startswith("ems.mode"):
-                #  Energy management mode
-                update_form_factory = make_config_update_value_form(
-                    ["OPTIMIZATION", "PREDICTION", "DISABLED"]
-                )
-            elif config["name"].endswith("elecpricefixed.time_windows.windows"):
-                update_form_factory = make_config_update_time_windows_windows_form(
-                    value_description="electricity_price_kwh [Amt/kWh]"
-                )
-
+            update_form_factory = resolve_form_factory(hint, config_details) if hint else None
             rows.append(
                 ConfigCard(
                     config["name"],

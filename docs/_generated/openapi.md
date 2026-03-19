@@ -1,6 +1,6 @@
 # Akkudoktor-EOS
 
-**Version**: `v0.3.0.dev2603191088291006`
+**Version**: `v0.3.0.dev2603192046247783`
 
 <!-- pyml disable line-length -->
 **Description**: This project provides a comprehensive solution for simulating and optimizing an energy system based on renewable energy sources. With a focus on photovoltaic (PV) systems, battery storage (batteries), load management (consumer requirements), heat pumps, electric vehicles, and consideration of electricity price data, this system enables forecasting and optimization of energy flow and costs over a specified period.
@@ -197,8 +197,8 @@ Note:
     Set ElecPriceAkkudoktor as provider, then update data with
     '/v1/prediction/update'
     and then request data with
-    '/v1/prediction/list?key=elecprice_marketprice_wh' or
-    '/v1/prediction/list?key=elecprice_marketprice_kwh' instead.
+    '/v1/prediction/list?key=elecprice_marketprice_amt_wh' or
+    '/v1/prediction/list?key=elecprice_marketprice_amt_kwh' instead.
 """
 ```
 <!-- pyml enable line-length -->

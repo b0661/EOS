@@ -99,6 +99,15 @@ MIGRATION_MAP: Dict[
         "devices/home_appliances",
         _list_to_device_dict("appliance"),
     ),
+    "feedintariff/provider_settings/FeedInTariffFixed/feed_in_tariff_kwh": (
+        "feedintariff/feedintarifffixed/feed_in_tariff_amt_kwh",
+    ),
+    "feedintariff/provider_settings/FeedInTariffImport/import_file_path": (
+        "feedintariff/feedintariffimport/import_file_path",
+    ),
+    "feedintariff/provider_settings/FeedInTariffImport/import_json": (
+        "feedintariff/feedintariffimport/import_json",
+    ),
     # 0.2.0.dev -> 0.2.0.dev
     "adapter/homeassistant/optimization_solution_entity_ids": (
         "adapter/homeassistant/solution_entity_ids",

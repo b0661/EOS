@@ -373,9 +373,11 @@ class HybridInverterDevice(EnergyDevice):
             self._pv_power_w = pv
 
         if self.param.inverter_type in (InverterType.BATTERY, InverterType.HYBRID):
-            soc_factor = context.resolve_measurement(self.param.battery_initial_soc_factor_key)
+            soc_factor = None
+            if self.param.battery_initial_soc_factor_key:  # skip if empty string
+                soc_factor = context.resolve_measurement(self.param.battery_initial_soc_factor_key)
             if soc_factor is None:
-                soc_factor = 0.0
+                soc_factor = self.param.battery_min_soc_factor  # use min_soc
             if not (0.0 <= soc_factor <= 1.0):
                 raise ValueError(
                     f"{self.device_id}: initial SoC factor {soc_factor} outside allowed bounds "

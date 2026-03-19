@@ -117,10 +117,12 @@ class TopologyValidator:
             sources = [
                 p
                 for p in ports
-                if p.direction in (PortDirection.SOURCE, PortDirection.BIDIRECTIONAL)
+                if p.direction in (str(PortDirection.SOURCE), str(PortDirection.BIDIRECTIONAL))
             ]
             sinks = [
-                p for p in ports if p.direction in (PortDirection.SINK, PortDirection.BIDIRECTIONAL)
+                p
+                for p in ports
+                if p.direction in (str(PortDirection.SINK), str(PortDirection.BIDIRECTIONAL))
             ]
 
             if not sources:

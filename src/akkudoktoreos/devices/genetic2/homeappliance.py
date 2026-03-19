@@ -146,9 +146,9 @@ class HomeApplianceParam(DeviceParam):
         if self.duration_h < 1:
             raise ValueError("duration_h must be >= 1")
         if self.num_cycles < 1:
-            raise ValueError("num_cycles must be >= 1")
+            raise ValueError(f"num_cycles '{self.num_cycles}' must be >= 1")
         if self.min_cycle_gap_h < 0:
-            raise ValueError("min_cycle_gap_h must be >= 0")
+            raise ValueError(f"min_cycle_gap_h '{self.min_cycle_gap_h}' must be >= 0")
         if not self.ports:
             raise ValueError("HomeApplianceParam requires at least one port")
 

@@ -191,3 +191,8 @@ version_scheme = "semver"
 # Enforce commit message and branch style:
 branch_validation = true
 branch_pattern = "^(feat|fix|chore|docs|refactor|test)/[a-z0-9._-]+$"
+
+[tool.uv.workspace]
+members = [
+    "help",
+]
