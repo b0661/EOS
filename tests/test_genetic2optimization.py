@@ -140,7 +140,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import cast
+from typing import Union, cast
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -192,6 +192,13 @@ from akkudoktoreos.optimization.optimization import OptimizationSolution
 from akkudoktoreos.simulation.genetic2.arbitrator import VectorizedBusArbitrator
 from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.utils.datetimeutil import to_datetime
+
+# ============================================================
+# Shared type alias
+# ============================================================
+
+# The union type that _build_devices accepts as its first argument.
+_ParamUnion = Union[GridConnectionParam, HomeApplianceParam, HybridInverterParam]
 
 # ============================================================
 # Shared constants
@@ -252,14 +259,11 @@ def make_inverter_param(
         inverter_type=inverter_type,
         off_state_power_consumption_w=0.0,
         on_state_power_consumption_w=0.0,
-        # PV fields — validation only fires for SOLAR/HYBRID, but the
-        # dataclass still requires them; supply benign values.
         pv_to_ac_efficiency=1.0,
         pv_to_battery_efficiency=1.0,
         pv_max_power_w=1.0,
         pv_min_power_w=0.0,
         pv_power_w_key=None,
-        # Battery fields
         ac_to_battery_efficiency=0.95,
         battery_to_ac_efficiency=0.95,
         battery_capacity_wh=10_000.0,
@@ -345,14 +349,7 @@ def _make_instance(
     buses: list[EnergyBus] | None = None,
     opt_cfg: _FakeOptCfg | None = None,
 ) -> Genetic2Optimization:
-    """Return a ``Genetic2Optimization`` whose ``config`` and ``ems`` are fakes.
-
-    ``ConfigMixin.config`` and ``EnergyManagementSystemMixin.ems`` are both
-    ``@classproperty`` descriptors that call global singletons — they ignore
-    instance attributes set via ``object.__setattr__``.  We therefore create
-    a one-off subclass per call that shadows both descriptors with regular
-    ``@property`` returning the fake objects.
-    """
+    """Return a ``Genetic2Optimization`` whose ``config`` and ``ems`` are fakes."""
     cfg = _FakeConfig(device_params, buses, opt_cfg)
     fake_ems = _FakeEMS()
 
@@ -377,7 +374,6 @@ def _make_best_result(
     total_revenues_amt: float = 1.0,
     instructions: dict | None = None,
 ) -> BestIndividualResult:
-    """Build a minimal BestIndividualResult for unit tests."""
     step_index = pd.DatetimeIndex(
         [START_DT.add(seconds=i * STEP_INTERVAL_SEC) for i in range(HORIZON)]
     )
@@ -404,7 +400,6 @@ def _make_opt_result(
     objective_names: list[str] | None = None,
     best_scalar_fitness: float = 0.0,
 ) -> OptimizationResult:
-    """Build a minimal OptimizationResult for unit tests."""
     if objective_names is None:
         objective_names = ["energy_cost_eur"]
     assembled = MagicMock(spec=AssembledGenome)
@@ -502,7 +497,9 @@ class TestBuildDevices:
 
     def test_device_indices_sequential_across_types(self):
         """grid(idx=0) → appliance(idx=1) → inverter(idx=2)."""
-        params = [make_grid_param(), make_appliance_param(), make_inverter_param()]
+        params: list[_ParamUnion] = [
+            make_grid_param(), make_appliance_param(), make_inverter_param()
+        ]
         devices, _ = _build_devices(params, [AC_BUS])
         assert len(devices) == 3
         assert devices[0]._device_index == 0
@@ -511,7 +508,7 @@ class TestBuildDevices:
 
     def test_port_index_advances_past_appliance(self):
         """Appliance has 1 port → inverter's port_index must be 1."""
-        params = [make_appliance_param(), make_inverter_param()]
+        params: list[_ParamUnion] = [make_appliance_param(), make_inverter_param()]
         devices, _ = _build_devices(params, [AC_BUS])
         assert devices[1]._port_index == 1
 
@@ -597,27 +594,13 @@ class TestBuildTopology:
 # TestBestToSolution
 # ============================================================
 
-# _best_to_solution constructs an OptimizationSolution via its Pydantic model.
-# OptimizationSolution.prediction is a required non-optional field, so any
-# call that omits or nulls it will raise a ValidationError.  We therefore
-# capture the keyword arguments passed to the constructor rather than letting
-# Pydantic validate them, which lets us test the mapping logic without needing
-# a fully populated prediction DataFrame.
 _SOLUTION_CLS_PATCH = (
     "akkudoktoreos.optimization.genetic2.genetic2.OptimizationSolution"
 )
 
 
 class TestBestToSolution:
-    """Unit-tests for _best_to_solution argument-passing logic.
-
-    All tests patch ``OptimizationSolution`` with a ``MagicMock`` so that Pydantic
-    validation is bypassed.  We assert on the keyword arguments forwarded to the
-    constructor, not on the resulting model instance.
-    """
-
     def _call(self, best, result, ctx):
-        """Call _best_to_solution and return (mock_cls, return_value)."""
         with patch(_SOLUTION_CLS_PATCH) as mock_cls:
             mock_cls.return_value = MagicMock(spec=OptimizationSolution)
             retval = _best_to_solution(best, result, ctx)
@@ -754,31 +737,23 @@ class TestOptimizeValidation:
 # ============================================================
 
 _OPTIMIZER_PATCH = "akkudoktoreos.optimization.genetic2.optimizer.GeneticOptimizer"
-
-# resolve_measurement / resolve_prediction are wrapped by @cache_energy_management
-# and call get_measurement() / get_prediction() singletons not initialised in tests.
-# Patching the names as bound in the simulation module is the only reliable approach
-# that works regardless of how the decorator caches or wraps the original function.
 _GET_MEASUREMENT_PATCH = "akkudoktoreos.simulation.genetic2.simulation.get_measurement"
 _GET_PREDICTION_PATCH = "akkudoktoreos.simulation.genetic2.simulation.get_prediction"
 
 
 def _make_fake_measurement_store(value: float = 0.5):
-    """Return a minimal measurement-store stub whose key_to_value returns value."""
     store = MagicMock()
     store.key_to_value.return_value = value
     return store
 
 
 def _make_fake_prediction_store(horizon: int, fill: float = 0.0):
-    """Return a minimal prediction-store stub whose key_to_array returns zeros."""
     store = MagicMock()
     store.key_to_array.return_value = np.full(horizon, fill)
     return store
 
 
 def _patch_context_resolution(monkeypatch) -> None:
-    """Stub out the data-store singletons called by SimulationContext resolution."""
     monkeypatch.setattr(
         _GET_MEASUREMENT_PATCH,
         lambda: _make_fake_measurement_store(),
@@ -790,7 +765,6 @@ def _patch_context_resolution(monkeypatch) -> None:
 
 
 class TestOptimizeContext:
-    """Monkeypatches GeneticOptimizer to capture the SimulationContext."""
 
     @pytest.fixture()
     def captured_context(self, monkeypatch) -> SimulationContext:
@@ -855,7 +829,6 @@ _ENGINE_PATCH = "akkudoktoreos.simulation.genetic2.engine.EnergySimulationEngine
 
 
 class TestOptimizeBusHandling:
-    """Captures the bus list seen by EnergySimulationEngine.__init__."""
 
     def _run_and_capture_buses(
         self,
@@ -907,7 +880,6 @@ class TestOptimizeBusHandling:
 
 
 class TestOptimizeReturnValues:
-    """Full pipeline run: HybridInverterDevice (BATTERY) + GridConnectionDevice."""
 
     @pytest.fixture()
     def result_pair(self, monkeypatch):
@@ -958,12 +930,8 @@ class TestOptimizeReturnValues:
 
 
 class TestOptimizeDeterminism:
-    """Verify that identical seeds produce identical GA results."""
 
     def _run(self, seed: int, monkeypatch) -> tuple[float, dict]:
-        """Return (best_scalar_fitness, best_genome_by_device_id)."""
-        # Import the real GeneticOptimizer BEFORE the patch is applied so that
-        # _CapturingOptimizer.__init__ gets the original class, not the mock.
         from akkudoktoreos.optimization.genetic2.optimizer import (
             GeneticOptimizer as _RealOptimizer,
         )

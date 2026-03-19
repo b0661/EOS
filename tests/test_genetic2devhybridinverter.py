@@ -35,6 +35,8 @@ Tolerances: rtol=1e-9 throughout; zero checks use approx(0.0, abs=1e-9).
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 import pytest
 from pendulum import Duration
@@ -52,6 +54,7 @@ from akkudoktoreos.devices.genetic2.hybridinverter import (
     InverterType,
 )
 from akkudoktoreos.simulation.genetic2.arbitrator import DeviceGrant, PortGrant
+from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
 from akkudoktoreos.utils.datetimeutil import to_datetime
 
 # ---------------------------------------------------------------------------
@@ -77,7 +80,13 @@ def make_step_times(n: int = HORIZON) -> tuple:
 # ---------------------------------------------------------------------------
 
 class FakeContext:
-    """Minimal SimulationContext stand-in for unit tests."""
+    """Minimal SimulationContext stand-in for unit tests.
+
+    Not a real SimulationContext (which is a frozen dataclass with no
+    resolve_* methods in the base).  Call sites that pass this to
+    setup_run() use cast(SimulationContext, ctx) so mypy is satisfied
+    while the duck-typed runtime behaviour is preserved.
+    """
 
     def __init__(
         self,
@@ -245,7 +254,7 @@ def make_device(
 ) -> HybridInverterDevice:
     context = make_context(horizon, STEP_INTERVAL, pv_w, initial_soc_factor)
     device = HybridInverterDevice(param, device_index, port_index)
-    device.setup_run(context)
+    device.setup_run(cast(SimulationContext, context))
     return device
 
 
@@ -397,7 +406,7 @@ class TestSetupRun:
     def test_stores_step_times(self):
         ctx = make_context(horizon=4)
         dev = HybridInverterDevice(make_battery_param(), 0, 0)
-        dev.setup_run(ctx)
+        dev.setup_run(cast(SimulationContext, ctx))
         assert dev._step_times == ctx.step_times
 
     def test_solar_pv_key_none_raises(self):
@@ -425,31 +434,32 @@ class TestSetupRun:
             battery_initial_soc_factor_key=SOC_KEY,
         )
         with pytest.raises(ValueError, match="pv_power_w_key"):
-            HybridInverterDevice(param, 0, 0).setup_run(make_context())
+            HybridInverterDevice(param, 0, 0).setup_run(cast(SimulationContext, make_context()))
 
     def test_pv_wrong_shape_raises(self):
         dev = HybridInverterDevice(make_solar_param(), 0, 0)
         ctx = FakeContext(make_step_times(4), pv_w=np.full(2, 3000.0))
         with pytest.raises(ValueError):
-            dev.setup_run(ctx)
+            dev.setup_run(cast(SimulationContext, ctx))
 
     def test_initial_soc_out_of_bounds_raises(self):
         dev = HybridInverterDevice(make_battery_param(min_soc=0.2, max_soc=0.8), 0, 0)
         with pytest.raises(ValueError, match="initial SoC factor"):
-            dev.setup_run(make_context(initial_soc_factor=-0.1))
+            dev.setup_run(cast(SimulationContext, make_context(initial_soc_factor=-0.1)))
         with pytest.raises(ValueError, match="initial SoC factor"):
-            dev.setup_run(make_context(initial_soc_factor=1.1))
+            dev.setup_run(cast(SimulationContext, make_context(initial_soc_factor=1.1)))
 
     def test_battery_resolves_initial_soc_wh(self):
         dev = HybridInverterDevice(
             make_battery_param(capacity_wh=10_000.0, min_soc=0.1, max_soc=0.9), 0, 0
         )
-        dev.setup_run(make_context(initial_soc_factor=0.6))
+        dev.setup_run(cast(SimulationContext, make_context(initial_soc_factor=0.6)))
         assert dev._battery_initial_soc_wh == pytest.approx(6_000.0)
 
     def test_solar_resolves_pv_array(self):
         dev = HybridInverterDevice(make_solar_param(), 0, 0)
-        dev.setup_run(make_context(pv_w=np.full(HORIZON, 5_000.0)))
+        dev.setup_run(cast(SimulationContext, make_context(pv_w=np.full(HORIZON, 5_000.0))))
+        assert dev._pv_power_w is not None
         np.testing.assert_allclose(dev._pv_power_w, 5_000.0)
 
 
@@ -471,18 +481,22 @@ class TestGenomeRequirements:
 
     def test_bat_factor_lower_bound_is_minus_one(self):
         slc = make_device(make_battery_param(), horizon=4).genome_requirements()
+        assert slc.lower_bound is not None
         np.testing.assert_array_equal(slc.lower_bound[0::2], np.full(4, -1.0))
 
     def test_bat_factor_upper_bound_is_plus_one(self):
         slc = make_device(make_battery_param(), horizon=4).genome_requirements()
+        assert slc.upper_bound is not None
         np.testing.assert_array_equal(slc.upper_bound[0::2], np.full(4, +1.0))
 
     def test_pv_util_lower_bound_is_zero(self):
         slc = make_device(make_hybrid_param(), horizon=4).genome_requirements()
+        assert slc.lower_bound is not None
         np.testing.assert_array_equal(slc.lower_bound[1::2], np.zeros(4))
 
     def test_pv_util_upper_bound_is_one(self):
         slc = make_device(make_hybrid_param(), horizon=4).genome_requirements()
+        assert slc.upper_bound is not None
         np.testing.assert_array_equal(slc.upper_bound[1::2], np.ones(4))
 
     def test_before_setup_run_raises(self):
@@ -990,7 +1004,7 @@ class TestBuildDeviceRequest:
         if param is None:
             param = make_battery_param()
         device = HybridInverterDevice(param, device_index, port_index)
-        device.setup_run(make_context(horizon=horizon))
+        device.setup_run(cast(SimulationContext, make_context(horizon=horizon)))
         state  = device.create_batch_state(pop, horizon)
         genome = np.tile([0.3, 0.0], (pop, horizon))
         device.apply_genome_batch(state, genome)
@@ -1027,7 +1041,7 @@ class TestBuildDeviceRequest:
 
     def test_idle_steps_zero_min_energy(self):
         device = HybridInverterDevice(make_battery_param(), 0, 0)
-        device.setup_run(make_context(horizon=HORIZON))
+        device.setup_run(cast(SimulationContext, make_context(horizon=HORIZON)))
         state  = device.create_batch_state(1, HORIZON)
         genome = np.zeros((1, 2 * HORIZON))
         device.apply_genome_batch(state, genome)
@@ -1037,7 +1051,7 @@ class TestBuildDeviceRequest:
 
     def test_charge_steps_positive_min_energy(self):
         device = HybridInverterDevice(make_battery_param(min_charge=0.1), 0, 0)
-        device.setup_run(make_context(horizon=1))
+        device.setup_run(cast(SimulationContext, make_context(horizon=1)))
         state  = device.create_batch_state(1, 1)
         genome = np.array([[0.5, 0.0]])
         device.apply_genome_batch(state, genome)
@@ -1045,7 +1059,7 @@ class TestBuildDeviceRequest:
 
     def test_discharge_steps_negative_min_energy(self):
         device = HybridInverterDevice(make_battery_param(min_discharge=0.1), 0, 0)
-        device.setup_run(make_context(horizon=1))
+        device.setup_run(cast(SimulationContext, make_context(horizon=1)))
         state  = device.create_batch_state(1, 1)
         genome = np.array([[-0.5, 0.0]])
         device.apply_genome_batch(state, genome)

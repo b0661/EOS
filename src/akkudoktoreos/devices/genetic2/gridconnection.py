@@ -90,48 +90,47 @@ class GridConnectionParam(DeviceParam):
     logic.
 
     Attributes:
-    ----------
-    device_id :
-        Unique identifier for this device instance.
-    port_id :
-        Identifier of the single bidirectional AC port. Must be unique
-        within the device and must match the port index registered with
-        the bus arbitrator's topology map.
-    bus_id :
-        ID of the AC bus this grid connection is attached to.
-    max_import_power_w :
-        Maximum continuous power the grid can supply to the local AC bus
-        [W]. Must be > 0. Caps the import side of the arbitration request.
-        Typical residential values: 11 000 – 25 000 W.
-    max_export_power_w :
-        Maximum continuous power the local AC bus can push back to the
-        grid [W]. Must be ≥ 0. Set to 0 to disable export (non-export
-        tariff or inverter export limit). Caps the export side of the
-        arbitration request.
-    import_cost_per_kwh :
-        Flat-rate electricity import cost [currency / kWh]. Applied
-        uniformly to every imported kWh unless overridden by a resolved
-        ``import_price_key`` time-series. Must be ≥ 0.
-    export_revenue_per_kwh :
-        Flat-rate feed-in revenue [currency / kWh]. Subtracted from total
-        cost for every exported kWh unless overridden by a resolved
-        ``export_price_key`` time-series. Must be ≥ 0.
-    import_price_key :
-        Optional key in the ``SimulationContext`` time-series store
-        resolving to a per-step import price array [currency / kWh] of
-        shape ``(horizon,)``. When set, replaces ``import_cost_per_kwh``
-        step-by-step. Useful for day-ahead market prices.
-    export_price_key :
-        Optional key in the ``SimulationContext`` time-series store
-        resolving to a per-step export revenue array [currency / kWh] of
-        shape ``(horizon,)``. When set, replaces
-        ``export_revenue_per_kwh`` step-by-step.
-    include_peak_power_objective :
-        When ``True``, ``compute_cost`` emits a second fitness column
-        ``"peak_import_kw"`` equal to the maximum import power [kW]
-        observed across the horizon for each individual. Enables
-        peak-shaving alongside cost minimisation without changing the
-        energy cost objective.
+        device_id :
+            Unique identifier for this device instance.
+        port_id :
+            Identifier of the single bidirectional AC port. Must be unique
+            within the device and must match the port index registered with
+            the bus arbitrator's topology map.
+        bus_id :
+            ID of the AC bus this grid connection is attached to.
+        max_import_power_w :
+            Maximum continuous power the grid can supply to the local AC bus
+            [W]. Must be > 0. Caps the import side of the arbitration request.
+            Typical residential values: 11 000 – 25 000 W.
+        max_export_power_w :
+            Maximum continuous power the local AC bus can push back to the
+            grid [W]. Must be ≥ 0. Set to 0 to disable export (non-export
+            tariff or inverter export limit). Caps the export side of the
+            arbitration request.
+        import_cost_per_kwh :
+            Flat-rate electricity import cost [currency / kWh]. Applied
+            uniformly to every imported kWh unless overridden by a resolved
+            ``import_price_key`` time-series. Must be ≥ 0.
+        export_revenue_per_kwh :
+            Flat-rate feed-in revenue [currency / kWh]. Subtracted from total
+            cost for every exported kWh unless overridden by a resolved
+            ``export_price_key`` time-series. Must be ≥ 0.
+        import_price_key :
+            Optional key in the ``SimulationContext`` time-series store
+            resolving to a per-step import price array [currency / kWh] of
+            shape ``(horizon,)``. When set, replaces ``import_cost_per_kwh``
+            step-by-step. Useful for day-ahead market prices.
+        export_price_key :
+            Optional key in the ``SimulationContext`` time-series store
+            resolving to a per-step export revenue array [currency / kWh] of
+            shape ``(horizon,)``. When set, replaces
+            ``export_revenue_per_kwh`` step-by-step.
+        include_peak_power_objective :
+            When ``True``, ``compute_cost`` emits a second fitness column
+            ``"peak_import_kw"`` equal to the maximum import power [kW]
+            observed across the horizon for each individual. Enables
+            peak-shaving alongside cost minimisation without changing the
+            energy cost objective.
     """
 
     max_import_power_w: float
@@ -166,18 +165,17 @@ class GridConnectionBatchState:
     Never shared between devices or between generations.
 
     Attributes:
-    ----------
-    granted_wh :
-        Net AC energy granted by the arbitrator per individual per step
-        [Wh], shape ``(population_size, horizon)``. Positive = imported
-        from grid; negative = exported to grid. Populated by
-        ``apply_device_grant``; all zeros until then.
-    population_size :
-        Number of individuals in this batch.
-    horizon :
-        Number of simulation time steps.
-    step_times :
-        Ordered ``DateTime`` timestamps, length == horizon.
+        granted_wh :
+            Net AC energy granted by the arbitrator per individual per step
+            [Wh], shape ``(population_size, horizon)``. Positive = imported
+            from grid; negative = exported to grid. Populated by
+            ``apply_device_grant``; all zeros until then.
+        population_size :
+            Number of individuals in this batch.
+        horizon :
+            Number of simulation time steps.
+        step_times :
+            Ordered ``DateTime`` timestamps, length == horizon.
     """
 
     granted_wh: np.ndarray  # (population_size, horizon)  float64

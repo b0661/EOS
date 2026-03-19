@@ -439,15 +439,11 @@ class HybridInverterDevice(EnergyDevice):
         Returns:
             The mutated ``genome_batch``.
         """
-        pv_power_w = self._pv_power_w
         if self._step_interval_sec is None:
             raise RuntimeError("Call setup_run() before apply_genome_batch().")
-        if pv_power_w is None and self.param.inverter_type in (
-            InverterType.SOLAR,
-            InverterType.HYBRID,
-        ):
-            raise RuntimeError("Call setup_run() before apply_genome_batch().")
-        p = self.param
+        pv_power_w = self._pv_power_w
+        pv_min_power_w = self.param.pv_min_power_w
+        pv_max_power_w = self.param.pv_max_power_w
 
         soc = np.full(
             state.population_size,
@@ -458,11 +454,10 @@ class HybridInverterDevice(EnergyDevice):
             raw_bat = genome_batch[:, 2 * t]  # shape (pop,)
             raw_pv = genome_batch[:, 2 * t + 1]  # shape (pop,)
 
-            pv_dc_avail_w = (
-                float(np.clip(pv_power_w[t], p.pv_min_power_w, p.pv_max_power_w))
-                if p.inverter_type in (InverterType.SOLAR, InverterType.HYBRID)
-                else 0.0
-            )
+            if pv_power_w is not None:
+                pv_dc_avail_w = float(np.clip(pv_power_w[t], pv_min_power_w, pv_max_power_w))
+            else:
+                pv_dc_avail_w = 0.0
 
             bat_t, pv_t = self._repair_genes(raw_bat, raw_pv, soc, pv_dc_avail_w)
 

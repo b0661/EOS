@@ -22,6 +22,20 @@
                "port": 1880
            }
        },
+       "buses": {
+           "buses": [
+               {
+                   "bus_id": "bus_dc",
+                   "carrier": "dc",
+                   "constraint": null
+               },
+               {
+                   "bus_id": "bus_ac",
+                   "carrier": "ac",
+                   "constraint": null
+               }
+           ]
+       },
        "cache": {
            "subpath": "cache",
            "cleanup_interval": 300.0
@@ -36,9 +50,9 @@
            "batch_size": 100
        },
        "devices": {
-           "batteries": [
-               {
-                   "device_id": "battery1",
+           "batteries": {
+               "bat0": {
+                   "device_id": "bat0",
                    "capacity_wh": 8000,
                    "charging_efficiency": 0.88,
                    "discharging_efficiency": 0.88,
@@ -59,14 +73,17 @@
                        1.0
                    ],
                    "min_soc_percentage": 0,
-                   "max_soc_percentage": 100
+                   "max_soc_percentage": 100,
+                   "operation_modes": [
+                       "BatteryOperationMode.SELF_CONSUMPTION"
+                   ]
                }
-           ],
+           },
            "max_batteries": 1,
-           "electric_vehicles": [
-               {
-                   "device_id": "battery1",
-                   "capacity_wh": 8000,
+           "electric_vehicles": {
+               "ev0": {
+                   "device_id": "ev0",
+                   "capacity_wh": 60000,
                    "charging_efficiency": 0.88,
                    "discharging_efficiency": 0.88,
                    "levelized_cost_of_storage_kwh": 0.0,
@@ -86,14 +103,54 @@
                        1.0
                    ],
                    "min_soc_percentage": 0,
-                   "max_soc_percentage": 100
+                   "max_soc_percentage": 100,
+                   "operation_modes": [
+                       "BatteryOperationMode.SELF_CONSUMPTION"
+                   ]
                }
-           ],
+           },
            "max_electric_vehicles": 1,
-           "inverters": [],
+           "inverters": {},
            "max_inverters": 1,
-           "home_appliances": [],
-           "max_home_appliances": 1
+           "grid_connections": {},
+           "max_grid_connections": 1,
+           "heat_pumps": {},
+           "max_heat_pumps": 1,
+           "fixed_loads": {
+               "base_load": {
+                   "device_id": "base_load",
+                   "ports": [
+                       {
+                           "port_id": "p_ac",
+                           "bus_id": "bus_ac",
+                           "direction": "sink",
+                           "max_power_w": null
+                       }
+                   ],
+                   "peak_power_w": 500.0
+               }
+           },
+           "max_fixed_loads": 3,
+           "home_appliances": {
+               "dishwasher": {
+                   "device_id": "dishwasher",
+                   "ports": [
+                       {
+                           "port_id": "p_ac",
+                           "bus_id": "bus_ac",
+                           "direction": "sink",
+                           "max_power_w": null
+                       }
+                   ],
+                   "consumption_wh": 1500,
+                   "duration_h": 2,
+                   "num_cycles": 1,
+                   "cycle_time_windows": null,
+                   "min_cycle_gap_h": 0,
+                   "cycles_completed_measurement_key": null
+               }
+           },
+           "max_home_appliances": 3
        },
        "elecprice": {
            "provider": "ElecPriceAkkudoktor",

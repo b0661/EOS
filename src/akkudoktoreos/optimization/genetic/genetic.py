@@ -1115,8 +1115,9 @@ class GeneticOptimization(OptimizationBase):
                 and len(self.config.devices.electric_vehicles) > 0
                 and list(self.config.devices.electric_vehicles.values())[0].charge_rates is not None
             ):
+                ev_device_id = list(self.config.devices.electric_vehicles.keys())[0]
                 self.ev_possible_charge_values = self.config.devices.electric_vehicles[
-                    0
+                    ev_device_id
                 ].charge_rates
             else:
                 warning_msg = "No charge rates provided for electric vehicle - using default."

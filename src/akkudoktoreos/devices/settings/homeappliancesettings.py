@@ -252,7 +252,7 @@ class HomeApplianceCommonSettings(PortsMixin, DevicesBaseSettings):
         Returns:
             HomeApplianceParam
         """
-        from akkudoktoreos.devices.genetic2.homeapplianc import HomeApplianceParam
+        from akkudoktoreos.devices.genetic2.homeappliance import HomeApplianceParam
 
         time_window_key = (
             f"devices/home_appliances/{self.device_id}/cycle_time_windows"

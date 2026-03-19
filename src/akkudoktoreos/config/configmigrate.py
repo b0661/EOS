@@ -31,6 +31,37 @@ if TYPE_CHECKING:
 _KEEP_DEFAULT = object()
 
 # -----------------------------
+# Migration helpers
+# -----------------------------
+
+
+def _list_to_device_dict(
+    prefix: str,
+) -> Callable[[Any], Any]:
+    """Return a transform that converts a list of device dicts to a keyed dict.
+
+    Each item must be a dict.  The key is taken from the item's own
+    ``device_id`` field when present; otherwise a key is synthesised
+    from *prefix* + the zero-based index (e.g. ``"bat0"``, ``"bat1"``).
+    """
+
+    def _transform(value: Any) -> Any:
+        if not isinstance(value, list):
+            return value  # already a dict or something unexpected – leave as-is
+        result: Dict[str, Any] = {}
+        for i, item in enumerate(value):
+            if not isinstance(item, dict):
+                continue
+            key = item.get("device_id") or f"{prefix}{i}"
+            # Ensure device_id is stored inside the dict so Pydantic can validate it
+            item.setdefault("device_id", key)
+            result[key] = item
+        return result
+
+    return _transform
+
+
+# -----------------------------
 # Global migration map constant
 # -----------------------------
 # key: old JSON path, value: either
@@ -48,6 +79,26 @@ MIGRATION_MAP: Dict[
         None,  # drop
     ],
 ] = {
+    # 0.3.0 -> 0.3.0.dev
+    # List → dict migration (all device collections)
+    # These must come *before* any sub-path entries that reference the old list indices,
+    # so the whole collection is moved first; the sub-path None-drops clean up leftovers.
+    "devices/batteries": (
+        "devices/batteries",
+        _list_to_device_dict("bat"),
+    ),
+    "devices/electric_vehicles": (
+        "devices/electric_vehicles",
+        _list_to_device_dict("ev"),
+    ),
+    "devices/inverters": (
+        "devices/inverters",
+        _list_to_device_dict("inv"),
+    ),
+    "devices/home_appliances": (
+        "devices/home_appliances",
+        _list_to_device_dict("appliance"),
+    ),
     # 0.2.0.dev -> 0.2.0.dev
     "adapter/homeassistant/optimization_solution_entity_ids": (
         "adapter/homeassistant/solution_entity_ids",
@@ -80,7 +131,7 @@ MIGRATION_MAP: Dict[
     "measurement/load3_name": "measurement/load_emr_keys/3",
     "measurement/load4_name": "measurement/load_emr_keys/4",
     "optimization/ev_available_charge_rates_percent": (
-        "devices/electric_vehicles/0/charge_rates",
+        "devices/electric_vehicles/ev1/charge_rates",
         lambda v: [x / 100 for x in v],
     ),
     "optimization/hours": "optimization/horizon_hours",
@@ -141,6 +192,7 @@ def migrate_config_data(config_data: Dict[str, Any]) -> "SettingsEOSDefaults":
             new_path = mapping
 
         old_value = _get_json_nested_value(config_data, old_path)
+        print(f"  MAP: '{old_path}' → old_value={old_value!r}")  # temporary
         if old_value is None:
             if keep_default:
                 migrated_source_paths.add(old_path.strip("/"))
@@ -164,6 +216,7 @@ def migrate_config_data(config_data: Dict[str, Any]) -> "SettingsEOSDefaults":
                 f"Failed mapped migration '{old_path}' -> '{new_path}': {e}"
             )
 
+    print("migrated_source_paths:", migrated_source_paths)
     # 2) Automatic migration for remaining fields
     auto_count += _migrate_matching_fields(
         config_data, new_config, migrated_source_paths, skipped_paths

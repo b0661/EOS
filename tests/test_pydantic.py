@@ -567,6 +567,80 @@ class TestPydanticDateTimeDataFrame:
         assert "extra" not in model.data[key]
         assert "extra" not in model.dtypes
 
+    def test_str_dtype_accepted_in_validate_dtypes(self):
+        """Verify that dtype 'str' (pandas 3.0 StringDtype alias) passes validation."""
+        model = PydanticDateTimeDataFrame(
+            data={"2024-12-21T00:00:00": {"label": "hello"}},
+            dtypes={"label": "str"},
+        )
+        assert model.dtypes["label"] == "str"
+
+    def test_string_dtype_accepted_in_validate_dtypes(self):
+        """Verify that dtype 'string' (pandas StringDtype) passes validation."""
+        model = PydanticDateTimeDataFrame(
+            data={"2024-12-21T00:00:00": {"label": "hello"}},
+            dtypes={"label": "string"},
+        )
+        assert model.dtypes["label"] == "string"
+
+    def test_invalid_dtype_still_rejected(self):
+        """Verify that unknown dtypes continue to raise ValidationError."""
+        with pytest.raises(ValidationError, match="Unsupported dtypes"):
+            PydanticDateTimeDataFrame(
+                data={"2024-12-21T00:00:00": {"label": "hello"}},
+                dtypes={"label": "unsupported_dtype"},
+            )
+
+    def test_str_dtype_round_trip_via_dataframe(self):
+        """from_dataframe with a string column produces 'str'/'string' dtype that
+        survives a to_dataframe round-trip as plain object-dtype strings."""
+        df = pd.DataFrame(
+            {"mode": ["CHARGE", "IDLE", "DISCHARGE"]},
+            index=pd.to_datetime(["2024-12-21", "2024-12-22", "2024-12-23"]),
+        )
+        model = PydanticDateTimeDataFrame.from_dataframe(df)
+
+        # The recorded dtype must be one of the accepted string aliases.
+        assert model.dtypes.get("mode") in ("str", "string", "object"), (
+            f"Unexpected dtype: {model.dtypes.get('mode')}"
+        )
+
+        result = model.to_dataframe()
+
+        # After round-trip the column must still hold the original string values.
+        assert list(result["mode"]) == ["CHARGE", "IDLE", "DISCHARGE"]
+        # And every value must be a plain Python str.
+        assert all(isinstance(v, str) for v in result["mode"]), (
+            "Expected plain str values after round-trip, got mixed types"
+        )
+
+    def test_str_dtype_to_dataframe_yields_object_dtype(self):
+        """to_dataframe normalises 'str'/'string' dtypes to object so downstream
+        code receives plain Python strings rather than nullable StringDtype arrays."""
+        model = PydanticDateTimeDataFrame(
+            data={"2024-12-21T00:00:00": {"label": "hello"}},
+            dtypes={"label": "str"},
+        )
+        result = model.to_dataframe()
+
+        assert result["label"].dtype == object, (
+            f"Expected object dtype after 'str' normalisation, got {result['label'].dtype}"
+        )
+        assert result["label"].iloc[0] == "hello"
+
+    def test_string_dtype_to_dataframe_yields_object_dtype(self):
+        """to_dataframe normalises the legacy 'string' dtype to object as well."""
+        model = PydanticDateTimeDataFrame(
+            data={"2024-12-21T00:00:00": {"label": "world"}},
+            dtypes={"label": "string"},
+        )
+        result = model.to_dataframe()
+
+        assert result["label"].dtype == object, (
+            f"Expected object dtype after 'string' normalisation, got {result['label'].dtype}"
+        )
+        assert result["label"].iloc[0] == "world"
+
 
 class TestPydanticDateTimeSeries:
     def test_valid_series(self):

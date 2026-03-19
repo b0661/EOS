@@ -19,6 +19,7 @@ class FixedLoadSettings(PortsMixin, DevicesBaseSettings):
 
     Port wiring guidance
     --------------------
+
     Fixed AC load::
 
         ports:
@@ -27,7 +28,7 @@ class FixedLoadSettings(PortsMixin, DevicesBaseSettings):
             direction: sink
 
     Notes:
-    -----
+    ------
     ``FixedLoadParam`` does not yet exist in ``devicesabc``.
     ``to_genetic2_param()`` raises ``NotImplementedError`` until it is
     added.

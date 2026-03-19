@@ -8,11 +8,7 @@
       "name": "Apache 2.0",
       "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
     },
-<<<<<<< HEAD
-    "version": "v0.3.0.dev2603180681250771"
-=======
-    "version": "v0.2.0.dev2603121645650601"
->>>>>>> 74647bf (fest: Add GENETIC2 optimization framework.)
+    "version": "v0.3.0.dev2603191088291006"
   },
   "paths": {
     "/v1/admin/cache/clear": {
@@ -661,256 +657,6 @@
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/resource/status": {
-      "get": {
-        "tags": [
-          "resource"
-        ],
-        "summary": "Fastapi Devices Status Get",
-        "description": "Get the latest status of a resource/ device.\n\nReturn:\n    latest_status: The latest status of a resource/ device.",
-        "operationId": "fastapi_devices_status_get_v1_resource_status_get",
-        "parameters": [
-          {
-            "name": "resource_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "description": "Resource ID.",
-              "title": "Resource Id"
-            },
-            "description": "Resource ID."
-          },
-          {
-            "name": "actuator_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Actuator ID.",
-              "title": "Actuator Id"
-            },
-            "description": "Actuator ID."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "$ref": "#/components/schemas/PowerMeasurement-Output"
-                    },
-                    {
-                      "$ref": "#/components/schemas/EnergyMeasurement-Output"
-                    },
-                    {
-                      "$ref": "#/components/schemas/PPBCPowerProfileStatus-Output"
-                    },
-                    {
-                      "$ref": "#/components/schemas/OMBCStatus"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FRBCActuatorStatus"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FRBCEnergyStatus-Output"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FRBCStorageStatus"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FRBCTimerStatus"
-                    },
-                    {
-                      "$ref": "#/components/schemas/DDBCActuatorStatus"
-                    }
-                  ],
-                  "discriminator": {
-                    "propertyName": "type",
-                    "mapping": {
-                      "PowerMeasurement": "#/components/schemas/PowerMeasurement-Output",
-                      "EnergyMeasurement": "#/components/schemas/EnergyMeasurement-Output",
-                      "PPBCPowerProfileStatus": "#/components/schemas/PPBCPowerProfileStatus-Output",
-                      "OMBCStatus": "#/components/schemas/OMBCStatus",
-                      "FRBCActuatorStatus": "#/components/schemas/FRBCActuatorStatus",
-                      "FRBCEnergyStatus": "#/components/schemas/FRBCEnergyStatus-Output",
-                      "FRBCStorageStatus": "#/components/schemas/FRBCStorageStatus",
-                      "FRBCTimerStatus": "#/components/schemas/FRBCTimerStatus",
-                      "DDBCActuatorStatus": "#/components/schemas/DDBCActuatorStatus"
-                    }
-                  },
-                  "title": "Response Fastapi Devices Status Get V1 Resource Status Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "resource"
-        ],
-        "summary": "Fastapi Devices Status Put",
-        "description": "Update the status of a resource/ device.\n\nReturn:\n    latest_status: The latest status of a resource/ device.",
-        "operationId": "fastapi_devices_status_put_v1_resource_status_put",
-        "parameters": [
-          {
-            "name": "resource_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "description": "Resource ID.",
-              "title": "Resource Id"
-            },
-            "description": "Resource ID."
-          },
-          {
-            "name": "actuator_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Actuator ID.",
-              "title": "Actuator Id"
-            },
-            "description": "Actuator ID."
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/PowerMeasurement-Input"
-                  },
-                  {
-                    "$ref": "#/components/schemas/EnergyMeasurement-Input"
-                  },
-                  {
-                    "$ref": "#/components/schemas/PPBCPowerProfileStatus-Input"
-                  },
-                  {
-                    "$ref": "#/components/schemas/OMBCStatus"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FRBCActuatorStatus"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FRBCEnergyStatus-Input"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FRBCStorageStatus"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FRBCTimerStatus"
-                  },
-                  {
-                    "$ref": "#/components/schemas/DDBCActuatorStatus"
-                  }
-                ],
-                "description": "Resource Status.",
-                "title": "Status"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "$ref": "#/components/schemas/PowerMeasurement-Output"
-                    },
-                    {
-                      "$ref": "#/components/schemas/EnergyMeasurement-Output"
-                    },
-                    {
-                      "$ref": "#/components/schemas/PPBCPowerProfileStatus-Output"
-                    },
-                    {
-                      "$ref": "#/components/schemas/OMBCStatus"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FRBCActuatorStatus"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FRBCEnergyStatus-Output"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FRBCStorageStatus"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FRBCTimerStatus"
-                    },
-                    {
-                      "$ref": "#/components/schemas/DDBCActuatorStatus"
-                    }
-                  ],
-                  "discriminator": {
-                    "propertyName": "type",
-                    "mapping": {
-                      "PowerMeasurement": "#/components/schemas/PowerMeasurement-Output",
-                      "EnergyMeasurement": "#/components/schemas/EnergyMeasurement-Output",
-                      "PPBCPowerProfileStatus": "#/components/schemas/PPBCPowerProfileStatus-Output",
-                      "OMBCStatus": "#/components/schemas/OMBCStatus",
-                      "FRBCActuatorStatus": "#/components/schemas/FRBCActuatorStatus",
-                      "FRBCEnergyStatus": "#/components/schemas/FRBCEnergyStatus-Output",
-                      "FRBCStorageStatus": "#/components/schemas/FRBCStorageStatus",
-                      "FRBCTimerStatus": "#/components/schemas/FRBCTimerStatus",
-                      "DDBCActuatorStatus": "#/components/schemas/DDBCActuatorStatus"
-                    }
-                  },
-                  "title": "Response Fastapi Devices Status Put V1 Resource Status Put"
-                }
               }
             }
           },
@@ -2301,7 +2047,7 @@
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Min Soc Percentage",
-            "description": "Minimum state of charge (SOC) as percentage of capacity [%]. This is the target SoC for charging",
+            "description": "Minimum state of charge (SOC) as percentage of capacity [%]. This is the target SoC for charging.",
             "default": 0,
             "examples": [
               10
@@ -2317,11 +2063,25 @@
             "examples": [
               100
             ]
+          },
+          "operation_modes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Operation Modes",
+            "description": "Supported operating modes for this battery.",
+            "examples": [
+              [
+                "SELF_CONSUMPTION",
+                "PEAK_SHAVING"
+              ]
+            ]
           }
         },
         "type": "object",
         "title": "BatteriesCommonSettings",
-        "description": "Battery devices base settings."
+        "description": "Battery and electric vehicle device settings.\n\nUsed for both stationary batteries and EV battery packs.\n\nNote: Used for the GENETIC algorithm only."
       },
       "BatteriesCommonSettings-Output": {
         "properties": {
@@ -2455,7 +2215,7 @@
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Min Soc Percentage",
-            "description": "Minimum state of charge (SOC) as percentage of capacity [%]. This is the target SoC for charging",
+            "description": "Minimum state of charge (SOC) as percentage of capacity [%]. This is the target SoC for charging.",
             "default": 0,
             "examples": [
               10
@@ -2472,50 +2232,57 @@
               100
             ]
           },
+          "operation_modes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Operation Modes",
+            "description": "Supported operating modes for this battery.",
+            "examples": [
+              [
+                "SELF_CONSUMPTION",
+                "PEAK_SHAVING"
+              ]
+            ]
+          },
           "measurement_key_soc_factor": {
             "type": "string",
             "title": "Measurement Key Soc Factor",
-            "description": "Measurement key for the battery state of charge (SoC) as factor of total capacity [0.0 ... 1.0].",
+            "description": "Measurement key for SoC as factor of total capacity [0.0 ... 1.0].",
             "readOnly": true
           },
           "measurement_key_power_l1_w": {
             "type": "string",
             "title": "Measurement Key Power L1 W",
-            "description": "Measurement key for the L1 power the battery is charged or discharged with [W].",
+            "description": "Measurement key for L1 power [W].",
             "readOnly": true
           },
           "measurement_key_power_l2_w": {
             "type": "string",
             "title": "Measurement Key Power L2 W",
-            "description": "Measurement key for the L2 power the battery is charged or discharged with [W].",
+            "description": "Measurement key for L2 power [W].",
             "readOnly": true
           },
           "measurement_key_power_l3_w": {
             "type": "string",
             "title": "Measurement Key Power L3 W",
-            "description": "Measurement key for the L3 power the battery is charged or discharged with [W].",
+            "description": "Measurement key for L3 power [W].",
             "readOnly": true
           },
           "measurement_key_power_3_phase_sym_w": {
             "type": "string",
             "title": "Measurement Key Power 3 Phase Sym W",
-            "description": "Measurement key for the symmetric 3 phase power the battery is charged or discharged with [W].",
+            "description": "Measurement key for symmetric 3-phase power [W].",
             "readOnly": true
           },
           "measurement_keys": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
             "title": "Measurement Keys",
-            "description": "Measurement keys for the battery stati that are measurements.",
+            "description": "All measurement keys for this battery.",
             "readOnly": true
           }
         },
@@ -2529,7 +2296,155 @@
           "measurement_keys"
         ],
         "title": "BatteriesCommonSettings",
-        "description": "Battery devices base settings."
+        "description": "Battery and electric vehicle device settings.\n\nUsed for both stationary batteries and EV battery packs.\n\nNote: Used for the GENETIC algorithm only."
+      },
+      "BusConfig": {
+        "properties": {
+          "bus_id": {
+            "type": "string",
+            "title": "Bus Id",
+            "description": "Unique bus identifier. Referenced by device port configs.",
+            "examples": [
+              "bus_ac",
+              "bus_dc",
+              "bus_heat"
+            ]
+          },
+          "carrier": {
+            "$ref": "#/components/schemas/EnergyCarrier",
+            "description": "Energy carrier type: 'ac', 'dc', or 'heat'.",
+            "examples": [
+              "ac",
+              "dc",
+              "heat"
+            ]
+          },
+          "constraint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusConstraintConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional structural constraints on the number of source or sink ports. Validated at engine construction time.",
+            "examples": [
+              null,
+              {
+                "max_sinks": 1
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "bus_id",
+          "carrier"
+        ],
+        "title": "BusConfig",
+        "description": "Configuration for a single energy bus.\n\nA bus is a connection point that devices attach to via ports. All ports\non the same bus exchange energy of the same carrier type.\n\nAttributes:\n    bus_id: Unique identifier for this bus. Referenced by\n        ``PortConfig.bus_id`` on all devices that connect to it.\n    carrier: Energy carrier type flowing through this bus.\n        ``\"ac\"`` = AC electricity, ``\"dc\"`` = DC electricity,\n        ``\"heat\"`` = thermal energy.\n    constraint: Optional structural limits on the number of source or\n        sink ports. Used by topology validation at engine construction."
+      },
+      "BusConstraintConfig": {
+        "properties": {
+          "max_sinks": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Sinks",
+            "description": "Maximum number of sink ports on this bus.",
+            "examples": [
+              1,
+              null
+            ]
+          },
+          "max_sources": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Sources",
+            "description": "Maximum number of source ports on this bus.",
+            "examples": [
+              1,
+              null
+            ]
+          }
+        },
+        "type": "object",
+        "title": "BusConstraintConfig",
+        "description": "Optional structural constraints on port counts for a bus.\n\nAttributes:\n    max_sinks: Maximum number of sink ports allowed on this bus,\n        or ``None`` for no limit.\n    max_sources: Maximum number of source ports allowed on this bus,\n        or ``None`` for no limit."
+      },
+      "BusesCommonSettings-Input": {
+        "properties": {
+          "buses": {
+            "items": {
+              "$ref": "#/components/schemas/BusConfig"
+            },
+            "type": "array",
+            "title": "Buses",
+            "description": "List of energy buses in the system.",
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_dc",
+                  "carrier": "dc"
+                },
+                {
+                  "bus_id": "bus_ac",
+                  "carrier": "ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          }
+        },
+        "type": "object",
+        "title": "BusesCommonSettings",
+        "description": "Configuration for all energy buses in the system.\n\nValidates that all ``bus_id`` values are unique. Each device's\n``ports`` field must reference a ``bus_id`` that exists here \u2014\nthis cross-reference is validated by the engine at construction time,\nnot here (to keep config loading independent of engine instantiation).\n\nCall ``to_genetic2_param()`` to obtain the ``list[EnergyBus]`` required by\n``EnergySimulationEngine``."
+      },
+      "BusesCommonSettings-Output": {
+        "properties": {
+          "buses": {
+            "items": {
+              "$ref": "#/components/schemas/BusConfig"
+            },
+            "type": "array",
+            "title": "Buses",
+            "description": "List of energy buses in the system.",
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_dc",
+                  "carrier": "dc"
+                },
+                {
+                  "bus_id": "bus_ac",
+                  "carrier": "ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          }
+        },
+        "type": "object",
+        "title": "BusesCommonSettings",
+        "description": "Configuration for all energy buses in the system.\n\nValidates that all ``bus_id`` values are unique. Each device's\n``ports`` field must reference a ``bus_id`` that exists here \u2014\nthis cross-reference is validated by the engine at construction time,\nnot here (to keep config loading independent of engine instantiation).\n\nCall ``to_genetic2_param()`` to obtain the ``list[EnergyBus]`` required by\n``EnergySimulationEngine``."
       },
       "CacheCommonSettings": {
         "properties": {
@@ -2594,6 +2509,9 @@
           "logging": {
             "$ref": "#/components/schemas/LoggingCommonSettings-Output"
           },
+          "buses": {
+            "$ref": "#/components/schemas/BusesCommonSettings-Output"
+          },
           "devices": {
             "$ref": "#/components/schemas/DevicesCommonSettings-Output"
           },
@@ -2636,59 +2554,35 @@
         "title": "ConfigEOS",
         "description": "Singleton configuration handler for the EOS application.\n\nConfigEOS extends `SettingsEOS` with support for  default configuration paths and automatic\ninitialization.\n\n`ConfigEOS` ensures that only one instance of the class is created throughout the application,\nallowing consistent access to EOS configuration settings. This singleton instance loads\nconfiguration data from a predefined set of directories or creates a default configuration if\nnone is found.\n\nInitialization Process:\n  - Upon instantiation, the singleton instance attempts to load a configuration file in this order:\n    1. The directory specified by the `EOS_CONFIG_DIR` environment variable\n    2. The directory specified by the `EOS_DIR` environment variable.\n    3. A platform specific default directory for EOS.\n    4. The current working directory.\n  - The first available configuration file found in these directories is loaded.\n  - If no configuration file is found, a default configuration file is created in the platform\n    specific default directory, and default settings are loaded into it.\n\nAttributes from the loaded configuration are accessible directly as instance attributes of\n`ConfigEOS`, providing a centralized, shared configuration object for EOS.\n\nSingleton Behavior:\n  - This class uses the `SingletonMixin` to ensure that all requests for `ConfigEOS` return\n    the same instance, which contains the most up-to-date configuration. Modifying the configuration\n    in one part of the application reflects across all references to this class.\n\nRaises:\n    FileNotFoundError: If no configuration file is found, and creating a default configuration fails.\n\nExample:\n    To initialize and access configuration attributes (only one instance is created):\n    .. code-block:: python\n\n        config_eos = ConfigEOS()  # Always returns the same instance\n            print(config_eos.prediction.hours)  # Access a setting from the loaded configuration"
       },
-      "DDBCActuatorStatus": {
+      "CycleTimeWindowSequence-Input": {
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "DDBCActuatorStatus",
-            "title": "Type",
-            "default": "DDBCActuatorStatus"
-          },
-          "active_operation_mode_id": {
-            "type": "string",
-            "title": "Active Operation Mode Id",
-            "description": "Currently active operation mode ID."
-          },
-          "operation_mode_factor": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Operation Mode Factor",
-            "description": "Factor with which the operation mode is configured (0 to 1)."
-          },
-          "previous_operation_mode_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Previous Operation Mode Id",
-            "description": "Previously active operation mode ID. Required unless this is the first mode."
-          },
-          "transition_timestamp": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transition Timestamp",
-            "description": "Timestamp of transition to the active operation mode."
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/ValueTimeWindow-Input"
+            },
+            "type": "array",
+            "title": "Windows",
+            "description": "Ordered list of value time windows. Each window defines a time interval and an associated value."
           }
         },
         "type": "object",
-        "required": [
-          "active_operation_mode_id",
-          "operation_mode_factor"
-        ],
-        "title": "DDBCActuatorStatus",
-        "description": "Current status of a DDBC Actuator.\n\nProvides information about the currently active operation mode and transition history.\nUsed to track the current state of the actuator."
+        "title": "CycleTimeWindowSequence",
+        "description": "Sequence of time windows associated to cycles.\n\nThis model specializes ``ValueTimeWindowSequence`` so that the ``value``\nfield of each ``ValueTimeWindow`` encodes the **cycle index** (0-based\ninteger) the window belongs to.\n\nTypical use: an appliance that must run ``n`` times per day, each run\nconstrained to a distinct time window.  Assign ``value=0`` to windows\nfor the first cycle, ``value=1`` for the second, and so on.  Multiple\nwindows may share the same cycle index (their allowed regions are unioned).\nWindows with ``value=None`` are silently ignored by all cycle-aware methods."
+      },
+      "CycleTimeWindowSequence-Output": {
+        "properties": {
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/ValueTimeWindow-Output"
+            },
+            "type": "array",
+            "title": "Windows",
+            "description": "Ordered list of value time windows. Each window defines a time interval and an associated value."
+          }
+        },
+        "type": "object",
+        "title": "CycleTimeWindowSequence",
+        "description": "Sequence of time windows associated to cycles.\n\nThis model specializes ``ValueTimeWindowSequence`` so that the ``value``\nfield of each ``ValueTimeWindow`` encodes the **cycle index** (0-based\ninteger) the window belongs to.\n\nTypical use: an appliance that must run ``n`` times per day, each run\nconstrained to a distinct time window.  Assign ``value=0`` to windows\nfor the first cycle, ``value=1`` for the second, and so on.  Multiple\nwindows may share the same cycle index (their allowed regions are unioned).\nWindows with ``value=None`` are silently ignored by all cycle-aware methods."
       },
       "DDBCInstruction": {
         "properties": {
@@ -2996,24 +2890,25 @@
           "batteries": {
             "anyOf": [
               {
-                "items": {
+                "additionalProperties": {
                   "$ref": "#/components/schemas/BatteriesCommonSettings-Input"
                 },
-                "type": "array"
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Batteries",
-            "description": "List of battery devices",
+            "description": "Stationary battery storage devices, keyed by device_id.",
             "examples": [
-              [
-                {
+              {
+                "bat0": {
                   "capacity_wh": 8000,
-                  "device_id": "battery1"
+                  "device_id": "bat0",
+                  "ports": []
                 }
-              ]
+              }
             ]
           },
           "max_batteries": {
@@ -3027,33 +2922,33 @@
               }
             ],
             "title": "Max Batteries",
-            "description": "Maximum number of batteries that can be set",
+            "description": "Maximum number of batteries allowed.",
             "examples": [
-              1,
-              2
+              1
             ]
           },
           "electric_vehicles": {
             "anyOf": [
               {
-                "items": {
+                "additionalProperties": {
                   "$ref": "#/components/schemas/BatteriesCommonSettings-Input"
                 },
-                "type": "array"
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Electric Vehicles",
-            "description": "List of electric vehicle devices",
+            "description": "Electric vehicle battery packs, keyed by device_id.",
             "examples": [
-              [
-                {
-                  "capacity_wh": 8000,
-                  "device_id": "battery1"
+              {
+                "ev0": {
+                  "capacity_wh": 60000,
+                  "device_id": "ev0",
+                  "ports": []
                 }
-              ]
+              }
             ]
           },
           "max_electric_vehicles": {
@@ -3067,28 +2962,27 @@
               }
             ],
             "title": "Max Electric Vehicles",
-            "description": "Maximum number of electric vehicles that can be set",
+            "description": "Maximum number of EVs allowed.",
             "examples": [
-              1,
-              2
+              1
             ]
           },
           "inverters": {
             "anyOf": [
               {
-                "items": {
+                "additionalProperties": {
                   "$ref": "#/components/schemas/InverterCommonSettings-Input"
                 },
-                "type": "array"
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Inverters",
-            "description": "List of inverters",
+            "description": "Inverter devices, keyed by device_id.",
             "examples": [
-              []
+              {}
             ]
           },
           "max_inverters": {
@@ -3102,28 +2996,147 @@
               }
             ],
             "title": "Max Inverters",
-            "description": "Maximum number of inverters that can be set",
+            "description": "Maximum number of inverters allowed.",
             "examples": [
-              1,
-              2
+              1
             ]
           },
-          "home_appliances": {
+          "grid_connections": {
             "anyOf": [
               {
-                "items": {
-                  "$ref": "#/components/schemas/HomeApplianceCommonSettings-Input"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/GridConnectionSettings-Input"
                 },
-                "type": "array"
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Home Appliances",
-            "description": "List of home appliances",
+            "title": "Grid Connections",
+            "description": "Grid connection points, keyed by device_id.",
             "examples": [
-              []
+              {}
+            ]
+          },
+          "max_grid_connections": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Grid Connections",
+            "description": "Maximum number of grid connections allowed.",
+            "examples": [
+              1
+            ]
+          },
+          "heat_pumps": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/HeatPumpCommonSettings-Input"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heat Pumps",
+            "description": "Heat pump devices, keyed by device_id.",
+            "examples": [
+              {}
+            ]
+          },
+          "max_heat_pumps": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Heat Pumps",
+            "description": "Maximum number of heat pumps allowed.",
+            "examples": [
+              1
+            ]
+          },
+          "fixed_loads": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/FixedLoadSettings-Input"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fixed Loads",
+            "description": "Non-controllable fixed household loads, keyed by device_id.",
+            "examples": [
+              {
+                "base_load": {
+                  "device_id": "base_load",
+                  "peak_power_w": 500,
+                  "ports": [
+                    {
+                      "bus_id": "bus_ac",
+                      "direction": "sink",
+                      "port_id": "p_ac"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "max_fixed_loads": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Fixed Loads",
+            "description": "Maximum number of fixed loads allowed.",
+            "examples": [
+              3
+            ]
+          },
+          "home_appliances": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/HomeApplianceCommonSettings-Input"
+            },
+            "type": "object",
+            "title": "Home Appliances",
+            "description": "Shiftable home appliance devices, keyed by device_id.",
+            "examples": [
+              {
+                "dishwasher": {
+                  "consumption_wh": 1500,
+                  "device_id": "dishwasher",
+                  "duration_h": 2.0,
+                  "ports": [
+                    {
+                      "bus_id": "bus_ac",
+                      "direction": "sink",
+                      "port_id": "p_ac"
+                    }
+                  ]
+                }
+              }
             ]
           },
           "max_home_appliances": {
@@ -3137,40 +3150,40 @@
               }
             ],
             "title": "Max Home Appliances",
-            "description": "Maximum number of home_appliances that can be set",
+            "description": "Maximum number of home appliances allowed.",
             "examples": [
-              1,
-              2
+              3
             ]
           }
         },
         "type": "object",
         "title": "DevicesCommonSettings",
-        "description": "Base configuration for devices simulation settings."
+        "description": "Configuration for all controllable devices in the simulation.\n\nEvery device collection is a ``dict[str, <Settings>]`` keyed by\n``device_id``.  This makes config paths stable regardless of\ndeclaration order and lets each device settings class build its own\nconfig path from ``self.device_id`` without needing an external index.\n\nDevices reference buses by ``bus_id`` in their ``ports`` field; the\ncorresponding buses must be declared in a separate ``BusesCommonSettings``\nthat is passed alongside this config when building the engine.\n\nCall ``to_genetic2_params()`` to obtain a flat ``list[DeviceParam]``\nfor all devices that have a complete GENETIC2 domain class. Device\ntypes whose domain class is not yet implemented\n(``GridConnectionSettings``, ``FixedLoadSettings``) are skipped with\na warning."
       },
       "DevicesCommonSettings-Output": {
         "properties": {
           "batteries": {
             "anyOf": [
               {
-                "items": {
+                "additionalProperties": {
                   "$ref": "#/components/schemas/BatteriesCommonSettings-Output"
                 },
-                "type": "array"
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Batteries",
-            "description": "List of battery devices",
+            "description": "Stationary battery storage devices, keyed by device_id.",
             "examples": [
-              [
-                {
+              {
+                "bat0": {
                   "capacity_wh": 8000,
-                  "device_id": "battery1"
+                  "device_id": "bat0",
+                  "ports": []
                 }
-              ]
+              }
             ]
           },
           "max_batteries": {
@@ -3184,33 +3197,33 @@
               }
             ],
             "title": "Max Batteries",
-            "description": "Maximum number of batteries that can be set",
+            "description": "Maximum number of batteries allowed.",
             "examples": [
-              1,
-              2
+              1
             ]
           },
           "electric_vehicles": {
             "anyOf": [
               {
-                "items": {
+                "additionalProperties": {
                   "$ref": "#/components/schemas/BatteriesCommonSettings-Output"
                 },
-                "type": "array"
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Electric Vehicles",
-            "description": "List of electric vehicle devices",
+            "description": "Electric vehicle battery packs, keyed by device_id.",
             "examples": [
-              [
-                {
-                  "capacity_wh": 8000,
-                  "device_id": "battery1"
+              {
+                "ev0": {
+                  "capacity_wh": 60000,
+                  "device_id": "ev0",
+                  "ports": []
                 }
-              ]
+              }
             ]
           },
           "max_electric_vehicles": {
@@ -3224,28 +3237,27 @@
               }
             ],
             "title": "Max Electric Vehicles",
-            "description": "Maximum number of electric vehicles that can be set",
+            "description": "Maximum number of EVs allowed.",
             "examples": [
-              1,
-              2
+              1
             ]
           },
           "inverters": {
             "anyOf": [
               {
-                "items": {
+                "additionalProperties": {
                   "$ref": "#/components/schemas/InverterCommonSettings-Output"
                 },
-                "type": "array"
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Inverters",
-            "description": "List of inverters",
+            "description": "Inverter devices, keyed by device_id.",
             "examples": [
-              []
+              {}
             ]
           },
           "max_inverters": {
@@ -3259,28 +3271,147 @@
               }
             ],
             "title": "Max Inverters",
-            "description": "Maximum number of inverters that can be set",
+            "description": "Maximum number of inverters allowed.",
             "examples": [
-              1,
-              2
+              1
             ]
           },
-          "home_appliances": {
+          "grid_connections": {
             "anyOf": [
               {
-                "items": {
-                  "$ref": "#/components/schemas/HomeApplianceCommonSettings-Output"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/GridConnectionSettings-Output"
                 },
-                "type": "array"
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Home Appliances",
-            "description": "List of home appliances",
+            "title": "Grid Connections",
+            "description": "Grid connection points, keyed by device_id.",
             "examples": [
-              []
+              {}
+            ]
+          },
+          "max_grid_connections": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Grid Connections",
+            "description": "Maximum number of grid connections allowed.",
+            "examples": [
+              1
+            ]
+          },
+          "heat_pumps": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/HeatPumpCommonSettings-Output"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heat Pumps",
+            "description": "Heat pump devices, keyed by device_id.",
+            "examples": [
+              {}
+            ]
+          },
+          "max_heat_pumps": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Heat Pumps",
+            "description": "Maximum number of heat pumps allowed.",
+            "examples": [
+              1
+            ]
+          },
+          "fixed_loads": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/FixedLoadSettings-Output"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fixed Loads",
+            "description": "Non-controllable fixed household loads, keyed by device_id.",
+            "examples": [
+              {
+                "base_load": {
+                  "device_id": "base_load",
+                  "peak_power_w": 500,
+                  "ports": [
+                    {
+                      "bus_id": "bus_ac",
+                      "direction": "sink",
+                      "port_id": "p_ac"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "max_fixed_loads": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Fixed Loads",
+            "description": "Maximum number of fixed loads allowed.",
+            "examples": [
+              3
+            ]
+          },
+          "home_appliances": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/HomeApplianceCommonSettings-Output"
+            },
+            "type": "object",
+            "title": "Home Appliances",
+            "description": "Shiftable home appliance devices, keyed by device_id.",
+            "examples": [
+              {
+                "dishwasher": {
+                  "consumption_wh": 1500,
+                  "device_id": "dishwasher",
+                  "duration_h": 2.0,
+                  "ports": [
+                    {
+                      "bus_id": "bus_ac",
+                      "direction": "sink",
+                      "port_id": "p_ac"
+                    }
+                  ]
+                }
+              }
             ]
           },
           "max_home_appliances": {
@@ -3294,26 +3425,18 @@
               }
             ],
             "title": "Max Home Appliances",
-            "description": "Maximum number of home_appliances that can be set",
+            "description": "Maximum number of home appliances allowed.",
             "examples": [
-              1,
-              2
+              3
             ]
           },
           "measurement_keys": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
             "title": "Measurement Keys",
-            "description": "Return the measurement keys for the resource/ device stati that are measurements.",
+            "description": "All measurement keys across all configured devices.",
             "readOnly": true
           }
         },
@@ -3322,7 +3445,7 @@
           "measurement_keys"
         ],
         "title": "DevicesCommonSettings",
-        "description": "Base configuration for devices simulation settings."
+        "description": "Configuration for all controllable devices in the simulation.\n\nEvery device collection is a ``dict[str, <Settings>]`` keyed by\n``device_id``.  This makes config paths stable regardless of\ndeclaration order and lets each device settings class build its own\nconfig path from ``self.device_id`` without needing an external index.\n\nDevices reference buses by ``bus_id`` in their ``ports`` field; the\ncorresponding buses must be declared in a separate ``BusesCommonSettings``\nthat is passed alongside this config when building the engine.\n\nCall ``to_genetic2_params()`` to obtain a flat ``list[DeviceParam]``\nfor all devices that have a complete GENETIC2 domain class. Device\ntypes whose domain class is not yet implemented\n(``GridConnectionSettings``, ``FixedLoadSettings``) are skipped with\na warning."
       },
       "ElecPriceCommonSettings-Input": {
         "properties": {
@@ -3794,6 +3917,16 @@
         "title": "ElectricVehicleResult",
         "description": "Result class containing information related to the electric vehicle's charging and discharging behavior."
       },
+      "EnergyCarrier": {
+        "type": "string",
+        "enum": [
+          "ac",
+          "dc",
+          "heat"
+        ],
+        "title": "EnergyCarrier",
+        "description": "Energy carrier type used for bus topology validation."
+      },
       "EnergyChartsBiddingZones": {
         "type": "string",
         "enum": [
@@ -3962,218 +4095,6 @@
         "title": "EnergyManagementPlan",
         "description": "A coordinated energy management plan composed of device control instructions.\n\nAttributes:\n    plan_id (ID): Unique identifier for this energy management plan.\n    generated_at (DateTime): Timestamp when the plan was generated.\n    valid_from (Optional[DateTime]): Earliest start time of any instruction.\n    valid_until (Optional[DateTime]): Latest end time across all instructions\n        with finite duration; None if all instructions have infinite duration.\n    instructions (list[BaseInstruction]): List of control instructions for the plan.\n    comment (Optional[str]): Optional comment or annotation for the plan."
       },
-      "EnergyMeasurement-Input": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "EnergyMeasurement",
-            "title": "Type",
-            "default": "EnergyMeasurement"
-          },
-          "measurement_timestamp": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Measurement Timestamp",
-            "description": "Timestamp when energy values were measured."
-          },
-          "last_reset": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Reset",
-            "description": "Timestamp when the energy meter's cumulative counter was last reset."
-          },
-          "values": {
-            "items": {
-              "$ref": "#/components/schemas/PowerValue"
-            },
-            "type": "array",
-            "title": "Values",
-            "description": "Array of measured energy values. Shall contain at least one item and at most one item per 'commodity_quantity' (defined inside the PowerValue)."
-          }
-        },
-        "type": "object",
-        "required": [
-          "measurement_timestamp",
-          "values"
-        ],
-        "title": "EnergyMeasurement",
-        "description": "Captures a set of energy meter readouts taken at a specific point in time.\n\nEnergy is defined as the cummulative power per hour as provided by an energy meter.\n\nThis model records multiple energy values (for different commodity quantities)\nalong with the timestamp when the meter readouts were taken, enabling time-series\nanalysis and monitoring of energy consumption or production.\n\nNote: This is an extension to the S2 standard."
-      },
-      "EnergyMeasurement-Output": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "EnergyMeasurement",
-            "title": "Type",
-            "default": "EnergyMeasurement"
-          },
-          "measurement_timestamp": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Measurement Timestamp",
-            "description": "Timestamp when energy values were measured."
-          },
-          "last_reset": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Reset",
-            "description": "Timestamp when the energy meter's cumulative counter was last reset."
-          },
-          "values": {
-            "items": {
-              "$ref": "#/components/schemas/PowerValue"
-            },
-            "type": "array",
-            "title": "Values",
-            "description": "Array of measured energy values. Shall contain at least one item and at most one item per 'commodity_quantity' (defined inside the PowerValue)."
-          }
-        },
-        "type": "object",
-        "required": [
-          "measurement_timestamp",
-          "values"
-        ],
-        "title": "EnergyMeasurement",
-        "description": "Captures a set of energy meter readouts taken at a specific point in time.\n\nEnergy is defined as the cummulative power per hour as provided by an energy meter.\n\nThis model records multiple energy values (for different commodity quantities)\nalong with the timestamp when the meter readouts were taken, enabling time-series\nanalysis and monitoring of energy consumption or production.\n\nNote: This is an extension to the S2 standard."
-      },
-      "FRBCActuatorStatus": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "FRBCActuatorStatus",
-            "title": "Type",
-            "default": "FRBCActuatorStatus"
-          },
-          "active_operation_mode_id": {
-            "type": "string",
-            "title": "Active Operation Mode Id",
-            "description": "Currently active operation mode ID."
-          },
-          "operation_mode_factor": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Operation Mode Factor",
-            "description": "Factor with which the mode is configured (0 to 1)."
-          },
-          "previous_operation_mode_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Previous Operation Mode Id",
-            "description": "Previously active operation mode ID."
-          },
-          "transition_timestamp": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transition Timestamp",
-            "description": "Timestamp of the last transition between modes."
-          }
-        },
-        "type": "object",
-        "required": [
-          "active_operation_mode_id",
-          "operation_mode_factor"
-        ],
-        "title": "FRBCActuatorStatus",
-        "description": "Current status of an FRBC Actuator.\n\nProvides information about the currently active operation mode and transition history.\nUsed to track the current state of the actuator."
-      },
-      "FRBCEnergyStatus-Input": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "FRBCEnergyStatus",
-            "title": "Type",
-            "default": "FRBCEnergyStatus"
-          },
-          "import_total": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EnergyMeasurement-Input"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Total cumulative imported energy from the energy meter start."
-          },
-          "export_total": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EnergyMeasurement-Input"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Total cumulative exported energy from the energy meter start."
-          }
-        },
-        "type": "object",
-        "title": "FRBCEnergyStatus",
-        "description": "Energy status of an FRBC storage.\n\nNote: This is an extension to the S2 standard."
-      },
-      "FRBCEnergyStatus-Output": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "FRBCEnergyStatus",
-            "title": "Type",
-            "default": "FRBCEnergyStatus"
-          },
-          "import_total": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EnergyMeasurement-Output"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Total cumulative imported energy from the energy meter start."
-          },
-          "export_total": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EnergyMeasurement-Output"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Total cumulative exported energy from the energy meter start."
-          }
-        },
-        "type": "object",
-        "title": "FRBCEnergyStatus",
-        "description": "Energy status of an FRBC storage.\n\nNote: This is an extension to the S2 standard."
-      },
       "FRBCInstruction": {
         "properties": {
           "id": {
@@ -4240,61 +4161,6 @@
         ],
         "title": "FRBCInstruction",
         "description": "Instruction for Fill Rate Based Control (FRBC).\n\nContains information about when and how to activate a specific operation mode\nfor an actuator. Used to command resources to change their operation at a specified time."
-      },
-      "FRBCStorageStatus": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "FRBCStorageStatus",
-            "title": "Type",
-            "default": "FRBCStorageStatus"
-          },
-          "present_fill_level": {
-            "type": "number",
-            "title": "Present Fill Level",
-            "description": "Current fill level of the storage."
-          }
-        },
-        "type": "object",
-        "required": [
-          "present_fill_level"
-        ],
-        "title": "FRBCStorageStatus",
-        "description": "Current status of an FRBC Storage.\n\nIndicates the current fill level of the storage, which is essential\nfor determining applicable operation modes and control decisions."
-      },
-      "FRBCTimerStatus": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "FRBCTimerStatus",
-            "title": "Type",
-            "default": "FRBCTimerStatus"
-          },
-          "actuator_id": {
-            "type": "string",
-            "title": "Actuator Id",
-            "description": "ID of the actuator the timer belongs to."
-          },
-          "timer_id": {
-            "type": "string",
-            "title": "Timer Id",
-            "description": "ID of the timer this status refers to."
-          },
-          "finished_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Finished At",
-            "description": "Indicates when the Timer will be finished. If the DateTime is in the future, the timer is not yet finished. If the DateTime is in the past, the timer is finished. If the timer was never started, the value can be an arbitrary DateTimeStamp in the past."
-          }
-        },
-        "type": "object",
-        "required": [
-          "actuator_id",
-          "timer_id",
-          "finished_at"
-        ],
-        "title": "FRBCTimerStatus",
-        "description": "Current status of an FRBC Timer.\n\nIndicates when the Timer will be finished."
       },
       "FeedInTariffCommonProviderSettings": {
         "properties": {
@@ -4467,6 +4333,136 @@
         "type": "object",
         "title": "FeedInTariffImportCommonSettings",
         "description": "Common settings for feed in tariff data import from file or JSON string."
+      },
+      "FixedLoadSettings-Input": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id",
+            "description": "ID of device",
+            "default": "<unknown>",
+            "examples": [
+              "battery1",
+              "ev1",
+              "inverter1",
+              "dishwasher"
+            ]
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortConfig"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ports",
+            "description": "Ports connecting this device to energy buses. At least one port is required. Each port_id must be unique within this device.\nDefaults to [{\"port_id\": \"port_ac\", \"bus_id\": \"bus_ac\", \"direction\": \"bidirectional\"}]",
+            "default": [
+              {
+                "port_id": "port_ac",
+                "bus_id": "bus_ac",
+                "direction": "bidirectional"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_ac",
+                  "direction": "bidirectional",
+                  "port_id": "port_ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "peak_power_w": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Peak Power W",
+            "description": "Peak power consumption of this load [W]. Actual consumption per step is provided by a forecast.",
+            "examples": [
+              500,
+              1200
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "peak_power_w"
+        ],
+        "title": "FixedLoadSettings",
+        "description": "Fixed (non-controllable) household load settings.\n\nRepresents a device whose consumption is driven entirely by an\nexternal forecast \u2014 it has no genome and the optimizer cannot\nshift or reduce its load. Typical examples: refrigerator, always-on\nequipment, base load.\n\nPort wiring guidance\n--------------------\n\nFixed AC load::\n\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink\n\nNotes:\n------\n``FixedLoadParam`` does not yet exist in ``devicesabc``.\n``to_genetic2_param()`` raises ``NotImplementedError`` until it is\nadded."
+      },
+      "FixedLoadSettings-Output": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id",
+            "description": "ID of device",
+            "default": "<unknown>",
+            "examples": [
+              "battery1",
+              "ev1",
+              "inverter1",
+              "dishwasher"
+            ]
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortConfig"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ports",
+            "description": "Ports connecting this device to energy buses. At least one port is required. Each port_id must be unique within this device.\nDefaults to [{\"port_id\": \"port_ac\", \"bus_id\": \"bus_ac\", \"direction\": \"bidirectional\"}]",
+            "default": [
+              {
+                "port_id": "port_ac",
+                "bus_id": "bus_ac",
+                "direction": "bidirectional"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_ac",
+                  "direction": "bidirectional",
+                  "port_id": "port_ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "peak_power_w": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Peak Power W",
+            "description": "Peak power consumption of this load [W]. Actual consumption per step is provided by a forecast.",
+            "examples": [
+              500,
+              1200
+            ]
+          },
+          "measurement_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Measurement Keys",
+            "description": "Measurement keys for this load (currently none).",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "peak_power_w",
+          "measurement_keys"
+        ],
+        "title": "FixedLoadSettings",
+        "description": "Fixed (non-controllable) household load settings.\n\nRepresents a device whose consumption is driven entirely by an\nexternal forecast \u2014 it has no genome and the optimizer cannot\nshift or reduce its load. Typical examples: refrigerator, always-on\nequipment, base load.\n\nPort wiring guidance\n--------------------\n\nFixed AC load::\n\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink\n\nNotes:\n------\n``FixedLoadParam`` does not yet exist in ``devicesabc``.\n``to_genetic2_param()`` raises ``NotImplementedError`` until it is\nadded."
       },
       "ForecastResponse": {
         "properties": {
@@ -4726,6 +4722,10 @@
             "default": 300,
             "examples": [
               300
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
             ]
           },
           "generations": {
@@ -4743,6 +4743,10 @@
             "default": 400,
             "examples": [
               400
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
             ]
           },
           "seed": {
@@ -4759,6 +4763,10 @@
             "description": "Fixed seed for genetic algorithm. Defaults to 'None' which means random seed.",
             "examples": [
               null
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
             ]
           },
           "penalties": {
@@ -4782,6 +4790,9 @@
               {
                 "ev_soc_miss": 10
               }
+            ],
+            "x-scope": [
+              "GENETIC"
             ]
           }
         },
@@ -5195,6 +5206,196 @@
         ],
         "title": "GesamtlastRequest"
       },
+      "GridConnectionSettings-Input": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id",
+            "description": "ID of device",
+            "default": "<unknown>",
+            "examples": [
+              "battery1",
+              "ev1",
+              "inverter1",
+              "dishwasher"
+            ]
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortConfig"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ports",
+            "description": "Ports connecting this device to energy buses. At least one port is required. Each port_id must be unique within this device.\nDefaults to [{\"port_id\": \"port_ac\", \"bus_id\": \"bus_ac\", \"direction\": \"bidirectional\"}]",
+            "default": [
+              {
+                "port_id": "port_ac",
+                "bus_id": "bus_ac",
+                "direction": "bidirectional"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_ac",
+                  "direction": "bidirectional",
+                  "port_id": "port_ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "max_import_power_w": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Import Power W",
+            "description": "Maximum power import from the grid [W].",
+            "default": 11000,
+            "examples": [
+              11000,
+              25000
+            ]
+          },
+          "max_export_power_w": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Export Power W",
+            "description": "Maximum power export to the grid [W].",
+            "default": 11000,
+            "examples": [
+              11000,
+              0
+            ]
+          },
+          "import_cost_per_kwh": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Import Cost Per Kwh",
+            "description": "Cost of importing 1 kWh from the grid [currency/kWh].",
+            "default": 0.3,
+            "examples": [
+              0.3
+            ]
+          },
+          "export_revenue_per_kwh": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Export Revenue Per Kwh",
+            "description": "Revenue from exporting 1 kWh to the grid [currency/kWh].",
+            "default": 0.08,
+            "examples": [
+              0.08
+            ]
+          }
+        },
+        "type": "object",
+        "title": "GridConnectionSettings",
+        "description": "Grid connection device settings.\n\nRepresents the household's connection point to the public AC grid.\nThe grid is bidirectional \u2014 it can import power (positive, consuming\nfrom the grid) or export power (negative, injecting into the grid).\n\nPort wiring guidance\n--------------------\nStandard grid connection::\n\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: bidirectional\n        max_power_w: 11000     # grid connection limit [W]"
+      },
+      "GridConnectionSettings-Output": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id",
+            "description": "ID of device",
+            "default": "<unknown>",
+            "examples": [
+              "battery1",
+              "ev1",
+              "inverter1",
+              "dishwasher"
+            ]
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortConfig"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ports",
+            "description": "Ports connecting this device to energy buses. At least one port is required. Each port_id must be unique within this device.\nDefaults to [{\"port_id\": \"port_ac\", \"bus_id\": \"bus_ac\", \"direction\": \"bidirectional\"}]",
+            "default": [
+              {
+                "port_id": "port_ac",
+                "bus_id": "bus_ac",
+                "direction": "bidirectional"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_ac",
+                  "direction": "bidirectional",
+                  "port_id": "port_ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "max_import_power_w": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Import Power W",
+            "description": "Maximum power import from the grid [W].",
+            "default": 11000,
+            "examples": [
+              11000,
+              25000
+            ]
+          },
+          "max_export_power_w": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Export Power W",
+            "description": "Maximum power export to the grid [W].",
+            "default": 11000,
+            "examples": [
+              11000,
+              0
+            ]
+          },
+          "import_cost_per_kwh": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Import Cost Per Kwh",
+            "description": "Cost of importing 1 kWh from the grid [currency/kWh].",
+            "default": 0.3,
+            "examples": [
+              0.3
+            ]
+          },
+          "export_revenue_per_kwh": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Export Revenue Per Kwh",
+            "description": "Revenue from exporting 1 kWh to the grid [currency/kWh].",
+            "default": 0.08,
+            "examples": [
+              0.08
+            ]
+          },
+          "measurement_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Measurement Keys",
+            "description": "Measurement keys for this grid connection (currently none).",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "measurement_keys"
+        ],
+        "title": "GridConnectionSettings",
+        "description": "Grid connection device settings.\n\nRepresents the household's connection point to the public AC grid.\nThe grid is bidirectional \u2014 it can import power (positive, consuming\nfrom the grid) or export power (negative, injecting into the grid).\n\nPort wiring guidance\n--------------------\nStandard grid connection::\n\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: bidirectional\n        max_power_w: 11000     # grid connection limit [W]"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5207,6 +5408,168 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HeatPumpCommonSettings-Input": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id",
+            "description": "ID of device",
+            "default": "<unknown>",
+            "examples": [
+              "battery1",
+              "ev1",
+              "inverter1",
+              "dishwasher"
+            ]
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortConfig"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ports",
+            "description": "Ports connecting this device to energy buses. At least one port is required. Each port_id must be unique within this device.\nDefaults to [{\"port_id\": \"port_ac\", \"bus_id\": \"bus_ac\", \"direction\": \"bidirectional\"}]",
+            "default": [
+              {
+                "port_id": "port_ac",
+                "bus_id": "bus_ac",
+                "direction": "bidirectional"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_ac",
+                  "direction": "bidirectional",
+                  "port_id": "port_ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "thermal_power_w": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Thermal Power W",
+            "description": "Rated thermal output power [W].",
+            "examples": [
+              8000
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "cop": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Cop",
+            "description": "Coefficient of performance: thermal output / electrical input. Electrical input = thermal_power_w / cop.",
+            "default": 3.0,
+            "examples": [
+              3.0,
+              4.5
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "thermal_power_w"
+        ],
+        "title": "HeatPumpCommonSettings",
+        "description": "Heat pump device settings.\n\nA heat pump consumes AC electrical power and produces thermal output.\nIt therefore needs an AC electrical port and a heat bus port.\n\nPort wiring guidance\n--------------------\nStandard heat pump::\n\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink       # consumes AC power\n      - port_id: p_heat\n        bus_id: bus_heat\n        direction: source     # delivers thermal output"
+      },
+      "HeatPumpCommonSettings-Output": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id",
+            "description": "ID of device",
+            "default": "<unknown>",
+            "examples": [
+              "battery1",
+              "ev1",
+              "inverter1",
+              "dishwasher"
+            ]
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortConfig"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ports",
+            "description": "Ports connecting this device to energy buses. At least one port is required. Each port_id must be unique within this device.\nDefaults to [{\"port_id\": \"port_ac\", \"bus_id\": \"bus_ac\", \"direction\": \"bidirectional\"}]",
+            "default": [
+              {
+                "port_id": "port_ac",
+                "bus_id": "bus_ac",
+                "direction": "bidirectional"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_ac",
+                  "direction": "bidirectional",
+                  "port_id": "port_ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "thermal_power_w": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Thermal Power W",
+            "description": "Rated thermal output power [W].",
+            "examples": [
+              8000
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "cop": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Cop",
+            "description": "Coefficient of performance: thermal output / electrical input. Electrical input = thermal_power_w / cop.",
+            "default": 3.0,
+            "examples": [
+              3.0,
+              4.5
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "measurement_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Measurement Keys",
+            "description": "Measurement keys for this heat pump (currently none).",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "thermal_power_w",
+          "measurement_keys"
+        ],
+        "title": "HeatPumpCommonSettings",
+        "description": "Heat pump device settings.\n\nA heat pump consumes AC electrical power and produces thermal output.\nIt therefore needs an AC electrical port and a heat bus port.\n\nPort wiring guidance\n--------------------\nStandard heat pump::\n\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink       # consumes AC power\n      - port_id: p_heat\n        bus_id: bus_heat\n        direction: source     # delivers thermal output"
       },
       "HomeApplianceCommonSettings-Input": {
         "properties": {
@@ -5222,11 +5585,39 @@
               "dishwasher"
             ]
           },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortConfig"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ports",
+            "description": "Ports connecting this device to energy buses. At least one port is required. Each port_id must be unique within this device.\nDefaults to [{\"port_id\": \"port_ac\", \"bus_id\": \"bus_ac\", \"direction\": \"bidirectional\"}]",
+            "default": [
+              {
+                "port_id": "port_ac",
+                "bus_id": "bus_ac",
+                "direction": "bidirectional"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_ac",
+                  "direction": "bidirectional",
+                  "port_id": "port_ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
           "consumption_wh": {
             "type": "integer",
             "exclusiveMinimum": 0.0,
             "title": "Consumption Wh",
-            "description": "Energy consumption [Wh].",
+            "description": "Energy consumption per run cycle [Wh].",
             "examples": [
               2000
             ]
@@ -5236,30 +5627,88 @@
             "maximum": 24.0,
             "exclusiveMinimum": 0.0,
             "title": "Duration H",
-            "description": "Usage duration in hours [0 ... 24].",
+            "description": "Run duration per cycle [h] (1-24).",
             "examples": [
-              1
+              2
             ]
           },
-          "time_windows": {
+          "num_cycles": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Num Cycles",
+            "description": "Number of times the appliance must run within the horizon. Required when cycle_time_windows is null (unconstrained). Ignored when cycle_time_windows is provided -- the number of distinct cycle indices in the windows defines num_cycles. Defaults to 1.",
+            "default": 1,
+            "examples": [
+              1,
+              2
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "cycle_time_windows": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TimeWindowSequence-Input"
+                "$ref": "#/components/schemas/CycleTimeWindowSequence-Input"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Sequence of allowed time windows. Defaults to optimization general time window.",
+            "description": "Per-cycle allowed scheduling time windows. Each window's value field specifies the cycle index (0-based). When null, the appliance may start at any step and num_cycles must be set explicitly.",
             "examples": [
+              null,
               {
                 "windows": [
                   {
-                    "duration": "2 hours",
-                    "start_time": "10:00"
+                    "duration": "5 hours",
+                    "start_time": "07:00",
+                    "value": 0
+                  },
+                  {
+                    "duration": "5 hours",
+                    "start_time": "17:00",
+                    "value": 1
                   }
                 ]
               }
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "min_cycle_gap_h": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Min Cycle Gap H",
+            "description": "Minimum idle time between the end of one cycle and the start of the next [h]. Applies uniformly between all consecutive cycles. 0 means back-to-back runs are permitted.",
+            "default": 0,
+            "examples": [
+              0,
+              1,
+              4
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "cycles_completed_measurement_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cycles Completed Measurement Key",
+            "description": "Measurement store key holding the number of cycles already completed in the current planning day. Read by HomeApplianceDevice.setup_run via context.resolve_measurement. Defaults to '{device_id}.cycles_completed' when null.",
+            "examples": [
+              "dishwasher.cycles_completed",
+              null
+            ],
+            "x-scope": [
+              "GENETIC2"
             ]
           }
         },
@@ -5269,7 +5718,7 @@
           "duration_h"
         ],
         "title": "HomeApplianceCommonSettings",
-        "description": "Home Appliance devices base settings."
+        "description": "Controllable home appliance device settings.\n\nRepresents a shiftable load whose start time \u2014 and optionally the\nstart times for multiple sequential runs \u2014 can be deferred by the\noptimiser within per-cycle allowed time windows.\n\nThe number of remaining cycles to plan is determined at runtime by\nreading ``cycles_completed_measurement_key`` from the measurement\nstore inside ``HomeApplianceDevice.setup_run``.\n\n``num_cycles`` is required when ``cycle_time_windows`` is ``None``\n(unconstrained); when windows are provided it is derived from\n``cycle_time_windows.num_cycles()``.\n\nSingle-cycle, unconstrained (start any time)\n---------------------------------------------\n\n::\n\n    device_id: dishwasher\n    consumption_wh: 1500\n    duration_h: 2\n    num_cycles: 1\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink\n\nSingle-cycle, constrained to one window\n----------------------------------------\n\nEach window's ``value`` field carries the **cycle index** (0-based).\nWindows without a ``value`` are ignored by the optimizer::\n\n    device_id: dishwasher\n    consumption_wh: 1500\n    duration_h: 2\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink\n    cycle_time_windows:\n      windows:\n        - start_time: \"10:00\"\n          duration: \"12 hours\"\n          value: 0\n\nMulti-cycle, per-cycle windows\n--------------------------------\n\nTwo cycles, each with its own window.  Cycle 0 runs in the morning,\ncycle 1 in the evening::\n\n    device_id: washing_machine\n    consumption_wh: 2000\n    duration_h: 2\n    min_cycle_gap_h: 1\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink\n    cycle_time_windows:\n      windows:\n        - start_time: \"07:00\"\n          duration: \"5 hours\"\n          value: 0\n        - start_time: \"17:00\"\n          duration: \"5 hours\"\n          value: 1\n\nMulti-cycle, shared window (both cycles may run any time 10:00-20:00)\n-----------------------------------------------------------------------\n\nAssign the same-shaped windows to distinct cycle indices so the\noptimizer can place them independently::\n\n    cycle_time_windows:\n      windows:\n        - start_time: \"10:00\"\n          duration: \"10 hours\"\n          value: 0\n        - start_time: \"10:00\"\n          duration: \"10 hours\"\n          value: 1\n\nPort wiring guidance\n--------------------\n\nStandard AC appliance::\n\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink"
       },
       "HomeApplianceCommonSettings-Output": {
         "properties": {
@@ -5285,11 +5734,39 @@
               "dishwasher"
             ]
           },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortConfig"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ports",
+            "description": "Ports connecting this device to energy buses. At least one port is required. Each port_id must be unique within this device.\nDefaults to [{\"port_id\": \"port_ac\", \"bus_id\": \"bus_ac\", \"direction\": \"bidirectional\"}]",
+            "default": [
+              {
+                "port_id": "port_ac",
+                "bus_id": "bus_ac",
+                "direction": "bidirectional"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_ac",
+                  "direction": "bidirectional",
+                  "port_id": "port_ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
           "consumption_wh": {
             "type": "integer",
             "exclusiveMinimum": 0.0,
             "title": "Consumption Wh",
-            "description": "Energy consumption [Wh].",
+            "description": "Energy consumption per run cycle [Wh].",
             "examples": [
               2000
             ]
@@ -5299,46 +5776,103 @@
             "maximum": 24.0,
             "exclusiveMinimum": 0.0,
             "title": "Duration H",
-            "description": "Usage duration in hours [0 ... 24].",
+            "description": "Run duration per cycle [h] (1-24).",
             "examples": [
-              1
+              2
             ]
           },
-          "time_windows": {
+          "num_cycles": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Num Cycles",
+            "description": "Number of times the appliance must run within the horizon. Required when cycle_time_windows is null (unconstrained). Ignored when cycle_time_windows is provided -- the number of distinct cycle indices in the windows defines num_cycles. Defaults to 1.",
+            "default": 1,
+            "examples": [
+              1,
+              2
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "cycle_time_windows": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TimeWindowSequence-Output"
+                "$ref": "#/components/schemas/CycleTimeWindowSequence-Output"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Sequence of allowed time windows. Defaults to optimization general time window.",
+            "description": "Per-cycle allowed scheduling time windows. Each window's value field specifies the cycle index (0-based). When null, the appliance may start at any step and num_cycles must be set explicitly.",
             "examples": [
+              null,
               {
                 "windows": [
                   {
-                    "duration": "2 hours",
-                    "start_time": "10:00"
+                    "duration": "5 hours",
+                    "start_time": "07:00",
+                    "value": 0
+                  },
+                  {
+                    "duration": "5 hours",
+                    "start_time": "17:00",
+                    "value": 1
                   }
                 ]
               }
+            ],
+            "x-scope": [
+              "GENETIC2"
             ]
           },
-          "measurement_keys": {
+          "min_cycle_gap_h": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Min Cycle Gap H",
+            "description": "Minimum idle time between the end of one cycle and the start of the next [h]. Applies uniformly between all consecutive cycles. 0 means back-to-back runs are permitted.",
+            "default": 0,
+            "examples": [
+              0,
+              1,
+              4
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "cycles_completed_measurement_key": {
             "anyOf": [
               {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
+            "title": "Cycles Completed Measurement Key",
+            "description": "Measurement store key holding the number of cycles already completed in the current planning day. Read by HomeApplianceDevice.setup_run via context.resolve_measurement. Defaults to '{device_id}.cycles_completed' when null.",
+            "examples": [
+              "dishwasher.cycles_completed",
+              null
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
+          "effective_num_cycles": {
+            "type": "integer",
+            "title": "Effective Num Cycles",
+            "description": "Number of cycles as seen by the optimizer.\n\nDerived from cycle_time_windows.num_cycles() when windows are\nprovided; falls back to the explicit num_cycles field otherwise.",
+            "readOnly": true
+          },
+          "measurement_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
             "title": "Measurement Keys",
-            "description": "Measurement keys for the home appliance stati that are measurements.",
+            "description": "Measurement keys this appliance reads.\n\nExposes the completed-cycles key so the broader system knows to\npopulate it after each run completes.",
             "readOnly": true
           }
         },
@@ -5346,10 +5880,11 @@
         "required": [
           "consumption_wh",
           "duration_h",
+          "effective_num_cycles",
           "measurement_keys"
         ],
         "title": "HomeApplianceCommonSettings",
-        "description": "Home Appliance devices base settings."
+        "description": "Controllable home appliance device settings.\n\nRepresents a shiftable load whose start time \u2014 and optionally the\nstart times for multiple sequential runs \u2014 can be deferred by the\noptimiser within per-cycle allowed time windows.\n\nThe number of remaining cycles to plan is determined at runtime by\nreading ``cycles_completed_measurement_key`` from the measurement\nstore inside ``HomeApplianceDevice.setup_run``.\n\n``num_cycles`` is required when ``cycle_time_windows`` is ``None``\n(unconstrained); when windows are provided it is derived from\n``cycle_time_windows.num_cycles()``.\n\nSingle-cycle, unconstrained (start any time)\n---------------------------------------------\n\n::\n\n    device_id: dishwasher\n    consumption_wh: 1500\n    duration_h: 2\n    num_cycles: 1\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink\n\nSingle-cycle, constrained to one window\n----------------------------------------\n\nEach window's ``value`` field carries the **cycle index** (0-based).\nWindows without a ``value`` are ignored by the optimizer::\n\n    device_id: dishwasher\n    consumption_wh: 1500\n    duration_h: 2\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink\n    cycle_time_windows:\n      windows:\n        - start_time: \"10:00\"\n          duration: \"12 hours\"\n          value: 0\n\nMulti-cycle, per-cycle windows\n--------------------------------\n\nTwo cycles, each with its own window.  Cycle 0 runs in the morning,\ncycle 1 in the evening::\n\n    device_id: washing_machine\n    consumption_wh: 2000\n    duration_h: 2\n    min_cycle_gap_h: 1\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink\n    cycle_time_windows:\n      windows:\n        - start_time: \"07:00\"\n          duration: \"5 hours\"\n          value: 0\n        - start_time: \"17:00\"\n          duration: \"5 hours\"\n          value: 1\n\nMulti-cycle, shared window (both cycles may run any time 10:00-20:00)\n-----------------------------------------------------------------------\n\nAssign the same-shaped windows to distinct cycle indices so the\noptimizer can place them independently::\n\n    cycle_time_windows:\n      windows:\n        - start_time: \"10:00\"\n          duration: \"10 hours\"\n          value: 0\n        - start_time: \"10:00\"\n          duration: \"10 hours\"\n          value: 1\n\nPort wiring guidance\n--------------------\n\nStandard AC appliance::\n\n    ports:\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: sink"
       },
       "HomeApplianceParameters": {
         "properties": {
@@ -5398,7 +5933,7 @@
           "time_windows": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TimeWindowSequence-Input"
+                "$ref": "#/components/schemas/TimeWindowSequence"
               },
               {
                 "type": "null"
@@ -5408,7 +5943,7 @@
             "examples": [
               [
                 {
-                  "duration": "3 hours",
+                  "duration": "2 hours",
                   "start_time": "10:00"
                 }
               ]
@@ -5823,6 +6358,34 @@
               "dishwasher"
             ]
           },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortConfig"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ports",
+            "description": "Ports connecting this device to energy buses. At least one port is required. Each port_id must be unique within this device.\nDefaults to [{\"port_id\": \"port_ac\", \"bus_id\": \"bus_ac\", \"direction\": \"bidirectional\"}]",
+            "default": [
+              {
+                "port_id": "port_ac",
+                "bus_id": "bus_ac",
+                "direction": "bidirectional"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_ac",
+                  "direction": "bidirectional",
+                  "port_id": "port_ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
           "max_power_w": {
             "anyOf": [
               {
@@ -5834,51 +6397,59 @@
               }
             ],
             "title": "Max Power W",
-            "description": "Maximum power [W].",
+            "description": "Maximum AC output power [W].",
             "examples": [
               10000
-            ]
-          },
-          "battery_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
             ],
-            "title": "Battery Id",
-            "description": "ID of battery controlled by this inverter.",
-            "examples": [
-              null,
-              "battery1"
-            ]
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
           },
           "ac_to_dc_efficiency": {
             "type": "number",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Ac To Dc Efficiency",
-            "description": "Efficiency of AC to DC conversion for grid-to-battery AC charging (0-1). Set to 0 to disable AC charging. Default 1.0 (no additional inverter loss).",
+            "description": "Efficiency of AC\u2192DC conversion for grid-to-battery charging (0\u20131). Set to 0 to disable AC charging. Default 1.0.",
             "default": 1.0,
             "examples": [
               0.95,
               1.0,
               0.0
-            ]
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
           },
           "dc_to_ac_efficiency": {
             "type": "number",
             "maximum": 1.0,
             "exclusiveMinimum": 0.0,
             "title": "Dc To Ac Efficiency",
-            "description": "Efficiency of DC to AC conversion for battery discharging to AC load/grid (0-1). Default 1.0 (no additional inverter loss).",
+            "description": "Efficiency of DC\u2192AC conversion for battery discharging (0\u20131). Default 1.0.",
             "default": 1.0,
             "examples": [
               0.95,
               1.0
-            ]
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
           },
           "max_ac_charge_power_w": {
             "anyOf": [
@@ -5891,17 +6462,368 @@
               }
             ],
             "title": "Max Ac Charge Power W",
-            "description": "Maximum AC charging power in watts. null means no additional limit. Set to 0 to disable AC charging.",
+            "description": "Maximum AC charging power [W]. null means no additional limit. 0 disables AC charging.",
             "examples": [
               null,
               0,
               5000
-            ]
+            ],
+            "x-scope": [
+              "GENETIC"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
+          },
+          "battery_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery Id",
+            "description": "Device ID of the battery.",
+            "examples": [
+              null
+            ],
+            "x-scope": [
+              "GENETIC"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "id"
+            }
+          },
+          "off_state_power_consumption_w": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Off State Power Consumption W",
+            "description": "Standby power consumed when the inverter is fully idle (battery=0 and PV=0) [W]. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              5.0,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
+          },
+          "on_state_power_consumption_w": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "On State Power Consumption W",
+            "description": "Auxiliary power consumed whenever the inverter is active (non-zero AC power) [W]. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              10.0,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
+          },
+          "pv_to_ac_efficiency": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Pv To Ac Efficiency",
+            "description": "Efficiency of PV DC\u2192AC conversion (0\u20131). Required when pv_power_w_key is set (SOLAR or HYBRID). Default 1.0.",
+            "default": 1.0,
+            "examples": [
+              0.97,
+              1.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "pv_to_battery_efficiency": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Pv To Battery Efficiency",
+            "description": "Efficiency of PV DC\u2192battery charging path (0\u20131). Used for HYBRID inverters only. Default 1.0.",
+            "default": 1.0,
+            "examples": [
+              0.98,
+              1.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "pv_max_power_w": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pv Max Power W",
+            "description": "Maximum DC PV power fed into the inverter [W]. Required when pv_power_w_key is set (SOLAR or HYBRID). Values from pv_power_w_key are clipped to this limit.",
+            "examples": [
+              8000.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
+          },
+          "pv_min_power_w": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Pv Min Power W",
+            "description": "Minimum DC PV power threshold [W]. Steps with available PV below this value are treated as zero. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              50.0,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
+          },
+          "pv_power_w_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pv Power W Key",
+            "description": "SimulationContext prediction key resolving to a per-step PV power forecast array [W] of shape (horizon,). Set for SOLAR and HYBRID inverter types; leave None for BATTERY.",
+            "examples": [
+              "pv_forecast_w",
+              null
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "prediction_key"
+            }
+          },
+          "battery_capacity_wh": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery Capacity Wh",
+            "description": "Usable battery capacity [Wh]. Required for BATTERY and HYBRID inverter types.",
+            "examples": [
+              10000.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "Wh",
+              "widget": "number"
+            }
+          },
+          "battery_charge_rates": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery Charge Rates",
+            "description": "Optional list of discrete charge rate fractions (each in (0, 1]). When set, the battery is constrained to these specific fractions of battery_max_charge_rate. null means continuous charging. All values must be in (0, 1].",
+            "examples": [
+              null,
+              [
+                0.25,
+                0.5,
+                1.0
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "list_number"
+            }
+          },
+          "battery_min_charge_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Battery Min Charge Rate",
+            "description": "Minimum non-zero charge rate as a fraction of battery_max_charge_rate. Charge commands below this threshold are rounded to zero. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              0.1,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_max_charge_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Battery Max Charge Rate",
+            "description": "Maximum charge rate as a fraction of the 1C rate (1C = battery_capacity_wh W). bat_factor=+1 maps to this rate. Default 1.0 (full 1C charge).",
+            "default": 1.0,
+            "examples": [
+              0.5,
+              1.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_min_discharge_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Battery Min Discharge Rate",
+            "description": "Minimum non-zero discharge rate as a fraction of battery_max_discharge_rate. Discharge commands below this threshold are rounded to zero. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              0.1,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_max_discharge_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Battery Max Discharge Rate",
+            "description": "Maximum discharge rate as a fraction of the 1C rate. bat_factor=\u22121 maps to this rate. Default 1.0 (full 1C discharge).",
+            "default": 1.0,
+            "examples": [
+              0.5,
+              1.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_min_soc_factor": {
+            "type": "number",
+            "exclusiveMaximum": 1.0,
+            "minimum": 0.0,
+            "title": "Battery Min Soc Factor",
+            "description": "Minimum allowed state of charge as a fraction of battery_capacity_wh. Must be < battery_max_soc_factor. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              0.1,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_max_soc_factor": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Battery Max Soc Factor",
+            "description": "Maximum allowed state of charge as a fraction of battery_capacity_wh. Must be > battery_min_soc_factor. Default 1.0.",
+            "default": 1.0,
+            "examples": [
+              0.9,
+              1.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_initial_soc_factor_key": {
+            "type": "string",
+            "title": "Battery Initial Soc Factor Key",
+            "description": "SimulationContext measurement key resolving to the initial battery SoC as a fraction of battery_capacity_wh, in [min_soc_factor, max_soc_factor]. An empty string means the device uses battery_min_soc_factor as the initial SoC (fully depleted to the minimum).",
+            "default": "",
+            "examples": [
+              "battery1.soc_factor",
+              ""
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "measurement_key"
+            }
           }
         },
         "type": "object",
         "title": "InverterCommonSettings",
-        "description": "Inverter devices base settings."
+        "description": "Inverter device settings.\n\nAn inverter bridges a DC bus (PV / battery) and an AC bus (grid /\nhousehold). It must therefore have at least one DC port and one AC\nport.\n\nPort wiring guidance\n--------------------\n\nStandard string inverter (PV-only, no battery)::\n\n    ports:\n      - port_id: p_dc\n        bus_id: bus_dc\n        direction: sink       # consumes DC power from PV\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: source     # injects AC power onto the AC bus\n\nHybrid inverter with battery::\n\n    ports:\n      - port_id: p_dc\n        bus_id: bus_dc\n        direction: bidirectional  # DC bus shared with battery\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: bidirectional  # can import AC for battery charging\n\nGENETIC2 inverter type inference\n---------------------------------\n\nThe ``inverter_type`` passed to ``HybridInverterParam`` is inferred\nautomatically from the fields that are set:\n\n- ``HYBRID``: ``pv_power_w_key`` is set **and** ``battery_capacity_wh``\n  is set (and > 0).\n- ``SOLAR``: ``pv_power_w_key`` is set but ``battery_capacity_wh`` is\n  ``None`` or 0.\n- ``BATTERY``: ``pv_power_w_key`` is ``None`` and\n  ``battery_capacity_wh`` is set (and > 0).\n\nNotes:\n------\n``battery_id`` is retained for backward compatibility with existing\nconfigurations but is not used by ``to_genetic2_param()``. Port wiring\nreplaces that coupling."
       },
       "InverterCommonSettings-Output": {
         "properties": {
@@ -5917,6 +6839,34 @@
               "dishwasher"
             ]
           },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortConfig"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ports",
+            "description": "Ports connecting this device to energy buses. At least one port is required. Each port_id must be unique within this device.\nDefaults to [{\"port_id\": \"port_ac\", \"bus_id\": \"bus_ac\", \"direction\": \"bidirectional\"}]",
+            "default": [
+              {
+                "port_id": "port_ac",
+                "bus_id": "bus_ac",
+                "direction": "bidirectional"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "bus_id": "bus_ac",
+                  "direction": "bidirectional",
+                  "port_id": "port_ac"
+                }
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ]
+          },
           "max_power_w": {
             "anyOf": [
               {
@@ -5928,51 +6878,59 @@
               }
             ],
             "title": "Max Power W",
-            "description": "Maximum power [W].",
+            "description": "Maximum AC output power [W].",
             "examples": [
               10000
-            ]
-          },
-          "battery_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
             ],
-            "title": "Battery Id",
-            "description": "ID of battery controlled by this inverter.",
-            "examples": [
-              null,
-              "battery1"
-            ]
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
           },
           "ac_to_dc_efficiency": {
             "type": "number",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Ac To Dc Efficiency",
-            "description": "Efficiency of AC to DC conversion for grid-to-battery AC charging (0-1). Set to 0 to disable AC charging. Default 1.0 (no additional inverter loss).",
+            "description": "Efficiency of AC\u2192DC conversion for grid-to-battery charging (0\u20131). Set to 0 to disable AC charging. Default 1.0.",
             "default": 1.0,
             "examples": [
               0.95,
               1.0,
               0.0
-            ]
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
           },
           "dc_to_ac_efficiency": {
             "type": "number",
             "maximum": 1.0,
             "exclusiveMinimum": 0.0,
             "title": "Dc To Ac Efficiency",
-            "description": "Efficiency of DC to AC conversion for battery discharging to AC load/grid (0-1). Default 1.0 (no additional inverter loss).",
+            "description": "Efficiency of DC\u2192AC conversion for battery discharging (0\u20131). Default 1.0.",
             "default": 1.0,
             "examples": [
               0.95,
               1.0
-            ]
+            ],
+            "x-scope": [
+              "GENETIC",
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
           },
           "max_ac_charge_power_w": {
             "anyOf": [
@@ -5985,18 +6943,208 @@
               }
             ],
             "title": "Max Ac Charge Power W",
-            "description": "Maximum AC charging power in watts. null means no additional limit. Set to 0 to disable AC charging.",
+            "description": "Maximum AC charging power [W]. null means no additional limit. 0 disables AC charging.",
             "examples": [
               null,
               0,
               5000
-            ]
+            ],
+            "x-scope": [
+              "GENETIC"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
           },
-          "measurement_keys": {
+          "battery_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery Id",
+            "description": "Device ID of the battery.",
+            "examples": [
+              null
+            ],
+            "x-scope": [
+              "GENETIC"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "id"
+            }
+          },
+          "off_state_power_consumption_w": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Off State Power Consumption W",
+            "description": "Standby power consumed when the inverter is fully idle (battery=0 and PV=0) [W]. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              5.0,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
+          },
+          "on_state_power_consumption_w": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "On State Power Consumption W",
+            "description": "Auxiliary power consumed whenever the inverter is active (non-zero AC power) [W]. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              10.0,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
+          },
+          "pv_to_ac_efficiency": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Pv To Ac Efficiency",
+            "description": "Efficiency of PV DC\u2192AC conversion (0\u20131). Required when pv_power_w_key is set (SOLAR or HYBRID). Default 1.0.",
+            "default": 1.0,
+            "examples": [
+              0.97,
+              1.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "pv_to_battery_efficiency": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Pv To Battery Efficiency",
+            "description": "Efficiency of PV DC\u2192battery charging path (0\u20131). Used for HYBRID inverters only. Default 1.0.",
+            "default": 1.0,
+            "examples": [
+              0.98,
+              1.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "pv_max_power_w": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pv Max Power W",
+            "description": "Maximum DC PV power fed into the inverter [W]. Required when pv_power_w_key is set (SOLAR or HYBRID). Values from pv_power_w_key are clipped to this limit.",
+            "examples": [
+              8000.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
+          },
+          "pv_min_power_w": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Pv Min Power W",
+            "description": "Minimum DC PV power threshold [W]. Steps with available PV below this value are treated as zero. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              50.0,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "W",
+              "widget": "number"
+            }
+          },
+          "pv_power_w_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pv Power W Key",
+            "description": "SimulationContext prediction key resolving to a per-step PV power forecast array [W] of shape (horizon,). Set for SOLAR and HYBRID inverter types; leave None for BATTERY.",
+            "examples": [
+              "pv_forecast_w",
+              null
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "prediction_key"
+            }
+          },
+          "battery_capacity_wh": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery Capacity Wh",
+            "description": "Usable battery capacity [Wh]. Required for BATTERY and HYBRID inverter types.",
+            "examples": [
+              10000.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "Wh",
+              "widget": "number"
+            }
+          },
+          "battery_charge_rates": {
             "anyOf": [
               {
                 "items": {
-                  "type": "string"
+                  "type": "number"
                 },
                 "type": "array"
               },
@@ -6004,8 +7152,162 @@
                 "type": "null"
               }
             ],
+            "title": "Battery Charge Rates",
+            "description": "Optional list of discrete charge rate fractions (each in (0, 1]). When set, the battery is constrained to these specific fractions of battery_max_charge_rate. null means continuous charging. All values must be in (0, 1].",
+            "examples": [
+              null,
+              [
+                0.25,
+                0.5,
+                1.0
+              ]
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "list_number"
+            }
+          },
+          "battery_min_charge_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Battery Min Charge Rate",
+            "description": "Minimum non-zero charge rate as a fraction of battery_max_charge_rate. Charge commands below this threshold are rounded to zero. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              0.1,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_max_charge_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Battery Max Charge Rate",
+            "description": "Maximum charge rate as a fraction of the 1C rate (1C = battery_capacity_wh W). bat_factor=+1 maps to this rate. Default 1.0 (full 1C charge).",
+            "default": 1.0,
+            "examples": [
+              0.5,
+              1.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_min_discharge_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Battery Min Discharge Rate",
+            "description": "Minimum non-zero discharge rate as a fraction of battery_max_discharge_rate. Discharge commands below this threshold are rounded to zero. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              0.1,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_max_discharge_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Battery Max Discharge Rate",
+            "description": "Maximum discharge rate as a fraction of the 1C rate. bat_factor=\u22121 maps to this rate. Default 1.0 (full 1C discharge).",
+            "default": 1.0,
+            "examples": [
+              0.5,
+              1.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_min_soc_factor": {
+            "type": "number",
+            "exclusiveMaximum": 1.0,
+            "minimum": 0.0,
+            "title": "Battery Min Soc Factor",
+            "description": "Minimum allowed state of charge as a fraction of battery_capacity_wh. Must be < battery_max_soc_factor. Default 0.0.",
+            "default": 0.0,
+            "examples": [
+              0.1,
+              0.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_max_soc_factor": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Battery Max Soc Factor",
+            "description": "Maximum allowed state of charge as a fraction of battery_capacity_wh. Must be > battery_min_soc_factor. Default 1.0.",
+            "default": 1.0,
+            "examples": [
+              0.9,
+              1.0
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "number"
+            }
+          },
+          "battery_initial_soc_factor_key": {
+            "type": "string",
+            "title": "Battery Initial Soc Factor Key",
+            "description": "SimulationContext measurement key resolving to the initial battery SoC as a fraction of battery_capacity_wh, in [min_soc_factor, max_soc_factor]. An empty string means the device uses battery_min_soc_factor as the initial SoC (fully depleted to the minimum).",
+            "default": "",
+            "examples": [
+              "battery1.soc_factor",
+              ""
+            ],
+            "x-scope": [
+              "GENETIC2"
+            ],
+            "x-ui": {
+              "unit": "",
+              "widget": "measurement_key"
+            }
+          },
+          "measurement_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
             "title": "Measurement Keys",
-            "description": "Measurement keys for the inverter stati that are measurements.",
+            "description": "Measurement keys for this inverter.\n\nReturns the ``battery_initial_soc_factor_key`` if non-empty, so\nthe EMS measurement store knows to watch for this key.",
             "readOnly": true
           }
         },
@@ -6014,7 +7316,7 @@
           "measurement_keys"
         ],
         "title": "InverterCommonSettings",
-        "description": "Inverter devices base settings."
+        "description": "Inverter device settings.\n\nAn inverter bridges a DC bus (PV / battery) and an AC bus (grid /\nhousehold). It must therefore have at least one DC port and one AC\nport.\n\nPort wiring guidance\n--------------------\n\nStandard string inverter (PV-only, no battery)::\n\n    ports:\n      - port_id: p_dc\n        bus_id: bus_dc\n        direction: sink       # consumes DC power from PV\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: source     # injects AC power onto the AC bus\n\nHybrid inverter with battery::\n\n    ports:\n      - port_id: p_dc\n        bus_id: bus_dc\n        direction: bidirectional  # DC bus shared with battery\n      - port_id: p_ac\n        bus_id: bus_ac\n        direction: bidirectional  # can import AC for battery charging\n\nGENETIC2 inverter type inference\n---------------------------------\n\nThe ``inverter_type`` passed to ``HybridInverterParam`` is inferred\nautomatically from the fields that are set:\n\n- ``HYBRID``: ``pv_power_w_key`` is set **and** ``battery_capacity_wh``\n  is set (and > 0).\n- ``SOLAR``: ``pv_power_w_key`` is set but ``battery_capacity_wh`` is\n  ``None`` or 0.\n- ``BATTERY``: ``pv_power_w_key`` is ``None`` and\n  ``battery_capacity_wh`` is set (and > 0).\n\nNotes:\n------\n``battery_id`` is retained for backward compatibility with existing\nconfigurations but is not used by ``to_genetic2_param()``. Port wiring\nreplaces that coupling."
       },
       "InverterParameters": {
         "properties": {
@@ -6720,60 +8022,6 @@
         "title": "OMBCInstruction",
         "description": "Instruction for Operation Mode Based Control (OMBC).\n\nContains information about when and how to activate a specific operation mode.\nUsed to command resources to change their operation at a specified time."
       },
-      "OMBCStatus": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "OMBCStatus",
-            "title": "Type",
-            "default": "OMBCStatus"
-          },
-          "active_operation_mode_id": {
-            "type": "string",
-            "title": "Active Operation Mode Id",
-            "description": "ID of the currently active operation mode."
-          },
-          "operation_mode_factor": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Operation Mode Factor",
-            "description": "Factor with which the operation mode is configured (between 0 and 1)."
-          },
-          "previous_operation_mode_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Previous Operation Mode Id",
-            "description": "ID of the previously active operation mode, if known."
-          },
-          "transition_timestamp": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transition Timestamp",
-            "description": "Timestamp of transition to the active operation mode, if applicable."
-          }
-        },
-        "type": "object",
-        "required": [
-          "active_operation_mode_id",
-          "operation_mode_factor"
-        ],
-        "title": "OMBCStatus",
-        "description": "Reports the current operational status of an Operation Mode Based Control system.\n\nThis model provides real-time status information about an OMBC-controlled device,\nincluding which operation mode is currently active, how it is configured,\nand information about recent mode transitions. It enables monitoring of the\ndevice's operational state and tracking mode transition history."
-      },
       "OptimizationCommonSettings-Input": {
         "properties": {
           "horizon_hours": {
@@ -6933,11 +8181,18 @@
             "title": "Keys",
             "description": "The keys of the solution.",
             "readOnly": true
+          },
+          "horizon": {
+            "type": "integer",
+            "title": "Horizon",
+            "description": "Number of optimization steps.",
+            "readOnly": true
           }
         },
         "type": "object",
         "required": [
-          "keys"
+          "keys",
+          "horizon"
         ],
         "title": "OptimizationCommonSettings",
         "description": "General Optimization Configuration."
@@ -7225,118 +8480,6 @@
         ],
         "title": "PPBCEndInterruptionInstruction",
         "description": "Represents an instruction to resume execution of a previously interrupted power sequence.\n\nThis model defines a control instruction that ends an interruption and resumes\nexecution of a previously interrupted power sequence. It complements the start\ninterruption instruction, enabling the complete interruption-resumption cycle\nfor flexible sequence execution control."
-      },
-      "PPBCPowerProfileStatus-Input": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "PPBCPowerProfileStatus",
-            "title": "Type",
-            "default": "PPBCPowerProfileStatus"
-          },
-          "sequence_container_status": {
-            "items": {
-              "$ref": "#/components/schemas/PPBCPowerSequenceContainerStatus"
-            },
-            "type": "array",
-            "title": "Sequence Container Status",
-            "description": "Status list for all sequence containers in the PowerProfileDefinition."
-          }
-        },
-        "type": "object",
-        "required": [
-          "sequence_container_status"
-        ],
-        "title": "PPBCPowerProfileStatus",
-        "description": "Reports the current status of a power profile execution.\n\nThis model provides comprehensive status information for all sequence containers\nin a power profile definition, enabling monitoring of profile execution progress.\nIt tracks which sequences have been selected and their current execution status."
-      },
-      "PPBCPowerProfileStatus-Output": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "PPBCPowerProfileStatus",
-            "title": "Type",
-            "default": "PPBCPowerProfileStatus"
-          },
-          "sequence_container_status": {
-            "items": {
-              "$ref": "#/components/schemas/PPBCPowerSequenceContainerStatus"
-            },
-            "type": "array",
-            "title": "Sequence Container Status",
-            "description": "Status list for all sequence containers in the PowerProfileDefinition."
-          }
-        },
-        "type": "object",
-        "required": [
-          "sequence_container_status"
-        ],
-        "title": "PPBCPowerProfileStatus",
-        "description": "Reports the current status of a power profile execution.\n\nThis model provides comprehensive status information for all sequence containers\nin a power profile definition, enabling monitoring of profile execution progress.\nIt tracks which sequences have been selected and their current execution status."
-      },
-      "PPBCPowerSequenceContainerStatus": {
-        "properties": {
-          "power_profile_id": {
-            "type": "string",
-            "title": "Power Profile Id",
-            "description": "ID of the related PowerProfileDefinition."
-          },
-          "sequence_container_id": {
-            "type": "string",
-            "title": "Sequence Container Id",
-            "description": "ID of the PowerSequenceContainer being reported on."
-          },
-          "selected_sequence_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Selected Sequence Id",
-            "description": "ID of the selected PowerSequence, if any."
-          },
-          "progress": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "duration"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Progress",
-            "description": "Elapsed time since the selected sequence started, if applicable."
-          },
-          "status": {
-            "$ref": "#/components/schemas/PPBCPowerSequenceStatus",
-            "description": "Status of the selected PowerSequence."
-          }
-        },
-        "type": "object",
-        "required": [
-          "power_profile_id",
-          "sequence_container_id",
-          "status"
-        ],
-        "title": "PPBCPowerSequenceContainerStatus",
-        "description": "Reports the status of a specific power sequence container execution.\n\nThis model provides detailed status information for a single sequence container,\nincluding which sequence was selected, the current execution progress, and the\noperational status. It enables fine-grained monitoring of sequence execution\nwithin the broader power profile."
-      },
-      "PPBCPowerSequenceStatus": {
-        "type": "string",
-        "enum": [
-          "NOT_SCHEDULED",
-          "SCHEDULED",
-          "EXECUTING",
-          "INTERRUPTED",
-          "FINISHED",
-          "ABORTED"
-        ],
-        "title": "PPBCPowerSequenceStatus",
-        "description": "Enumeration of status values for Power Profile Based Control sequences."
       },
       "PPBCScheduleInstruction": {
         "properties": {
@@ -8104,87 +9247,71 @@
         "title": "PVForecastVrmCommonSettings",
         "description": "Common settings for PV forecast VRM API."
       },
-      "PowerMeasurement-Input": {
+      "PortConfig": {
         "properties": {
-          "type": {
+          "port_id": {
             "type": "string",
-            "const": "PowerMeasurement",
-            "title": "Type",
-            "default": "PowerMeasurement"
+            "title": "Port Id",
+            "description": "Unique port identifier within this device.",
+            "examples": [
+              "p_dc",
+              "p_ac"
+            ]
           },
-          "measurement_timestamp": {
+          "bus_id": {
             "type": "string",
-            "format": "date-time",
-            "title": "Measurement Timestamp",
-            "description": "Timestamp when PowerValues were measured."
+            "title": "Bus Id",
+            "description": "ID of the bus this port connects to.",
+            "examples": [
+              "bus_dc",
+              "bus_ac"
+            ]
           },
-          "values": {
-            "items": {
-              "$ref": "#/components/schemas/PowerValue"
-            },
-            "type": "array",
-            "title": "Values",
-            "description": "Array of measured PowerValues. Shall contain at least one item and at most one item per 'commodity_quantity' (defined inside the PowerValue)."
+          "direction": {
+            "$ref": "#/components/schemas/PortDirection",
+            "description": "Energy flow direction from the device's perspective. 'source' = injects energy, 'sink' = consumes energy, 'bidirectional' = both.",
+            "examples": [
+              "source",
+              "sink",
+              "bidirectional"
+            ]
+          },
+          "max_power_w": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Power W",
+            "description": "Maximum power through this port [W]. null means no limit.",
+            "examples": [
+              5000,
+              null
+            ]
           }
         },
         "type": "object",
         "required": [
-          "measurement_timestamp",
-          "values"
+          "port_id",
+          "bus_id",
+          "direction"
         ],
-        "title": "PowerMeasurement",
-        "description": "Captures a set of power measurements taken at a specific point in time.\n\nThis model records multiple power values (for different commodity quantities)\nalong with the timestamp when the measurements were taken, enabling time-series\nanalysis and monitoring of power consumption or production."
+        "title": "PortConfig",
+        "description": "Configuration for a single device port.\n\nEach port connects a device to one energy bus. The carrier is\ndetermined by the bus \u2014 ports do not redeclare it.\n\nAttributes:\n    port_id: Unique identifier for this port within the owning device.\n        Must be unique per device; need not be globally unique.\n    bus_id: References a ``BusConfig.bus_id`` that must exist in the\n        same ``BusesCommonSettings``.\n    direction: Energy flow direction from the device's perspective.\n        ``SOURCE`` = device injects energy onto the bus.\n        ``SINK`` = device consumes energy from the bus.\n        ``BIDIRECTIONAL`` = device can do both (battery, grid).\n    max_power_w: Optional maximum power [W] through this port.\n        ``None`` means no port-level limit (bus or device limits still\n        apply)."
       },
-      "PowerMeasurement-Output": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "PowerMeasurement",
-            "title": "Type",
-            "default": "PowerMeasurement"
-          },
-          "measurement_timestamp": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Measurement Timestamp",
-            "description": "Timestamp when PowerValues were measured."
-          },
-          "values": {
-            "items": {
-              "$ref": "#/components/schemas/PowerValue"
-            },
-            "type": "array",
-            "title": "Values",
-            "description": "Array of measured PowerValues. Shall contain at least one item and at most one item per 'commodity_quantity' (defined inside the PowerValue)."
-          }
-        },
-        "type": "object",
-        "required": [
-          "measurement_timestamp",
-          "values"
+      "PortDirection": {
+        "type": "string",
+        "enum": [
+          "source",
+          "sink",
+          "bidirectional"
         ],
-        "title": "PowerMeasurement",
-        "description": "Captures a set of power measurements taken at a specific point in time.\n\nThis model records multiple power values (for different commodity quantities)\nalong with the timestamp when the measurements were taken, enabling time-series\nanalysis and monitoring of power consumption or production."
-      },
-      "PowerValue": {
-        "properties": {
-          "commodity_quantity": {
-            "$ref": "#/components/schemas/CommodityQuantity",
-            "description": "The power quantity the value refers to."
-          },
-          "value": {
-            "type": "number",
-            "title": "Value",
-            "description": "Power value expressed in the unit associated with the CommodityQuantity."
-          }
-        },
-        "type": "object",
-        "required": [
-          "commodity_quantity",
-          "value"
-        ],
-        "title": "PowerValue",
-        "description": "Represents a specific power value measurement with its associated commodity quantity.\n\nThis class links a numerical power value to a specific type of power quantity (such as\nactive power, reactive power, etc.) and its unit of measurement."
+        "title": "PortDirection",
+        "description": "Energy flow direction of a port relative to its owning device.\n\nThe direction is defined from the perspective of the device, not the bus:\n\nSOURCE\n    The device injects energy onto the bus (e.g. a PV array, a generator,\n    or a battery discharging).\nSINK\n    The device consumes energy from the bus (e.g. a load, a heat pump,\n    or a battery charging).\nBIDIRECTIONAL\n    The device can both inject and consume energy depending on operating\n    state (e.g. a battery that charges and discharges, a grid connection\n    that imports and exports). Counts as both a source and a sink for\n    bus-level topology validation."
       },
       "PredictionCommonSettings": {
         "properties": {
@@ -8523,6 +9650,17 @@
             ],
             "description": "Logging Settings"
           },
+          "buses": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusesCommonSettings-Input"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Energy Buses Settings"
+          },
           "devices": {
             "anyOf": [
               {
@@ -8791,7 +9929,7 @@
         "title": "SolarPanelBatteryParameters",
         "description": "PV battery device simulation configuration."
       },
-      "TimeWindow-Input": {
+      "TimeWindow": {
         "properties": {
           "start_time": {
             "title": "Start Time",
@@ -8865,104 +10003,13 @@
           "duration"
         ],
         "title": "TimeWindow",
-        "description": "Model defining a daily or date time window with optional localization support.\n\nRepresents a time interval starting at `start_time` and lasting for `duration`.\nCan restrict applicability to a specific day of the week or a specific calendar date.\nSupports day names in multiple languages via locale-aware parsing.\n\nTimezone contract:\n\n``start_time`` is always **naive** (no ``tzinfo``).  It is interpreted as a\nlocal wall-clock time in whatever timezone the caller's ``date_time`` or\n``reference_date`` carries.  When those arguments are timezone-aware the\nwindow boundaries are evaluated in that timezone; when they are naive,\narithmetic is performed as-is (no timezone conversion occurs).\n\n``date``, being a calendar ``Date`` object, is inherently timezone-free.\n\nThis design avoids the ambiguity that arises when a stored ``start_time``\ncarries its own timezone that differs from the caller's timezone, and keeps\nthe model serialisable without timezone state."
+        "description": "Model defining a daily or date time window with optional localization support.\n\nRepresents a time interval starting at `start_time` and lasting for `duration`.\nCan restrict applicability to a specific day of the week or a specific calendar date.\nSupports day names in multiple languages via locale-aware parsing.\n\nTimezone contract\n-----------------\n``start_time`` is always **naive** (no ``tzinfo``).  It is interpreted as a\nlocal wall-clock time in whatever timezone the caller's ``date_time`` or\n``reference_date`` carries.  When those arguments are timezone-aware the\nwindow boundaries are evaluated in that timezone; when they are naive,\narithmetic is performed as-is (no timezone conversion occurs).\n\n``date``, being a calendar ``Date`` object, is inherently timezone-free.\n\nThis design avoids the ambiguity that arises when a stored ``start_time``\ncarries its own timezone that differs from the caller's timezone, and keeps\nthe model serialisable without timezone state."
       },
-      "TimeWindow-Output": {
-        "properties": {
-          "start_time": {
-            "type": "string",
-            "title": "Start Time",
-            "description": "Naive start time of the time window (time of day, no timezone). Interpreted in the timezone of the datetime passed to contains() or earliest_start_time().",
-            "examples": [
-              "00:00:00"
-            ]
-          },
-          "duration": {
-            "type": "string",
-            "title": "Duration",
-            "description": "Duration of the time window starting from `start_time`.",
-            "examples": [
-              "2 hours"
-            ]
-          },
-          "day_of_week": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Day Of Week",
-            "description": "Optional day of the week restriction. Can be specified as integer (0=Monday to 6=Sunday) or localized weekday name. If None, applies every day unless `date` is set.",
-            "examples": [
-              null
-            ]
-          },
-          "date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Date",
-            "description": "Optional specific calendar date for the time window. Naive \u2014 matched against the local date of the datetime passed to contains(). Overrides `day_of_week` if set.",
-            "examples": [
-              null
-            ]
-          },
-          "locale": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Locale",
-            "description": "Locale used to parse weekday names in `day_of_week` when given as string. If not set, Pendulum's default locale is used. Examples: 'en', 'de', 'fr', etc.",
-            "examples": [
-              null
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "start_time",
-          "duration"
-        ],
-        "title": "TimeWindow",
-        "description": "Model defining a daily or date time window with optional localization support.\n\nRepresents a time interval starting at `start_time` and lasting for `duration`.\nCan restrict applicability to a specific day of the week or a specific calendar date.\nSupports day names in multiple languages via locale-aware parsing.\n\nTimezone contract:\n\n``start_time`` is always **naive** (no ``tzinfo``).  It is interpreted as a\nlocal wall-clock time in whatever timezone the caller's ``date_time`` or\n``reference_date`` carries.  When those arguments are timezone-aware the\nwindow boundaries are evaluated in that timezone; when they are naive,\narithmetic is performed as-is (no timezone conversion occurs).\n\n``date``, being a calendar ``Date`` object, is inherently timezone-free.\n\nThis design avoids the ambiguity that arises when a stored ``start_time``\ncarries its own timezone that differs from the caller's timezone, and keeps\nthe model serialisable without timezone state."
-      },
-      "TimeWindowSequence-Input": {
+      "TimeWindowSequence": {
         "properties": {
           "windows": {
             "items": {
-              "$ref": "#/components/schemas/TimeWindow-Input"
-            },
-            "type": "array",
-            "title": "Windows",
-            "description": "List of TimeWindow objects that make up this sequence."
-          }
-        },
-        "type": "object",
-        "title": "TimeWindowSequence",
-        "description": "Model representing a sequence of time windows with collective operations.\n\nManages multiple TimeWindow objects and provides methods to work with them\nas a cohesive unit for scheduling and availability checking."
-      },
-      "TimeWindowSequence-Output": {
-        "properties": {
-          "windows": {
-            "items": {
-              "$ref": "#/components/schemas/TimeWindow-Output"
+              "$ref": "#/components/schemas/TimeWindow"
             },
             "type": "array",
             "title": "Windows",

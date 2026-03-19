@@ -405,12 +405,6 @@ class GeneticOptimizer:
 
         solution_df = pd.DataFrame(columns, index=step_index)
 
-        # pandas 3.0 infers string columns as dtype "str" rather than "object".
-        # PydanticDateTimeDataFrame only accepts "object" for string columns,
-        # so coerce all str-dtype columns back to object after construction.
-        for col in solution_df.select_dtypes(include="str").columns:
-            solution_df[col] = solution_df[col].astype(object)
-
         # ------------------------------------------------------------------
         # 5. Aggregate financials
         # ------------------------------------------------------------------

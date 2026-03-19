@@ -1057,8 +1057,9 @@ class PydanticDateTimeDataFrame(PydanticBaseModel):
         if not v:
             return v
 
-        # Allowed exact dtypes
-        valid_base_dtypes = {"int64", "float64", "bool", "object", "string"}
+        # Allowed exact dtypes.
+        # "str" is the pandas 3.0 alias for pd.StringDtype (previously "string" or "object").
+        valid_base_dtypes = {"int64", "float64", "bool", "object", "string", "str"}
 
         def is_valid_dtype(dtype: str) -> bool:
             # Allow timezone-aware or naive datetime64 - pandas 3.0 also has us
@@ -1104,6 +1105,11 @@ class PydanticDateTimeDataFrame(PydanticBaseModel):
         for col, dtype in self.dtypes.items():
             if dtype.startswith("datetime64[ns") or dtype.startswith("datetime64[us"):
                 df[col] = pd.to_datetime(df[col], utc=True)
+            elif dtype in ("str", "string"):
+                # pandas 3.0 uses "str" for pd.StringDtype; normalise to object so
+                # downstream code receives plain Python strings rather than a
+                # nullable StringDtype array, which keeps serialisation simple.
+                df[col] = df[col].astype(object)
             elif dtype in dtype_mapping.keys():
                 df[col] = df[col].astype(dtype_mapping[dtype])
             else:

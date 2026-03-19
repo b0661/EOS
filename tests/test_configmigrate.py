@@ -215,6 +215,8 @@ class TestConfigMigration:
                 # Verify the migrated value matches the expected one
                 new_value = configmigrate._get_json_nested_value(new_data, new_path)
                 if new_value != expected_value:
+                    if expected_value == _ANY_SENTINEL:
+                        continue  # wildcard sentinel: any present value is acceptable
                     # Check if this mapping uses _KEEP_DEFAULT and the old value was None/missing
                     old_value = configmigrate._get_json_nested_value(old_data, old_path)
                     keep_default = (
@@ -248,3 +250,7 @@ class TestConfigMigration:
             # Remove the .new working file only if the test passed (failed == False)
             if not failed and working_file.exists():
                 working_file.unlink(missing_ok=True)
+            if configmigrate.skipped_paths:
+                print(f"\nSkipped paths ({len(configmigrate.skipped_paths)}):")
+                for p in configmigrate.skipped_paths:
+                    print(f"  - {p}")

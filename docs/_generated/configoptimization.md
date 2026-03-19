@@ -9,6 +9,7 @@
 | ---- | -------------------- | ---- | --------- | ------- | ----------- |
 | algorithm | `EOS_OPTIMIZATION__ALGORITHM` | `Optional[str]` | `rw` | `GENETIC` | The optimization algorithm. |
 | genetic | `EOS_OPTIMIZATION__GENETIC` | `Optional[akkudoktoreos.optimization.optimization.GeneticCommonSettings]` | `rw` | `None` | Genetic optimization algorithm configuration. |
+| horizon | | `int` | `ro` | `N/A` | Number of optimization steps. |
 | horizon_hours | `EOS_OPTIMIZATION__HORIZON_HOURS` | `Optional[int]` | `rw` | `24` | The general time window within which the energy optimization goal shall be achieved [h]. Defaults to 24 hours. |
 | interval | `EOS_OPTIMIZATION__INTERVAL` | `Optional[int]` | `rw` | `3600` | The optimization interval [sec]. |
 | keys | | `list[str]` | `ro` | `N/A` | The keys of the solution. |
@@ -58,7 +59,8 @@
                    "ev_soc_miss": 10
                }
            },
-           "keys": []
+           "keys": [],
+           "horizon": 24
        }
    }
 ```

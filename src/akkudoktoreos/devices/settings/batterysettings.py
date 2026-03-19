@@ -111,8 +111,8 @@ class BatteriesCommonSettings(DevicesBaseSettings):
             "examples": [100],
         },
     )
-    operation_modes: list[BatteryOperationMode] = Field(
-        default_factory=lambda: [BatteryOperationMode.SELF_CONSUMPTION],
+    operation_modes: list[str] = Field(
+        default_factory=lambda: [str(BatteryOperationMode.SELF_CONSUMPTION)],
         json_schema_extra={
             "description": "Supported operating modes for this battery.",
             "examples": [["SELF_CONSUMPTION", "PEAK_SHAVING"]],

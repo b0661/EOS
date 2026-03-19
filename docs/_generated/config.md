@@ -3,6 +3,7 @@
 :caption: Configuration Table
 
 ../_generated/configadapter.md
+../_generated/configbuses.md
 ../_generated/configcache.md
 ../_generated/configdatabase.md
 ../_generated/configdevices.md

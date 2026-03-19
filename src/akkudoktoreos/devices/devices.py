@@ -2,34 +2,36 @@
 
 Concepts
 --------
+
 1. **Pydantic Config Models (mutable, user-facing)**
-   - Read, validate, and document user-provided configuration.
-   - Each device type has a corresponding CommonSettings class defined
-     in ``devices/settings/<device>.py``.
-   - Multiple devices of the same type are represented as a
-     ``dict[str, <Settings>]`` in ``DevicesCommonSettings``, keyed by
-     ``device_id``.  The dict key must match the ``device_id`` field
-     inside the value.
+    - Read, validate, and document user-provided configuration.
+    - Each device type has a corresponding CommonSettings class defined
+        in ``devices/settings/<device>.py``.
+    - Multiple devices of the same type are represented as a
+        ``dict[str, <Settings>]`` in ``DevicesCommonSettings``, keyed by
+        ``device_id``.  The dict key must match the ``device_id`` field
+        inside the value.
 
 2. **Optimizer-specific domain conversion**
-   - Each CommonSettings class exposes ``to_genetic2_param()`` to produce
-     the immutable frozen dataclass required by the GENETIC2 optimizer.
-   - Other optimizers add their own ``to_<optimizer>_param()`` methods to
-     the same CommonSettings classes when needed.
-   - ``DevicesCommonSettings.to_genetic2_params()`` aggregates all devices
-     into a flat ``list[DeviceParam]`` for GENETIC2.
+    - Each CommonSettings class exposes ``to_genetic2_param()`` to produce
+        the immutable frozen dataclass required by the GENETIC2 optimizer.
+    - Other optimizers add their own ``to_<optimizer>_param()`` methods to
+        the same CommonSettings classes when needed.
+    - ``DevicesCommonSettings.to_genetic2_params()`` aggregates all devices
+        into a flat ``list[DeviceParam]`` for GENETIC2.
 
 3. **Topology Config**
-   - ``BusConfig`` / ``BusesCommonSettings`` — declare energy buses explicitly.
-   - Each device config carries a ``ports`` field wiring it to buses.
+    - ``BusConfig`` / ``BusesCommonSettings`` — declare energy buses explicitly.
+    - Each device config carries a ``ports`` field wiring it to buses.
 
 4. **Backward compatibility**
-   - All names previously importable from this module remain importable
-     here. The definitions have moved to ``devices/settings/`` but this
-     file re-exports everything so existing import sites are unaffected.
+    - All names previously importable from this module remain importable
+        here. The definitions have moved to ``devices/settings/`` but this
+        file re-exports everything so existing import sites are unaffected.
 
 Usage (GENETIC2)
 ----------------
+
 1. Load ``BusesCommonSettings`` + ``DevicesCommonSettings`` from YAML/JSON.
 2. Pydantic validates all fields and constraints.
 3. ``buses_config.to_domain()``  →  ``list[EnergyBus]``
@@ -216,7 +218,13 @@ class DevicesCommonSettings(SettingsBaseModel):
         json_schema_extra={
             "description": "Non-controllable fixed household loads, keyed by device_id.",
             "examples": [
-                {"base_load": {"device_id": "base_load", "peak_power_w": 500, "ports": []}}
+                {
+                    "base_load": {
+                        "device_id": "base_load",
+                        "peak_power_w": 500,
+                        "ports": [{"bus_id": "bus_ac", "port_id": "p_ac", "direction": "sink"}],
+                    }
+                }
             ],
         },
     )
@@ -235,7 +243,14 @@ class DevicesCommonSettings(SettingsBaseModel):
         json_schema_extra={
             "description": "Shiftable home appliance devices, keyed by device_id.",
             "examples": [
-                {"dishwasher": {"device_id": "dishwasher", "consumption_wh": 1500, "ports": []}}
+                {
+                    "dishwasher": {
+                        "device_id": "dishwasher",
+                        "consumption_wh": 1500,
+                        "duration_h": 2.0,  # required field
+                        "ports": [{"bus_id": "bus_ac", "port_id": "p_ac", "direction": "sink"}],
+                    }
+                }
             ],
         },
     )

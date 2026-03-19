@@ -562,7 +562,7 @@ class GeneticOptimizationParameters(
                             "device_id": "dishwasher1",
                             "consumption_wh": 2000,
                             "duration_h": 3.0,
-                            "time_windows": {
+                            "cycle_time_windows": {
                                 "windows": [
                                     {
                                         "start_time": "08:00",
@@ -590,7 +590,7 @@ class GeneticOptimizationParameters(
                             "device_id": "dishwasher1",
                             "consumption_wh": 2000,
                             "duration_h": 3.0,
-                            "time_windows": None,
+                            "cycle_time_windows": None,
                         },
                     }
                     # Retry

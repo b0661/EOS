@@ -24,6 +24,7 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
 
     Port wiring guidance
     --------------------
+
     Standard string inverter (PV-only, no battery)::
 
         ports:
@@ -46,6 +47,7 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
 
     GENETIC2 inverter type inference
     ---------------------------------
+
     The ``inverter_type`` passed to ``HybridInverterParam`` is inferred
     automatically from the fields that are set:
 
@@ -57,10 +59,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
       ``battery_capacity_wh`` is set (and > 0).
 
     Notes:
-    -----
+    ------
     ``battery_id`` is retained for backward compatibility with existing
-    configurations but is not used by ``to_genetic2_param()`` or the
-    simulation engine. Port wiring replaces that coupling.
+    configurations but is not used by ``to_genetic2_param()``. Port wiring
+    replaces that coupling.
     """
 
     # ------------------------------------------------------------------
@@ -74,6 +76,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             "description": "Maximum AC output power [W].",
             "examples": [10000],
             "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "W",
+            },
         },
     )
     ac_to_dc_efficiency: float = Field(
@@ -87,6 +93,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [0.95, 1.0, 0.0],
             "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "",
+            },
         },
     )
     dc_to_ac_efficiency: float = Field(
@@ -99,6 +109,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [0.95, 1.0],
             "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "",
+            },
         },
     )
     max_ac_charge_power_w: Optional[float] = Field(
@@ -111,17 +125,22 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [None, 0, 5000],
             "x-scope": [str(ConfigScope.GENETIC)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "W",
+            },
         },
     )
     battery_id: Optional[str] = Field(
         default=None,
         json_schema_extra={
-            "description": (
-                "Deprecated. Use port wiring to connect inverter to battery DC bus. "
-                "Retained for backward compatibility only."
-            ),
+            "description": ("Device ID of the battery."),
             "examples": [None],
             "x-scope": [str(ConfigScope.GENETIC)],
+            "x-ui": {
+                "widget": "id",
+                "unit": "",
+            },
         },
     )
 
@@ -140,6 +159,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [5.0, 0.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "W",
+            },
         },
     )
     on_state_power_consumption_w: float = Field(
@@ -152,6 +175,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [10.0, 0.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "W",
+            },
         },
     )
 
@@ -167,6 +194,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [0.97, 1.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "",
+            },
         },
     )
     pv_to_battery_efficiency: float = Field(
@@ -180,6 +211,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [0.98, 1.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "",
+            },
         },
     )
     pv_max_power_w: Optional[float] = Field(
@@ -193,6 +228,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [8000.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "W",
+            },
         },
     )
     pv_min_power_w: float = Field(
@@ -205,6 +244,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [50.0, 0.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "W",
+            },
         },
     )
     pv_power_w_key: Optional[str] = Field(
@@ -217,6 +260,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": ["pv_forecast_w", None],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "prediction_key",
+                "unit": "",
+            },
         },
     )
 
@@ -230,6 +277,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [10000.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "Wh",
+            },
         },
     )
     battery_charge_rates: Optional[list[float]] = Field(
@@ -243,6 +294,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [None, [0.25, 0.5, 1.0]],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "list_number",
+                "unit": "",
+            },
         },
     )
     battery_min_charge_rate: float = Field(
@@ -256,6 +311,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [0.1, 0.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "",
+            },
         },
     )
     battery_max_charge_rate: float = Field(
@@ -270,6 +329,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [0.5, 1.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "",
+            },
         },
     )
     battery_min_discharge_rate: float = Field(
@@ -283,6 +346,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [0.1, 0.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "",
+            },
         },
     )
     battery_max_discharge_rate: float = Field(
@@ -296,6 +363,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [0.5, 1.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "",
+            },
         },
     )
     battery_min_soc_factor: float = Field(
@@ -309,6 +380,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [0.1, 0.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "",
+            },
         },
     )
     battery_max_soc_factor: float = Field(
@@ -322,6 +397,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": [0.9, 1.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "number",
+                "unit": "",
+            },
         },
     )
     battery_initial_soc_factor_key: str = Field(
@@ -335,6 +414,10 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": ["battery1.soc_factor", ""],
             "x-scope": [str(ConfigScope.GENETIC2)],
+            "x-ui": {
+                "widget": "measurement_key",
+                "unit": "",
+            },
         },
     )
 
@@ -408,7 +491,7 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
 
         return HybridInverterParam(
             device_id=self.device_id,
-            ports=self.ports_to_genetc2_param(),
+            ports=self.ports_to_genetic2_param(),
             inverter_type=inverter_type,
             # Auxiliary consumption
             off_state_power_consumption_w=self.off_state_power_consumption_w,

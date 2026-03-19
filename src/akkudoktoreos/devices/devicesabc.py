@@ -385,10 +385,13 @@ class EnergyDevice(ABC):
 
         Args:
             context (SimulationContext):
-                Holds the simulation context with:
-                    step_times: Ordered tuple of ``DateTime`` timestamps defining
-                        the simulation horizon. Length equals the genome horizon.
-                    step_interval: Fixed time delta between consecutive steps [s].
+                Holds the simulation context.
+
+                step_times:
+                    Ordered tuple of ``DateTime`` timestamps defining
+                    the simulation horizon. Length equals the genome horizon.
+                step_interval:
+                    Fixed time delta between consecutive steps [s].
         """
         raise NotImplementedError
 
@@ -647,12 +650,15 @@ class SingleStateEnergyDevice(EnergyDevice):
 
         Args:
             context (SimulationContext):
-                Holds the simulation context with:
-                    step_times: Ordered ``DateTime`` timestamps. Stored as
-                        ``_step_times`` and forwarded into every `SingleStateBatchState`` so all
-                        lifecycle methods can use them (time-of-use pricing, S2 instruction
-                        construction, etc.).
-                    step_interval: Fixed time delta between steps [s].
+                Holds the simulation context.
+
+                step_times:
+                    Ordered ``DateTime`` timestamps. Stored as
+                    ``_step_times`` and forwarded into every ``SingleStateBatchState`` so all
+                    lifecycle methods can use them (time-of-use pricing, S2 instruction
+                    construction, etc.).
+                step_interval:
+                    Fixed time delta between steps [s].
         """
         self._step_times = context.step_times
         self._num_steps = context.horizon

@@ -1,6 +1,6 @@
 # Akkudoktor-EOS
 
-**Version**: `v0.3.0.dev2603180681250771`
+**Version**: `v0.3.0.dev2603191088291006`
 
 <!-- pyml disable line-length -->
 **Description**: This project provides a comprehensive solution for simulating and optimizing an energy system based on renewable energy sources. With a focus on photovoltaic (PV) systems, battery storage (batteries), load management (consumer requirements), heat pumps, electric vehicles, and consideration of electricity price data, this system enables forecasting and optimization of energy flow and costs over a specified period.
@@ -1276,108 +1276,6 @@ Args:
 - `force_update` (query, optional): No description provided.
 
 - `force_enable` (query, optional): No description provided.
-
-**Responses**:
-
-- **200**: Successful Response
-
-- **422**: Validation Error
-
----
-
-## GET /v1/resource/status
-
-<!-- pyml disable line-length -->
-**Links**: [local](http://localhost:8503/docs#/default/fastapi_devices_status_get_v1_resource_status_get), [eos](https://petstore3.swagger.io/?url=https://raw.githubusercontent.com/Akkudoktor-EOS/EOS/refs/heads/main/openapi.json#/default/fastapi_devices_status_get_v1_resource_status_get)
-<!-- pyml enable line-length -->
-
-Fastapi Devices Status Get
-
-<!-- pyml disable line-length -->
-```python
-"""
-Get the latest status of a resource/ device.
-
-Return:
-    latest_status: The latest status of a resource/ device.
-"""
-```
-<!-- pyml enable line-length -->
-
-**Parameters**:
-
-- `resource_id` (query, required): Resource ID.
-
-- `actuator_id` (query, optional): Actuator ID.
-
-**Responses**:
-
-- **200**: Successful Response
-
-- **422**: Validation Error
-
----
-
-## PUT /v1/resource/status
-
-<!-- pyml disable line-length -->
-**Links**: [local](http://localhost:8503/docs#/default/fastapi_devices_status_put_v1_resource_status_put), [eos](https://petstore3.swagger.io/?url=https://raw.githubusercontent.com/Akkudoktor-EOS/EOS/refs/heads/main/openapi.json#/default/fastapi_devices_status_put_v1_resource_status_put)
-<!-- pyml enable line-length -->
-
-Fastapi Devices Status Put
-
-<!-- pyml disable line-length -->
-```python
-"""
-Update the status of a resource/ device.
-
-Return:
-    latest_status: The latest status of a resource/ device.
-"""
-```
-<!-- pyml enable line-length -->
-
-**Parameters**:
-
-- `resource_id` (query, required): Resource ID.
-
-- `actuator_id` (query, optional): Actuator ID.
-
-**Request Body**:
-
-- `application/json`: {
-  "anyOf": [
-    {
-      "$ref": "#/components/schemas/PowerMeasurement-Input"
-    },
-    {
-      "$ref": "#/components/schemas/EnergyMeasurement-Input"
-    },
-    {
-      "$ref": "#/components/schemas/PPBCPowerProfileStatus-Input"
-    },
-    {
-      "$ref": "#/components/schemas/OMBCStatus"
-    },
-    {
-      "$ref": "#/components/schemas/FRBCActuatorStatus"
-    },
-    {
-      "$ref": "#/components/schemas/FRBCEnergyStatus-Input"
-    },
-    {
-      "$ref": "#/components/schemas/FRBCStorageStatus"
-    },
-    {
-      "$ref": "#/components/schemas/FRBCTimerStatus"
-    },
-    {
-      "$ref": "#/components/schemas/DDBCActuatorStatus"
-    }
-  ],
-  "description": "Resource Status.",
-  "title": "Status"
-}
 
 **Responses**:
 

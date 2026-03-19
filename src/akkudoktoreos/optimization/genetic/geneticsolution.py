@@ -306,9 +306,10 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
             (the inverter curtails automatically, but this makes intent clear).
           - Discharge: blocked when SOC is at or below min SOC.
         """
-        bat_list = list(self.config.devices.batteries.values())
-        if not bat_list:
+        batteries = self.config.devices.batteries
+        if batteries is None or len(batteries) == 0:
             return ac_charge, dc_charge, discharge_allowed
+        bat_list = list(batteries.values())
 
         bat = bat_list[0]
         min_soc = float(bat.min_soc_percentage)
