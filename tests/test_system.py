@@ -99,7 +99,7 @@ class TestSystem:
             result = requests.post(f"{server}/v1/prediction/update/PVForecastAkkudoktor")
             assert result.status_code == HTTPStatus.OK, f"Failed: {result.headers} {result.text}"
 
-            result = requests.get(f"{server}/v1/prediction/series?key=pvforecast_ac_power")
+            result = requests.get(f"{server}/v1/prediction/series?key=pvforecast_ac_power_w")
             assert result.status_code == HTTPStatus.OK
 
             data = result.json()

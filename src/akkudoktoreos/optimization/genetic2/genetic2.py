@@ -51,13 +51,15 @@ from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 from loguru import logger
-from pendulum import Duration
-from pendulum import now as pendulum_now
 
 from akkudoktoreos.core.coreabc import ConfigMixin, EnergyManagementSystemMixin
 from akkudoktoreos.core.emplan import EnergyManagementPlan
 from akkudoktoreos.core.pydantic import PydanticDateTimeDataFrame
 from akkudoktoreos.devices.devicesabc import EnergyBus, EnergyCarrier
+from akkudoktoreos.devices.genetic2.fixedload import (
+    FixedLoadDevice,
+    FixedLoadParam,
+)
 from akkudoktoreos.devices.genetic2.gridconnection import (
     GridConnectionDevice,
     GridConnectionParam,
@@ -71,6 +73,8 @@ from akkudoktoreos.devices.genetic2.hybridinverter import (
     HybridInverterParam,
 )
 from akkudoktoreos.optimization.optimization import OptimizationSolution
+from akkudoktoreos.utils.datetimeutil import to_datetime
+
 
 if TYPE_CHECKING:
     from akkudoktoreos.optimization.genetic2.optimizer import (
@@ -92,13 +96,23 @@ def _build_devices(
     """Instantiate concrete EnergyDevice objects from immutable param objects."""
     import warnings
 
-    devices: list[Union[GridConnectionDevice, HomeApplianceDevice, HybridInverterDevice]] = []
+    devices: list[Union[FixedLoadDevice, GridConnectionDevice, HomeApplianceDevice, HybridInverterDevice]] = []
     device_index = 0
     port_index = 0
-    dev: Union[GridConnectionDevice, HomeApplianceDevice, HybridInverterDevice]
+    dev: Union[FixedLoadDevice, GridConnectionDevice, HomeApplianceDevice, HybridInverterDevice]
 
     for param in device_params:
-        if isinstance(param, GridConnectionParam):
+        if isinstance(param, FixedLoadParam):
+            dev = FixedLoadDevice(
+                param=param,
+                device_index=device_index,
+                port_index=port_index,
+            )
+            devices.append(dev)
+            port_index += len(dev.ports)
+            device_index += 1
+
+        elif isinstance(param, GridConnectionParam):
             dev = GridConnectionDevice(
                 param=param,
                 device_index=device_index,
@@ -134,7 +148,7 @@ def _build_devices(
                 f"'{param.device_id}'. Skipping.",
                 stacklevel=3,
             )
-            port_index += len(param.ports)
+            #port_index += len(param.ports)
 
     return devices, buses
 
@@ -189,17 +203,7 @@ def _collect_predictions(context: SimulationContext) -> PydanticDateTimeDataFram
     predictions = context.resolved_predictions()
     logger.debug("Resolved predictions keys: {}", list(predictions.keys()))
 
-    step_index = pd.DatetimeIndex([pd.Timestamp(dt.isoformat()) for dt in context.step_times])
-
-    df = pd.DataFrame(predictions, index=step_index)
-    df.index.name = None
-
-    if df.empty:
-        # No predictions resolved — return a minimal valid DataFrame
-        # with at least one placeholder column so the dashboard doesn't crash
-        df["no_prediction_data"] = 0.0
-
-    return PydanticDateTimeDataFrame.from_dataframe(df)
+    return PydanticDateTimeDataFrame.from_dataframe(predictions)
 
 
 def _best_to_solution(
@@ -226,7 +230,7 @@ def _best_to_solution(
     """
     return OptimizationSolution(
         id=str(uuid.uuid4()),
-        generated_at=pendulum_now(),
+        generated_at=to_datetime(),
         valid_from=context.step_times[0] if context.step_times else None,
         valid_until=context.step_times[-1] if context.step_times else None,
         total_costs_amt=best.total_costs_amt,
@@ -245,7 +249,7 @@ def _best_to_plan(best: BestIndividualResult) -> EnergyManagementPlan:
     ]
     return EnergyManagementPlan(
         id=str(uuid.uuid4()),
-        generated_at=pendulum_now(),
+        generated_at=to_datetime(),
         instructions=all_instructions,
     )
 
@@ -269,6 +273,7 @@ class Genetic2Optimization(ConfigMixin, EnergyManagementSystemMixin):
         from akkudoktoreos.simulation.genetic2.engine import EnergySimulationEngine
         from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
         from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
+        from pendulum import Duration # Do not use utils, we do not need and want pydantic here
 
         # ------------------------------------------------------------------
         # 1. Resolve optimisation parameters from config

@@ -32,7 +32,7 @@ class PVForecastImportCommonSettings(SettingsBaseModel):
         default=None,
         json_schema_extra={
             "description": "JSON string, dictionary of PV forecast value lists.",
-            "examples": ['{"pvforecast_ac_power": [0, 8.05, 352.91]}'],
+            "examples": ['{"pvforecast_ac_power_w": [0, 8.05, 352.91]}'],
         },
     )
 

@@ -16,7 +16,7 @@ Pricing modes
 ~~~~~~~~~~~~~
 * **Flat rate**: ``import_cost_per_kwh`` / ``export_revenue_per_kwh`` from
   ``GridConnectionParam``, applied uniformly across all steps.
-* **Time-of-use**: optional ``import_price_key`` / ``export_price_key``
+* **Time-of-use**: optional ``import_price_amt_kwh_key`` / ``export_price_amt_kwh_key``
   resolved from the ``SimulationContext`` during ``setup_run``.  When set they
   replace the flat rate *for that direction only*.
 
@@ -149,8 +149,8 @@ def make_param(
     max_export_w: float = MAX_EXPORT_W,
     import_cost: float = IMPORT_COST,
     export_rev: float = EXPORT_REV,
-    import_price_key: str | None = None,
-    export_price_key: str | None = None,
+    import_price_amt_kwh_key: str | None = None,
+    export_price_amt_kwh_key: str | None = None,
     include_peak: bool = False,
 ) -> GridConnectionParam:
     port = EnergyPort(port_id=port_id, bus_id=bus_id, direction=PortDirection.BIDIRECTIONAL)
@@ -161,8 +161,8 @@ def make_param(
         max_export_power_w=max_export_w,
         import_cost_per_kwh=import_cost,
         export_revenue_per_kwh=export_rev,
-        import_price_key=import_price_key,
-        export_price_key=export_price_key,
+        import_price_amt_kwh_key=import_price_amt_kwh_key,
+        export_price_amt_kwh_key=export_price_amt_kwh_key,
         include_peak_power_objective=include_peak,
     )
 
@@ -320,30 +320,30 @@ class TestSetupRun:
 
     def test_import_price_resolved_when_key_set(self) -> None:
         prices = np.linspace(0.20, 0.40, HORIZON)
-        param = make_param(import_price_key=IMPORT_KEY)
+        param = make_param(import_price_amt_kwh_key=IMPORT_KEY)
         device = make_device(param=param, import_prices=prices)
         assert device._import_price_per_kwh is not None
         np.testing.assert_allclose(device._import_price_per_kwh, prices)
 
     def test_export_price_resolved_when_key_set(self) -> None:
         prices = np.linspace(0.05, 0.12, HORIZON)
-        param = make_param(export_price_key=EXPORT_KEY)
+        param = make_param(export_price_amt_kwh_key=EXPORT_KEY)
         device = make_device(param=param, export_prices=prices)
         assert device._export_price_per_kwh is not None
         np.testing.assert_allclose(device._export_price_per_kwh, prices)
 
     def test_import_price_none_when_no_key(self) -> None:
-        device = make_device(param=make_param(import_price_key=None))
+        device = make_device(param=make_param(import_price_amt_kwh_key=None))
         assert device._import_price_per_kwh is None
 
     def test_export_price_none_when_no_key(self) -> None:
-        device = make_device(param=make_param(export_price_key=None))
+        device = make_device(param=make_param(export_price_amt_kwh_key=None))
         assert device._export_price_per_kwh is None
 
     def test_wrong_shape_import_price_raises(self) -> None:
         wrong = np.ones(HORIZON + 2)
         ctx = FakeContext(horizon=HORIZON, import_prices=wrong)
-        param = make_param(import_price_key=IMPORT_KEY)
+        param = make_param(import_price_amt_kwh_key=IMPORT_KEY)
         device = GridConnectionDevice(param, 0, 0)
         with pytest.raises(ValueError, match="import price series"):
             device.setup_run(cast(SimulationContext, ctx))
@@ -351,7 +351,7 @@ class TestSetupRun:
     def test_wrong_shape_export_price_raises(self) -> None:
         wrong = np.ones(HORIZON - 1)
         ctx = FakeContext(horizon=HORIZON, export_prices=wrong)
-        param = make_param(export_price_key=EXPORT_KEY)
+        param = make_param(export_price_amt_kwh_key=EXPORT_KEY)
         device = GridConnectionDevice(param, 0, 0)
         with pytest.raises(ValueError, match="export price series"):
             device.setup_run(cast(SimulationContext, ctx))
@@ -608,7 +608,7 @@ class TestComputeCostFlatMixed:
 class TestComputeCostTOU:
     def test_tou_import_overrides_flat_rate(self) -> None:
         tou = np.full(HORIZON, 0.50)
-        param = make_param(import_price_key=IMPORT_KEY, import_cost=0.30)
+        param = make_param(import_price_amt_kwh_key=IMPORT_KEY, import_cost=0.30)
         device = make_device(param=param, import_prices=tou)
         state = device.create_batch_state(1, HORIZON)
         state.granted_wh[0, :] = 1_000.0
@@ -617,7 +617,7 @@ class TestComputeCostTOU:
 
     def test_tou_export_overrides_flat_rate(self) -> None:
         tou = np.full(HORIZON, 0.15)
-        param = make_param(export_price_key=EXPORT_KEY, export_rev=0.08)
+        param = make_param(export_price_amt_kwh_key=EXPORT_KEY, export_rev=0.08)
         device = make_device(param=param, export_prices=tou)
         state = device.create_batch_state(1, HORIZON)
         state.granted_wh[0, :] = -1_000.0
@@ -626,7 +626,7 @@ class TestComputeCostTOU:
 
     def test_tou_prices_applied_per_step(self) -> None:
         prices = np.array([0.10, 0.60])
-        param = make_param(import_price_key=IMPORT_KEY)
+        param = make_param(import_price_amt_kwh_key=IMPORT_KEY)
         device = make_device(param=param, horizon=2, import_prices=prices)
         state = device.create_batch_state(1, 2)
         state.granted_wh[0, 0] = 1_000.0
@@ -636,7 +636,7 @@ class TestComputeCostTOU:
 
     def test_tou_import_key_does_not_affect_export_direction(self) -> None:
         tou_import = np.full(HORIZON, 0.50)
-        param = make_param(import_price_key=IMPORT_KEY, export_rev=EXPORT_REV)
+        param = make_param(import_price_amt_kwh_key=IMPORT_KEY, export_rev=EXPORT_REV)
         device = make_device(param=param, import_prices=tou_import)
         state = device.create_batch_state(1, HORIZON)
         state.granted_wh[0, :] = -1_000.0
@@ -645,7 +645,7 @@ class TestComputeCostTOU:
 
     def test_tou_export_key_does_not_affect_import_direction(self) -> None:
         tou_export = np.full(HORIZON, 0.15)
-        param = make_param(export_price_key=EXPORT_KEY, import_cost=IMPORT_COST)
+        param = make_param(export_price_amt_kwh_key=EXPORT_KEY, import_cost=IMPORT_COST)
         device = make_device(param=param, export_prices=tou_export)
         state = device.create_batch_state(1, HORIZON)
         state.granted_wh[0, :] = 1_000.0

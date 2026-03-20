@@ -370,10 +370,6 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             ),
             "examples": ["battery1.soc_factor", ""],
             "x-scope": [str(ConfigScope.GENETIC2)],
-            "x-ui": {
-                "widget": "measurement_key",
-                "unit": "",
-            },
         },
     )
 

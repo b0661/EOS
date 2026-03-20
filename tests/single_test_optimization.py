@@ -133,7 +133,7 @@ def prepare_optimization_real_parameters() -> GeneticOptimizationParameters:
 
     # PV Forecast (in W)
     pv_forecast = prediction_eos.key_to_array(
-        key="pvforecast_ac_power",
+        key="pvforecast_ac_power_w",
         start_datetime=prediction_eos.ems_start_datetime,
         end_datetime=prediction_eos.end_datetime,
     )

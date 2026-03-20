@@ -102,11 +102,11 @@ class PVForecastVrm(PVForecastProvider):
             dc_power = round(value, 2)
             ac_power = round(dc_power * 0.96, 2)
             self.update_value(
-                date, {"pvforecast_dc_power": dc_power, "pvforecast_ac_power": ac_power}
+                date, {"pvforecast_dc_power_w": dc_power, "pvforecast_ac_power_w": ac_power}
             )
             pv_forecast.append((date, dc_power))
 
-        logger.debug(f"Updated pvforecast_dc_power with {len(pv_forecast)} entries.")
+        logger.debug(f"Updated pvforecast_dc_power_w with {len(pv_forecast)} entries.")
         self.update_datetime = to_datetime(in_timezone=self.config.general.timezone)
 
 

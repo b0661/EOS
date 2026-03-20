@@ -183,7 +183,7 @@ class PVForecastAkkudoktorDataRecord(PVForecastDataRecord):
         if self.pvforecastakkudoktor_ac_power_measured is not None:
             return self.pvforecastakkudoktor_ac_power_measured
         else:
-            return self.pvforecast_ac_power
+            return self.pvforecast_ac_power_w
 
 
 class PVForecastAkkudoktor(PVForecastProvider):
@@ -335,8 +335,8 @@ class PVForecastAkkudoktor(PVForecastProvider):
             sum_ac_power = sum(values.power for values in forecast_values)
 
             data = {
-                "pvforecast_dc_power": sum_dc_power,
-                "pvforecast_ac_power": sum_ac_power,
+                "pvforecast_dc_power_w": sum_dc_power,
+                "pvforecast_ac_power_w": sum_ac_power,
                 "pvforecastakkudoktor_wind_speed_10m": forecast_values[0].windspeed_10m,
                 "pvforecastakkudoktor_temp_air": forecast_values[0].temperature,
             }
@@ -371,8 +371,8 @@ class PVForecastAkkudoktor(PVForecastProvider):
         report_lines = []
         for record in self.records:
             date_time = record.date_time
-            dc_power = format_value(record.pvforecast_dc_power)
-            ac_power = format_value(record.pvforecast_ac_power)
+            dc_power = format_value(record.pvforecast_dc_power_w)
+            ac_power = format_value(record.pvforecast_ac_power_w)
             ac_power_measured = format_value(record.pvforecastakkudoktor_ac_power_measured)
             ac_power_any = format_value(record.pvforecastakkudoktor_ac_power_any)
 

@@ -523,11 +523,13 @@ class HybridInverterDevice(EnergyDevice):
           grid exchange at this step is within ``_SELF_CONSUMPTION_THRESHOLD_W``
           of zero *and* the battery is active (discharging or charging).  In
           this mode the inverter firmware autonomously balances local supply
-          and demand without an explicit power setpoint, so
-          ``operation_mode_factor`` is set to ``0.0``.  Requires an
+          and demand without an explicit power setpoint.  Requires an
           ``InstructionContext`` with a non-``None`` ``grid_granted_wh``
           vector; falls back to explicit ``CHARGE``/``DISCHARGE``/``IDLE``
-          if context is absent.
+          if context is absent.  ``operation_mode_factor`` carries the
+          optimised ``abs(bat_factor)`` magnitude so that the GA's decision
+          is visible in the solution DataFrame even though the firmware
+          ignores the explicit setpoint.
         * ``operation_mode_id = "CHARGE"``   when ``bat_factor > 0``
         * ``operation_mode_id = "DISCHARGE"`` when ``bat_factor < 0``
         * ``operation_mode_id = "IDLE"``      when ``bat_factor = 0``
@@ -564,8 +566,11 @@ class HybridInverterDevice(EnergyDevice):
                 # The arbitrated AC bus is at (or very near) zero net exchange.
                 # The optimizer found a self-consumption equilibrium; delegate
                 # real-time balancing to the inverter firmware.
+                # The factor carries the optimised bat_factor magnitude so that
+                # downstream consumers (logging, dashboards) can see what the GA
+                # decided, even though the firmware ignores the explicit setpoint.
                 bat_mode = "SELF_CONSUMPTION"
-                bat_factor_out = 0.0
+                bat_factor_out = 1.0 # abs(float(bat_f))
             elif bat_f > 0.0:
                 bat_mode = "CHARGE"
                 bat_factor_out = abs(float(bat_f))

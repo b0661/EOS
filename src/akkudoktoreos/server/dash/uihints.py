@@ -232,23 +232,43 @@ UI_HINTS: dict[str, UiHint] = {
     "devices.batteries": UiHint(
         form="map_items",
         item_path="devices.batteries",
-        # item_model populated lazily in _ensure_item_models()
     ),
     "devices.electric_vehicles": UiHint(
         form="map_items",
         item_path="devices.electric_vehicles",
-        # item_model populated lazily in _ensure_item_models()
+    ),
+    "devices.grid_connections": UiHint(
+        form="map_items",
+        item_path="devices.grid_connections",
+    ),
+    "devices.fixed_loads": UiHint(
+        form="map_items",
+        item_path="devices.fixed_loads",
+    ),
+    # Sub-field hint for the load_power_w_key field inside each inveter entry
+    "devices.inverters.load_power_w_key": UiHint(
+        form="select",
+        options=["loadforecast_power_w", "null"]
     ),
     "devices.home_appliances": UiHint(
         form="map_items",
         item_path="devices.home_appliances",
-        # item_model populated lazily in _ensure_item_models()
     ),
     # Sub-field hint for the time_windows field inside each appliance entry
     "devices.home_appliances.cycle_time_windows.windows": UiHint(
         form="time_windows",
         value_description="cycle index (0-based)",
     ),
+    "devices.inverters": UiHint(
+        form="map_items",
+        item_path="devices.inverters",
+    ),
+    # Sub-field hint for the pv_power_w_key field inside each inveter entry
+    "devices.inverters.pv_power_w_key": UiHint(
+        form="select",
+        options=["pvforecast_dc_power_w", "null"]
+    ),
+
     # ------------------------------------------------------------------
     # Electricity price — fixed time windows
     # ------------------------------------------------------------------
@@ -293,12 +313,33 @@ def _ensure_item_models() -> None:
 
         UI_HINTS["devices.electric_vehicles"].item_model = BatteriesCommonSettings
 
+    if UI_HINTS["devices.grid_connections"].item_model is None:
+        from akkudoktoreos.devices.settings.gridconnectionsettings import (
+            GridConnectionCommonSettings,
+        )
+
+        UI_HINTS["devices.grid_connections"].item_model = GridConnectionCommonSettings
+
+    if UI_HINTS["devices.fixed_loads"].item_model is None:
+        from akkudoktoreos.devices.settings.fixedloadsettings import (
+            FixedLoadCommonSettings,
+        )
+
+        UI_HINTS["devices.fixed_loads"].item_model = FixedLoadCommonSettings
+
     if UI_HINTS["devices.home_appliances"].item_model is None:
         from akkudoktoreos.devices.settings.homeappliancesettings import (
             HomeApplianceCommonSettings,
         )
 
         UI_HINTS["devices.home_appliances"].item_model = HomeApplianceCommonSettings
+
+    if UI_HINTS["devices.inverters"].item_model is None:
+        from akkudoktoreos.devices.settings.invertersettings import (
+            InverterCommonSettings,
+        )
+
+        UI_HINTS["devices.inverters"].item_model = InverterCommonSettings
 
 
 def resolve_item_model(hint: UiHint) -> Optional[Any]:

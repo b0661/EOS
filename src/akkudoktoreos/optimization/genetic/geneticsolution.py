@@ -564,13 +564,13 @@ class GeneticSolution(ConfigMixin, GeneticParametersBaseModel):
 
         for pred_key, pred_fill_method, pred_solution_key, pred_solution_factor in [
             (
-                "pvforecast_ac_power",
+                "pvforecast_ac_power_w",
                 "linear",
                 "pvforecast_ac_energy_wh",
                 power_to_energy_per_interval_factor,
             ),
             (
-                "pvforecast_dc_power",
+                "pvforecast_dc_power_w",
                 "linear",
                 "pvforecast_dc_energy_wh",
                 power_to_energy_per_interval_factor,

@@ -1,15 +1,20 @@
 """Fixed (non-controllable) household load settings."""
 
+from typing import TYPE_CHECKING
 from pydantic import Field, computed_field
 
+from akkudoktoreos.config.configabc import ConfigScope
 from akkudoktoreos.devices.devicesabc import DeviceParam
 from akkudoktoreos.devices.settings.devicebasesettings import (
     DevicesBaseSettings,
     PortsMixin,
 )
 
+if TYPE_CHECKING:
+    from akkudoktoreos.devices.genetic2.fixedload import FixedLoadParam
 
-class FixedLoadSettings(PortsMixin, DevicesBaseSettings):
+
+class FixedLoadCommonSettings(PortsMixin, DevicesBaseSettings):
     """Fixed (non-controllable) household load settings.
 
     Represents a device whose consumption is driven entirely by an
@@ -26,37 +31,28 @@ class FixedLoadSettings(PortsMixin, DevicesBaseSettings):
           - port_id: p_ac
             bus_id: bus_ac
             direction: sink
-
-    Notes:
-    ------
-    ``FixedLoadParam`` does not yet exist in ``devicesabc``.
-    ``to_genetic2_param()`` raises ``NotImplementedError`` until it is
-    added.
     """
 
-    peak_power_w: float = Field(
-        ...,
-        gt=0,
+    load_power_w_key: str = Field(
+        default="loadforecast_power_w",
         json_schema_extra={
             "description": (
-                "Peak power consumption of this load [W]. "
-                "Actual consumption per step is provided by a forecast."
+                "SimulationContext prediction key resolving to a per-step "
+                "load forecast array [W] of shape (horizon,). "
             ),
-            "examples": [500, 1200],
+            "examples": ["loadforecast_power_w", ""],
+            "x-scope": [str(ConfigScope.GENETIC2)],
         },
     )
 
-    def to_genetic2_param(self) -> DeviceParam:
-        """Return an immutable domain object for the GENETIC2 optimizer.
+    def to_genetic2_param(self) -> "FixedLoadParam":
+        """Return an immutable domain object for the GENETIC2 optimizer."""
+        from akkudoktoreos.devices.genetic2.fixedload import FixedLoadParam
 
-        Raises:
-            NotImplementedError: ``FixedLoadParam`` is not yet defined in
-                ``devicesabc``. Add it there first.
-        """
-        # TODO: return FixedLoadParam(...) once defined in devicesabc.
-        raise NotImplementedError(
-            "FixedLoadParam is not yet defined in devicesabc. "
-            "Add it before calling to_genetic2_param() on FixedLoadSettings."
+        return FixedLoadParam(
+            device_id=self.device_id,
+            ports=self.ports_to_genetic2_param(),
+            load_power_w_key = self.load_power_w_key,
         )
 
     @computed_field  # type: ignore[prop-decorator]

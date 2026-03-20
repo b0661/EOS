@@ -198,8 +198,8 @@ class OptimizationSolution(PydanticBaseModel):
                 "- costs_amt: Costs in money amount"
                 "- revenue_amt: Revenue in money amount"
                 "- losses_energy_wh: Energy losses in wh"
-                "- <device-id>_operation_mode_id: Operation mode id of the device."
-                "- <device-id>_operation_mode_factor: Operation mode factor of the device."
+                "- <device-id>_<mode>_op_mode: Operation mode of the device."
+                "- <device-id>_<mode>_op_factor: Operation mode factor of the device."
                 "- <device-id>_soc_factor: State of charge of a battery/ electric vehicle device as factor of total capacity."
                 "- <device-id>_energy_wh: Energy consumption (positive) of a device in wh."
             )

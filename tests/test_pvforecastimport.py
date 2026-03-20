@@ -88,7 +88,7 @@ def test_invalid_provider(provider, config_eos):
 )
 def test_import(provider, sample_import_1_json, start_datetime, from_file, config_eos):
     """Test fetching forecast from import."""
-    key = "pvforecast_ac_power"
+    key = "pvforecast_ac_power_w"
     ems_eos = get_ems()
     ems_eos.set_start_datetime(to_datetime(start_datetime, in_timezone="Europe/Berlin"))
     if from_file:

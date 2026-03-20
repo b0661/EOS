@@ -143,7 +143,7 @@ to `DISABLED` in the configuration.
 - Unit: W
 - Time Range: 48 hours (00:00 today to 23:00 tomorrow)
 - Format: Array of hourly values
-- Data Source: `GET /v1/prediction/series?key=pvforecast_ac_power`
+- Data Source: `GET /v1/prediction/series?key=pvforecast_ac_power_w`
 
 #### Electricity Price Forecast (`strompreis_euro_pro_wh`)
 

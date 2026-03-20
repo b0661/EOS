@@ -27,14 +27,20 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 
 # Do not use datetimemutil - we do not need the pydantic model
 from pendulum import DateTime, Duration
 
 from akkudoktoreos.core.cache import cache_energy_management
 from akkudoktoreos.core.coreabc import get_config, get_measurement, get_prediction
+from akkudoktoreos.utils.datetimeutil import to_datetime
 
-_prediction_key_tracker: dict[int, set[str]] = {}
+
+_prediction_key_tracker: set[str] = set()
+
+def reset_prediction_key_tracker() -> None:
+    _prediction_key_tracker.clear()
 
 
 @dataclass(slots=True, frozen=True)
@@ -74,12 +80,7 @@ class SimulationContext:
     def __post_init__(self) -> None:
         """Initialize derived attributes after construction."""
         object.__setattr__(self, "horizon", len(self.step_times))
-        # Register a fresh tracking set for this instance
-        _prediction_key_tracker[id(self)] = set()
-
-    def __del__(self) -> None:
-        """Clean up tracking set when context is garbage collected."""
-        _prediction_key_tracker.pop(id(self), None)
+        reset_prediction_key_tracker()
 
     # ------------------------------------------------------------------
     # Generic resolution
@@ -104,7 +105,9 @@ class SimulationContext:
             KeyError: If the key does not exist in the store.
             ValueError: If alignment to the horizon fails.
         """
-        _prediction_key_tracker.get(id(self), set()).add(key)
+        # prediction may already be cached, even before start of simulation
+        # Ensure the key is recorded.
+        _prediction_key_tracker.add(key)
         return self._resolve_prediction_cached(key)
 
     @cache_energy_management
@@ -119,12 +122,37 @@ class SimulationContext:
             align_to_interval=True,
         )
 
-    def resolved_predictions(self) -> dict[str, np.ndarray]:
+    def resolved_predictions(self) -> pd.DataFrame:
         """Return all prediction arrays that were requested during this run."""
-        return {
-            key: self.resolve_prediction(key)
-            for key in _prediction_key_tracker.get(id(self), set())
+        tz = self.step_times[0].timezone_name
+        reference_index = pd.date_range(
+            start=self.step_times[0].replace(tzinfo=None),
+            end=(self.step_times[-1] + self.step_interval).replace(tzinfo=None),
+            freq=self.step_interval,
+            inclusive="left",
+            tz=tz,
+        )
+        keys = _prediction_key_tracker
+        data = {
+            "date_time": reference_index,
         }
+        for key in keys:
+            try:
+                array = self.resolve_prediction(key)
+                if len(array) != len(reference_index):
+                    raise ValueError(
+                        f"Array length mismatch for key '{key}' (expected {len(reference_index)}, got {len(array)})"
+                    )
+
+                data[key] = self.resolve_prediction(key)
+            except KeyError as e:
+                raise KeyError(f"Failed to retrieve data for key '{key}': {e}")
+
+        if not data:
+            raise KeyError(f"No valid data found for the requested keys {keys}.")
+
+        df = pd.DataFrame(data, index=reference_index)
+        return df
 
     @cache_energy_management
     def resolve_measurement(self, key: str) -> Optional[float]:

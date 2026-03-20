@@ -73,7 +73,7 @@ solution_excludes = [
 
 # Current state of solution displayed
 solution_visible: dict[str, bool] = {
-    "pv_energy_wh": True,
+    "pvforecast_power_w": True,
     "elec_price_amt_kwh": True,
     "feed_in_tariff_amt_kwh": True,
 }
@@ -188,15 +188,20 @@ def SolutionCard(solution: OptimizationSolution, config: SettingsEOS, data: Opti
     validate_source(source)
 
     # Calculate minimum and maximum Range
+    power_w_min = 0.0
+    power_w_max = 0.0
     energy_wh_min = 0.0
     energy_wh_max = 0.0
     amt_kwh_min = 0.0
     amt_kwh_max = 0.0
     amt_min = 0.0
     amt_max = 0.0
-    soc_factor_min = 0.0
-    soc_factor_max = 1.0
+    factor_min = 0.0
+    factor_max = 1.0
     for col in df.columns:
+        if col.endswith("power_w"):
+            power_w_min = min(power_w_min, float(df[col].min()))
+            power_w_max = max(power_w_max, float(df[col].max()))
         if col.endswith("energy_wh"):
             energy_wh_min = min(energy_wh_min, float(df[col].min()))
             energy_wh_max = max(energy_wh_max, float(df[col].max()))
@@ -210,10 +215,11 @@ def SolutionCard(solution: OptimizationSolution, config: SettingsEOS, data: Opti
             continue
     # Adjust to similar y-axis 0-point
     values_min_max = [
+        (power_w_min, power_w_max),
         (energy_wh_min, energy_wh_max),
         (amt_kwh_min, amt_kwh_max),
         (amt_min, amt_max),
-        (soc_factor_min, soc_factor_max),
+        (factor_min, factor_max),
     ]
     # First get the maximum factor for the min value related the maximum value
     min_max_factor = 0.0
@@ -224,11 +230,15 @@ def SolutionCard(solution: OptimizationSolution, config: SettingsEOS, data: Opti
                 min_max_factor = value_factor
 
     # Adapt the min values to have the same relative min/max factor on all y-axis
+    power_w_min = min_max_factor * power_w_max * -1.0
     energy_wh_min = min_max_factor * energy_wh_max * -1.0
     amt_kwh_min = min_max_factor * amt_kwh_max * -1.0
     amt_min = min_max_factor * amt_max * -1.0
-    soc_factor_min = min_max_factor * soc_factor_max * -1.0
+    factor_min = min_max_factor * factor_max * -1.0
     # add 5% to min and max values for better display
+    power_w_range_orig = power_w_max - power_w_min
+    power_w_max += 0.05 * power_w_range_orig
+    power_w_min -= 0.05 * power_w_range_orig
     energy_wh_range_orig = energy_wh_max - energy_wh_min
     energy_wh_max += 0.05 * energy_wh_range_orig
     energy_wh_min -= 0.05 * energy_wh_range_orig
@@ -238,9 +248,9 @@ def SolutionCard(solution: OptimizationSolution, config: SettingsEOS, data: Opti
     amt_range_orig = amt_max - amt_min
     amt_max += 0.05 * amt_range_orig
     amt_min -= 0.05 * amt_range_orig
-    soc_factor_range_orig = soc_factor_max - soc_factor_min
-    soc_factor_max += 0.05 * soc_factor_range_orig
-    soc_factor_min -= 0.05 * soc_factor_range_orig
+    factor_range_orig = factor_max - factor_min
+    factor_max += 0.05 * factor_range_orig
+    factor_min -= 0.05 * factor_range_orig
 
     if eosstatus.eos_health is not None:
         last_run_datetime = eosstatus.eos_health["energy-management"]["last_run_datetime"]
@@ -253,27 +263,31 @@ def SolutionCard(solution: OptimizationSolution, config: SettingsEOS, data: Opti
         title=f"Optimization Solution - last run: {last_run_datetime}",
         x_axis_type="datetime",
         x_axis_label=f"Datetime [localtime {date_time_tz}] - start: {start_datetime}",
-        y_axis_label="Energy [Wh]",
+        y_axis_label="Power [W]",
         sizing_mode="stretch_width",
-        y_range=Range1d(energy_wh_min, energy_wh_max),
+        y_range=Range1d(power_w_min, power_w_max),
         height=400,
     )
 
     plot.extra_y_ranges = {
-        "factor": Range1d(soc_factor_min, soc_factor_max),  # y2
-        "amt_kwh": Range1d(amt_kwh_min, amt_kwh_max),  # y3
-        "amt": Range1d(amt_min, amt_max),  # y4
+        "energy": Range1d(energy_wh_min, energy_wh_max),  # y2
+        "factor": Range1d(factor_min, factor_max),  # y3
+        "amt_kwh": Range1d(amt_kwh_min, amt_kwh_max),  # y4
+        "amt": Range1d(amt_min, amt_max),  # y5
     }
     # y2 axis
-    y2_axis = LinearAxis(y_range_name="factor", axis_label="Factor [0.0..1.0]")
+    y2_axis = LinearAxis(y_range_name="energy", axis_label="Energy [Wh]")
     plot.add_layout(y2_axis, "left")
     # y3 axis
-    y3_axis = LinearAxis(y_range_name="amt_kwh", axis_label="Electricty Price [currency/kWh]")
-    y3_axis.axis_label_text_color = "red"
-    plot.add_layout(y3_axis, "right")
+    y3_axis = LinearAxis(y_range_name="factor", axis_label="Factor [0.0..1.0]")
+    plot.add_layout(y3_axis, "left")
     # y4 axis
-    y4_axis = LinearAxis(y_range_name="amt", axis_label="Amount [currency]")
+    y4_axis = LinearAxis(y_range_name="amt_kwh", axis_label="Electricty Price [Amount/kWh]")
+    y4_axis.axis_label_text_color = "red"
     plot.add_layout(y4_axis, "right")
+    # y5 axis
+    y5_axis = LinearAxis(y_range_name="amt", axis_label="Amount [Amount]")
+    plot.add_layout(y5_axis, "right")
 
     plot.toolbar.autohide = True
 
@@ -312,7 +326,7 @@ def SolutionCard(solution: OptimizationSolution, config: SettingsEOS, data: Opti
         else:
             line_dash = "solid"
         if visible:
-            if col.endswith("energy_wh"):
+            if col.endswith("power_w"):
                 r = plot.step(
                     x="date_time_local",
                     y=col,
@@ -322,15 +336,16 @@ def SolutionCard(solution: OptimizationSolution, config: SettingsEOS, data: Opti
                     color=color_palette[color],
                     line_dash=line_dash,
                 )
-            elif col.endswith("soc_factor"):
-                r = plot.line(
+            elif col.endswith("energy_wh"):
+                r = plot.step(
                     x="date_time_local",
                     y=col,
+                    mode="after",
                     source=source,
                     legend_label=col,
                     color=color_palette[color],
                     line_dash=line_dash,
-                    y_range_name="factor",
+                    y_range_name="energy",
                 )
             elif col.endswith("factor"):
                 r = plot.step(

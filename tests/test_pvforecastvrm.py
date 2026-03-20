@@ -63,11 +63,11 @@ def test_update_data_updates_dc_and_ac_power(pvforecast_instance):
         expected_calls = [
             call(
                 pendulum.datetime(2025, 1, 1, 0, 0, tz='Europe/Berlin'),
-                {"pvforecast_dc_power": 120.0, "pvforecast_ac_power": 115.2}
+                {"pvforecast_dc_power_w": 120.0, "pvforecast_ac_power_w": 115.2}
             ),
             call(
                 pendulum.datetime(2025, 1, 1, 1, 0, tz='Europe/Berlin'),
-                {"pvforecast_dc_power": 130.0, "pvforecast_ac_power": 124.8}
+                {"pvforecast_dc_power_w": 130.0, "pvforecast_ac_power_w": 124.8}
             ),
         ]
 

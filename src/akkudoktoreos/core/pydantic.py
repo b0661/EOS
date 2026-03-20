@@ -1120,18 +1120,26 @@ class PydanticDateTimeDataFrame(PydanticBaseModel):
     @classmethod
     def _detect_data_tz(cls, df: pd.DataFrame) -> Optional[str]:
         """Detect timezone of pandas data."""
+        tz_str = None
         # Index first (strongest signal)
         if isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
-            return str(df.index.tz)
+            tz_str = str(df.index.tz)
+            if tz_str.startswith("UTC") and len(tz_str) > 3:
+                # Regression test
+                raise ValueError(f"Invalid Timezone {tz_str} in time index {df.index}")
+        else:
+            # Then datetime columns
+            for col in df.columns:
+                if is_datetime64_any_dtype(df[col]):
+                    tz = getattr(df[col].dt, "tz", None)
+                    if tz is not None:
+                        tz_str = str(tz)
+                        break
+            if tz_str.startswith("UTC") and len(tz_str) > 3:
+                # Regression test
+                raise ValueError(f"Invalid Timezone {tz_str} in data column {col}")
 
-        # Then datetime columns
-        for col in df.columns:
-            if is_datetime64_any_dtype(df[col]):
-                tz = getattr(df[col].dt, "tz", None)
-                if tz is not None:
-                    return str(tz)
-
-        return None
+        return tz_str
 
     @classmethod
     def from_dataframe(

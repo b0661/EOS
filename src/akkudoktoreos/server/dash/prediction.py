@@ -28,7 +28,7 @@ def PVForecast(predictions: pd.DataFrame, config: dict, date_time_tz: str, dark:
     )
     plot.vbar(
         x="date_time",
-        top="pvforecast_ac_power",
+        top="pvforecast_ac_power_w",
         source=source,
         width=BAR_WIDTH_1HOUR * 0.8,
         legend_label="AC Power",
@@ -224,7 +224,7 @@ def Prediction(eos_host: str, eos_port: Union[str, int], data: Optional[dict] = 
     try:
         params = {
             "keys": [
-                "pvforecast_ac_power",
+                "pvforecast_ac_power_w",
                 "elecprice_marketprice_amt_kwh",
                 "weather_relative_humidity",
                 "weather_temp_air",

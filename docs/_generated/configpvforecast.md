@@ -241,7 +241,7 @@
            "provider_settings": {
                "PVForecastImport": {
                    "import_file_path": null,
-                   "import_json": "{\"pvforecast_ac_power\": [0, 8.05, 352.91]}"
+                   "import_json": "{\"pvforecast_ac_power_w\": [0, 8.05, 352.91]}"
                }
            }
        }

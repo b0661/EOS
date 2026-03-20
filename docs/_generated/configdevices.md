@@ -12,7 +12,7 @@ that is passed alongside this config when building the engine.
 Call ``to_genetic2_params()`` to obtain a flat ``list[DeviceParam]``
 for all devices that have a complete GENETIC2 domain class. Device
 types whose domain class is not yet implemented
-(``GridConnectionSettings``, ``FixedLoadSettings``) are skipped with
+(``GridConnectionCommonSettings``, ``FixedLoadCommonSettings``) are skipped with
 a warning.
 
 <!-- pyml disable line-length -->
@@ -24,8 +24,8 @@ a warning.
 | ---- | -------------------- | ---- | --------- | ------- | ----------- |
 | batteries | `EOS_DEVICES__BATTERIES` | `Optional[dict[str, akkudoktoreos.devices.settings.batterysettings.BatteriesCommonSettings]]` | `rw` | `None` | Stationary battery storage devices, keyed by device_id. |
 | electric_vehicles | `EOS_DEVICES__ELECTRIC_VEHICLES` | `Optional[dict[str, akkudoktoreos.devices.settings.batterysettings.BatteriesCommonSettings]]` | `rw` | `None` | Electric vehicle battery packs, keyed by device_id. |
-| fixed_loads | `EOS_DEVICES__FIXED_LOADS` | `Optional[dict[str, akkudoktoreos.devices.settings.fixedloadsettings.FixedLoadSettings]]` | `rw` | `None` | Non-controllable fixed household loads, keyed by device_id. |
-| grid_connections | `EOS_DEVICES__GRID_CONNECTIONS` | `Optional[dict[str, akkudoktoreos.devices.settings.gridconnectionsettings.GridConnectionSettings]]` | `rw` | `None` | Grid connection points, keyed by device_id. |
+| fixed_loads | `EOS_DEVICES__FIXED_LOADS` | `Optional[dict[str, akkudoktoreos.devices.settings.fixedloadsettings.FixedLoadCommonSettings]]` | `rw` | `None` | Non-controllable fixed household loads, keyed by device_id. |
+| grid_connections | `EOS_DEVICES__GRID_CONNECTIONS` | `Optional[dict[str, akkudoktoreos.devices.settings.gridconnectionsettings.GridConnectionCommonSettings]]` | `rw` | `None` | Grid connection points, keyed by device_id. |
 | heat_pumps | `EOS_DEVICES__HEAT_PUMPS` | `Optional[dict[str, akkudoktoreos.devices.settings.heatpumpsettings.HeatPumpCommonSettings]]` | `rw` | `None` | Heat pump devices, keyed by device_id. |
 | home_appliances | `EOS_DEVICES__HOME_APPLIANCES` | `dict[str, akkudoktoreos.devices.settings.homeappliancesettings.HomeApplianceCommonSettings]` | `rw` | `required` | Shiftable home appliance devices, keyed by device_id. |
 | inverters | `EOS_DEVICES__INVERTERS` | `Optional[dict[str, akkudoktoreos.devices.settings.invertersettings.InverterCommonSettings]]` | `rw` | `None` | Inverter devices, keyed by device_id. |

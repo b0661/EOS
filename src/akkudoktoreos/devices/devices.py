@@ -53,8 +53,8 @@ from akkudoktoreos.devices.settings.batterysettings import (
 from akkudoktoreos.devices.settings.devicebasesettings import (
     BusConfig,
 )
-from akkudoktoreos.devices.settings.fixedloadsettings import FixedLoadSettings
-from akkudoktoreos.devices.settings.gridconnectionsettings import GridConnectionSettings
+from akkudoktoreos.devices.settings.fixedloadsettings import FixedLoadCommonSettings
+from akkudoktoreos.devices.settings.gridconnectionsettings import GridConnectionCommonSettings
 from akkudoktoreos.devices.settings.heatpumpsettings import HeatPumpCommonSettings
 from akkudoktoreos.devices.settings.homeappliancesettings import (
     HomeApplianceCommonSettings,
@@ -132,7 +132,7 @@ class DevicesCommonSettings(SettingsBaseModel):
     Call ``to_genetic2_params()`` to obtain a flat ``list[DeviceParam]``
     for all devices that have a complete GENETIC2 domain class. Device
     types whose domain class is not yet implemented
-    (``GridConnectionSettings``, ``FixedLoadSettings``) are skipped with
+    (``GridConnectionCommonSettings``, ``FixedLoadCommonSettings``) are skipped with
     a warning.
     """
 
@@ -182,7 +182,7 @@ class DevicesCommonSettings(SettingsBaseModel):
     )
 
     # ---- Grid connections ----
-    grid_connections: Optional[dict[str, GridConnectionSettings]] = Field(
+    grid_connections: Optional[dict[str, GridConnectionCommonSettings]] = Field(
         default=None,
         json_schema_extra={
             "description": "Grid connection points, keyed by device_id.",
@@ -218,7 +218,7 @@ class DevicesCommonSettings(SettingsBaseModel):
     )
 
     # ---- Fixed loads ----
-    fixed_loads: Optional[dict[str, FixedLoadSettings]] = Field(
+    fixed_loads: Optional[dict[str, FixedLoadCommonSettings]] = Field(
         default=None,
         json_schema_extra={
             "description": "Non-controllable fixed household loads, keyed by device_id.",
@@ -296,7 +296,7 @@ class DevicesCommonSettings(SettingsBaseModel):
         """Return a flat list of GENETIC2 domain objects for all devices.
 
         Device types whose domain class is not yet implemented
-        (``GridConnectionSettings``, ``FixedLoadSettings``) are skipped
+        (``GridConnectionCommonSettings``, ``FixedLoadCommonSettings``) are skipped
         with a warning rather than raising, so a partial system can still
         be configured and optimised.
 
@@ -320,7 +320,6 @@ class DevicesCommonSettings(SettingsBaseModel):
                     )
 
         # Batteries and EVs not used in GENETIC2 (only GENETIC)
-        # Grid connections and fixed loads skipped until domain classes exist:
         _add(self.fixed_loads)
         _add(self.heat_pumps)
         _add(self.home_appliances)

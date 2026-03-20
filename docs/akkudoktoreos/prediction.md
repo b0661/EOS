@@ -289,8 +289,8 @@ The data may additionally or solely be provided by the
 
 Prediction keys:
 
-- `pvforecast_ac_power`: Total DC power (W).
-- `pvforecast_dc_power`: Total AC power (W).
+- `pvforecast_ac_power_w`: Total DC power (W).
+- `pvforecast_dc_power_w`: Total AC power (W).
 
 Configuration options:
 
@@ -516,7 +516,7 @@ This token must be stored in the EOS configuration along with the VRM-Installati
 
 The prediction keys for the PV forecast data are:
 
-- `pvforecast_dc_power`: Total DC power (W).
+- `pvforecast_dc_power_w`: Total DC power (W).
 
 ### PVForecastImport Provider
 
@@ -526,8 +526,8 @@ becomes available.
 
 The prediction keys for the PV forecast data are:
 
-- `pvforecast_ac_power`: Total AC power (W).
-- `pvforecast_dc_power`: Total DC power (W).
+- `pvforecast_ac_power_w`: Total AC power (W).
+- `pvforecast_dc_power_w`: Total DC power (W).
 
 The PV forecast data must be provided in one of the formats described in
 <project:#prediction-import-providers>. The data source can be given in the

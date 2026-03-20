@@ -243,9 +243,9 @@ class GeneticOptimizationParameters(
             cls.prediction.update_data()
 
             try:
-                pvforecast_ac_power = (
+                pvforecast_ac_power_w = (
                     cls.prediction.key_to_array(
-                        key="pvforecast_ac_power",
+                        key="pvforecast_ac_power_w",
                         start_datetime=parameter_start_datetime,
                         end_datetime=parameter_end_datetime,
                         interval=interval,
@@ -598,7 +598,7 @@ class GeneticOptimizationParameters(
             try:
                 oparams = GeneticOptimizationParameters(
                     ems=GeneticEnergyManagementParameters(
-                        pv_prognose_wh=pvforecast_ac_power,
+                        pv_prognose_wh=pvforecast_ac_power_w,
                         strompreis_euro_pro_wh=elecprice_marketprice_amt_wh,
                         einspeiseverguetung_euro_pro_wh=feed_in_tariff_amt_wh,
                         gesamtlast=loadforecast_power_w,

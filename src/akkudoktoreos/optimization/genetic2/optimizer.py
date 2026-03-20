@@ -119,10 +119,11 @@ class BestIndividualResult:
             - ``{id}_energy_wh``             Per-step granted energy for each device [Wh].
             - ``{id}_soc_factor``            SoC as fraction of capacity
                                              (inverter/battery devices only).
-            - ``{id}_operation_mode_id``     Operation mode string per step
+            - ``{id}_{mode]_op_mode``        Operation mode {mode} active = 1.0, inactive = 0.0
                                              (inverter + appliance devices).
-            - ``{id}_operation_mode_factor`` Operation mode factor per step
-                                             (inverter devices only).
+            - ``{id}_{mode}_op_factor``      Operation mode factor per step
+                                             (follows op_mode for home appliances, for inverters
+                                             defines the charge/ discharge factor for the mode).
         total_costs_amt: Aggregate gross import cost over the horizon [currency].
         total_revenues_amt: Aggregate gross export revenue over the horizon [currency].
     """
@@ -338,6 +339,41 @@ class GeneticOptimizer:
             except NotImplementedError:
                 pass
 
+            # ---- Instruction-driven per-mode columns -------------------------
+            if device_id in instructions:
+
+                # 1. One-time lookup: execution_time → step index t ∈ [0, horizon)
+                time_to_step: dict[Any, int] = {ts: i for i, ts in enumerate(step_index)}
+
+                # 2. Accumulate per-mode float arrays (all start as zeros)
+                mode_op:     dict[str, np.ndarray] = {}   # mode_id → (horizon,) 0.0/1.0
+                mode_factor: dict[str, np.ndarray] = {}   # mode_id → (horizon,) factor
+
+                for instr in instructions[device_id]:
+                    mode_id = getattr(instr, "operation_mode_id", None)
+                    if mode_id is None:        # skip non-OMBC/FRBC instructions
+                        continue
+                    t = time_to_step.get(instr.execution_time)
+                    if t is None:              # instruction outside horizon (shouldn't happen)
+                        continue
+                    factor = float(getattr(instr, "operation_mode_factor", 1.0))
+
+                    if mode_id not in mode_op: # first time we see this mode: allocate arrays
+                        mode_op[mode_id]     = np.zeros(horizon)
+                        mode_factor[mode_id] = np.zeros(horizon)
+
+                    mode_op[mode_id][t]     = 1.0    # mark step t as active for this mode
+                    mode_factor[mode_id][t] = factor # store the factor at step t
+
+                # 3. Emit columns — one pair per mode, lowercased
+                for mode_id, op_arr in mode_op.items():
+                    # Special rule: suppress PV_UTILISE when PV was never used
+                    if mode_id == "PV_UTILISE" and not np.any(op_arr):
+                        continue
+                    columns[f"{device_id}_{mode_id.lower()}_op_mode"]   = op_arr
+                    columns[f"{device_id}_{mode_id.lower()}_op_factor"] = mode_factor[mode_id]
+
+
             # ---- Solution columns (duck-typed on batch state attributes) ----
             # state is typed as ``object`` in BatchSimulationState; cast both
             # state and device to Any so mypy allows attribute access on the
@@ -345,8 +381,14 @@ class GeneticOptimizer:
             s: Any = state
             d: Any = device
 
-            # GridConnectionDevice: has granted_wh but NOT bat_factors
-            if hasattr(state, "granted_wh") and not hasattr(state, "bat_factors"):
+            # GridConnectionDevice: has granted_wh, no bat_factors, and the
+            # param carries import_cost_per_kwh (distinguishes it from
+            # FixedLoadDevice which shares the same state shape).
+            if (
+                hasattr(state, "granted_wh")
+                and not hasattr(state, "bat_factors")
+                and hasattr(d.param, "import_cost_per_kwh")
+            ):
                 granted: np.ndarray = s.granted_wh[0]  # (horizon,)
                 columns["grid_energy_wh"] = granted
 
@@ -370,22 +412,27 @@ class GeneticOptimizer:
                 columns["revenue_amt"] = (export_wh / 1000.0) * export_price
                 load_energy_wh += import_wh
 
+            # FixedLoadDevice: has granted_wh, no bat_factors, and the param
+            # carries load_power_w_key (distinguishes it from GridConnection).
+            elif (
+                hasattr(state, "granted_wh")
+                and not hasattr(state, "bat_factors")
+                and hasattr(d.param, "load_power_w_key")
+            ):
+                energy_wh: np.ndarray = s.granted_wh[0]  # (horizon,)
+                columns[f"{device_id}_energy_wh"] = energy_wh
+                load_energy_wh += np.maximum(0.0, energy_wh)
+
             # HybridInverterDevice: has bat_factors + soc_wh
             elif hasattr(state, "bat_factors") and hasattr(state, "soc_wh"):
                 ac_power_w: np.ndarray = s.ac_power_w[0]  # (horizon,) after apply_device_grant
-                energy_wh: np.ndarray = ac_power_w * step_h
+                energy_wh = ac_power_w * step_h
                 columns[f"{device_id}_energy_wh"] = energy_wh
 
                 capacity_wh: float = d.param.battery_capacity_wh
                 columns[f"{device_id}_soc_factor"] = (
                     s.soc_wh[0] / capacity_wh if capacity_wh > 0 else np.zeros(horizon)
                 )
-
-                bat_f: np.ndarray = s.bat_factors[0]  # (horizon,)
-                columns[f"{device_id}_operation_mode_id"] = np.where(
-                    bat_f > 0.0, "CHARGE", np.where(bat_f < 0.0, "DISCHARGE", "IDLE")
-                )
-                columns[f"{device_id}_operation_mode_factor"] = np.abs(bat_f)
 
                 load_energy_wh += np.maximum(0.0, energy_wh)
 
@@ -394,9 +441,49 @@ class GeneticOptimizer:
                 energy_wh = s.granted_energy_wh[0]  # (horizon,)
                 columns[f"{device_id}_energy_wh"] = energy_wh
 
-                schedule_w: np.ndarray = s.schedule[0]  # (horizon,) [W]
-                columns[f"{device_id}_operation_mode_id"] = np.where(schedule_w > 0.0, "RUN", "OFF")
                 load_energy_wh += np.maximum(0.0, energy_wh)
+
+            # ---- Instruction-driven per-mode columns -------------------------
+            # Build {id}_{MODE}_op_mode (0.0/1.0) and {id}_{MODE}_op_factor
+            # columns from the S2 instructions already collected above.
+            # This is done for every device that produced instructions and has
+            # an operation_mode_id attribute on its instructions (inverters and
+            # appliances).  Grid instructions are empty lists so nothing is
+            # emitted for the grid device.
+            # The step → instruction mapping uses the instruction's
+            # execution_time matched against step_index.  Multiple instructions
+            # sharing the same execution_time (e.g. bat + PV_UTILISE from
+            # HybridInverterDevice) each get their own mode column.
+            if device_id in instructions:
+                # Build a fast lookup: execution_time → step index
+                time_to_step: dict[Any, int] = {t: i for i, t in enumerate(step_index)}
+
+                # Accumulate per-mode arrays keyed by mode string
+                mode_op: dict[str, np.ndarray] = {}
+                mode_factor: dict[str, np.ndarray] = {}
+
+                for instr in instructions[device_id]:
+                    mode_id: str | None = getattr(instr, "operation_mode_id", None)
+                    if mode_id is None:
+                        continue
+                    t = time_to_step.get(instr.execution_time)
+                    if t is None:
+                        continue
+                    factor = float(getattr(instr, "operation_mode_factor", 1.0))
+
+                    if mode_id not in mode_op:
+                        mode_op[mode_id] = np.zeros(horizon)
+                        mode_factor[mode_id] = np.zeros(horizon)
+                    mode_op[mode_id][t] = 1.0
+                    mode_factor[mode_id][t] = factor
+
+                for mode_id, op_arr in mode_op.items():
+                    # Skip PV_UTILISE entirely when no step actually used PV
+                    # (pv_util was zero across the whole horizon).
+                    if mode_id == "PV_UTILISE" and not np.any(op_arr):
+                        continue
+                    columns[f"{device_id}_{mode_id.lower()}_op_mode"] = op_arr
+                    columns[f"{device_id}_{mode_id.lower()}_op_factor"] = mode_factor[mode_id]
 
         columns["load_energy_wh"] = load_energy_wh
         # Conversion losses are embedded in device physics but not surfaced

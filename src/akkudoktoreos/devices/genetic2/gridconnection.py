@@ -40,7 +40,7 @@ Two pricing modes are supported and may be combined per direction:
     ``GridConnectionParam`` apply uniformly across every step.
 
 **Time-of-use** (optional, context-resolved)
-    If ``import_price_key`` or ``export_price_key`` is set, the
+    If ``import_price_amt_kwh_key`` or ``export_price_amt_kwh_key`` is set, the
     corresponding time-series is resolved from the ``SimulationContext``
     during ``setup_run`` and used *instead of* the flat rate for that
     direction. This supports day-ahead spot prices, dynamic feed-in
@@ -110,17 +110,17 @@ class GridConnectionParam(DeviceParam):
         import_cost_per_kwh :
             Flat-rate electricity import cost [currency / kWh]. Applied
             uniformly to every imported kWh unless overridden by a resolved
-            ``import_price_key`` time-series. Must be ≥ 0.
+            ``import_price_amt_kwh_key`` time-series. Must be ≥ 0.
         export_revenue_per_kwh :
             Flat-rate feed-in revenue [currency / kWh]. Subtracted from total
             cost for every exported kWh unless overridden by a resolved
-            ``export_price_key`` time-series. Must be ≥ 0.
-        import_price_key :
+            ``export_price_amt_kwh_key`` time-series. Must be ≥ 0.
+        import_price_amt_kwh_key :
             Optional key in the ``SimulationContext`` time-series store
             resolving to a per-step import price array [currency / kWh] of
             shape ``(horizon,)``. When set, replaces ``import_cost_per_kwh``
             step-by-step. Useful for day-ahead market prices.
-        export_price_key :
+        export_price_amt_kwh_key :
             Optional key in the ``SimulationContext`` time-series store
             resolving to a per-step export revenue array [currency / kWh] of
             shape ``(horizon,)``. When set, replaces
@@ -137,8 +137,8 @@ class GridConnectionParam(DeviceParam):
     max_export_power_w: float
     import_cost_per_kwh: float
     export_revenue_per_kwh: float
-    import_price_key: str | None = None
-    export_price_key: str | None = None
+    import_price_amt_kwh_key: str | None = None
+    export_price_amt_kwh_key: str | None = None
     include_peak_power_objective: bool = False
 
     def __post_init__(self) -> None:
@@ -272,8 +272,8 @@ class GridConnectionDevice(EnergyDevice):
         self._num_steps = horizon
         self._step_interval_sec = context.step_interval.total_seconds()
 
-        if self.param.import_price_key is not None:
-            prices = context.resolve_prediction(self.param.import_price_key)
+        if self.param.import_price_amt_kwh_key is not None:
+            prices = context.resolve_prediction(self.param.import_price_amt_kwh_key)
             if prices.shape != (horizon,):
                 raise ValueError(
                     f"{self.device_id}: import price series must have shape "
@@ -283,8 +283,8 @@ class GridConnectionDevice(EnergyDevice):
         else:
             self._import_price_per_kwh = None
 
-        if self.param.export_price_key is not None:
-            prices = context.resolve_prediction(self.param.export_price_key)
+        if self.param.export_price_amt_kwh_key is not None:
+            prices = context.resolve_prediction(self.param.export_price_amt_kwh_key)
             if prices.shape != (horizon,):
                 raise ValueError(
                     f"{self.device_id}: export price series must have shape "
@@ -431,7 +431,7 @@ class GridConnectionDevice(EnergyDevice):
           ``cost -= abs(granted_wh[i, t]) / 1000 * export_price[t]``
 
         ``import_price[t]`` is the time-of-use array resolved from the
-        context during ``setup_run`` if ``import_price_key`` was set,
+        context during ``setup_run`` if ``import_price_amt_kwh_key`` was set,
         otherwise a uniform array filled with ``param.import_cost_per_kwh``.
         Likewise for ``export_price[t]``.
 

@@ -16,10 +16,10 @@ from akkudoktoreos.prediction.predictionabc import PredictionProvider, Predictio
 class PVForecastDataRecord(PredictionRecord):
     """Represents a pvforecast data record containing various pvforecast attributes at a specific datetime."""
 
-    pvforecast_dc_power: Optional[float] = Field(
+    pvforecast_dc_power_w: Optional[float] = Field(
         default=None, json_schema_extra={"description": "Total DC power (W)."}
     )
-    pvforecast_ac_power: Optional[float] = Field(
+    pvforecast_ac_power_w: Optional[float] = Field(
         default=None, json_schema_extra={"description": "Total AC power (W)."}
     )
 

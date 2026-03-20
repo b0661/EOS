@@ -286,8 +286,8 @@ def test_report_ac_power_and_measurement(provider, config_eos):
 
     record = PVForecastAkkudoktorDataRecord(
         pvforecastakkudoktor_ac_power_measured=900.0,
-        pvforecast_dc_power=450.0,
-        pvforecast_ac_power=400.0,
+        pvforecast_dc_power_w=450.0,
+        pvforecast_ac_power_w=400.0,
     )
     provider.insert_by_datetime(record)
 

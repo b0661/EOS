@@ -1276,7 +1276,7 @@ async def fastapi_pvforecast() -> ForecastResponse:
         Set PVForecastAkkudoktor as provider, then update data with
         '/v1/prediction/update'
         and then request data with
-        '/v1/prediction/list?key=pvforecast_ac_power' and
+        '/v1/prediction/list?key=pvforecast_ac_power_w' and
         '/v1/prediction/list?key=pvforecastakkudoktor_temp_air' instead.
     """
     settings = SettingsEOS(pvforecast=PVForecastCommonSettings(provider="PVForecastAkkudoktor"))
@@ -1301,7 +1301,7 @@ async def fastapi_pvforecast() -> ForecastResponse:
         ac_power = (
             get_prediction()
             .key_to_array(
-                key="pvforecast_ac_power",
+                key="pvforecast_ac_power_w",
                 start_datetime=start_datetime,
                 end_datetime=end_datetime,
             )
