@@ -569,15 +569,31 @@ class HybridInverterDevice(EnergyDevice):
             raise RuntimeError("Call setup_run() before compute_cost().")
 
         # Terminal SoC correction.
+        #
+        # The GA must not profit from either direction of SoC deviation:
+        #
+        # Net discharge (delta > 0): the battery consumed stored energy that
+        #   must be replaced — penalised at the mean import price.
+        #
+        # Net charge (delta < 0): the battery stored imported energy that
+        #   goes unused this horizon — penalised at the export price (the
+        #   opportunity cost of not exporting that energy instead).
+        #
+        # Both corrections use the same magnitude so neither direction is
+        # artificially preferred.
         initial_soc_wh = self._battery_initial_soc_wh
-        terminal_soc_wh = state.soc_wh[:, -1]          # (population_size,)
-        delta_wh = initial_soc_wh - terminal_soc_wh     # positive = net discharged
+        terminal_soc_wh = state.soc_wh[:, -1]           # (population_size,)
+        delta_wh = initial_soc_wh - terminal_soc_wh      # positive = net discharged
         mean_import_price = (
             float(self._import_price_per_kwh.mean())
             if self._import_price_per_kwh is not None
             else 0.10
         )
-        terminal_correction = np.maximum(0.0, delta_wh) / 1000.0 * mean_import_price
+        # Net-discharged energy → replace at import price
+        discharge_correction = np.maximum(0.0,  delta_wh) / 1000.0 * mean_import_price
+        # Net-charged energy → opportunity cost at export price (stranded import)
+        charge_correction    = np.maximum(0.0, -delta_wh) / 1000.0 * mean_import_price
+        terminal_correction  = discharge_correction + charge_correction
 
         # Optional LCOS.
         if p.levelized_cost_of_storage_amt_kwh > 0.0:
@@ -1045,7 +1061,7 @@ class HybridInverterDevice(EnergyDevice):
 
         if charge_mask.any():
             if p.inverter_type == InverterType.HYBRID and pv_power_w is not None:
-                pv_clipped = np.clip(pv_power_w, p.pv_min_power_w, p.pv_max_power_w)
+                pv_clipped = np.where(pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0)
                 # Use the per-step PV utilisation to determine how much PV assists
                 # the minimum charge.  We look at each step that is charging.
                 pop_idx, step_idx = np.where(charge_mask)
@@ -1068,7 +1084,7 @@ class HybridInverterDevice(EnergyDevice):
 
         if discharge_mask.any():
             if p.inverter_type == InverterType.HYBRID and pv_power_w is not None:
-                pv_clipped = np.clip(pv_power_w, p.pv_min_power_w, p.pv_max_power_w)
+                pv_clipped = np.where(pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0)
                 pop_idx, step_idx = np.where(discharge_mask)
                 pv_util_at_step = state.pv_util_factors[pop_idx, step_idx]
                 pv_dc_used = pv_util_at_step * pv_clipped[step_idx]
@@ -1086,7 +1102,7 @@ class HybridInverterDevice(EnergyDevice):
         if idle_mask.any() and p.inverter_type in (
             InverterType.SOLAR, InverterType.HYBRID
         ) and pv_power_w is not None:
-            pv_clipped = np.clip(pv_power_w, p.pv_min_power_w, p.pv_max_power_w)
+            pv_clipped = np.where(pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0)
             pop_idx, step_idx = np.where(idle_mask)
             pv_util_at_step = state.pv_util_factors[pop_idx, step_idx]
             pv_ac_w = pv_util_at_step * pv_clipped[step_idx] * p.pv_to_ac_efficiency
