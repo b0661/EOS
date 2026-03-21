@@ -413,13 +413,13 @@ class GeneticOptimizationParameters(
                     # Retry
                     continue
                 # Levelized cost of ownership
-                if battery_config.levelized_cost_of_storage_kwh is None:
+                if battery_config.levelized_cost_of_storage_amt_kwh is None:
                     logger.info(
                         "No battery device LCOS data available - defaulting to 0 €/kWh. Parameter preparation attempt {}.",
                         attempt,
                     )
-                    battery_config.levelized_cost_of_storage_kwh = 0
-                battery_lcos_kwh = battery_config.levelized_cost_of_storage_kwh
+                    battery_config.levelized_cost_of_storage_amt_kwh = 0
+                battery_lcos_kwh = battery_config.levelized_cost_of_storage_amt_kwh
                 # Initial SOC
                 try:
                     initial_soc_factor = cls.measurement.key_to_value(

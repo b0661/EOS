@@ -1961,7 +1961,7 @@
               0.88
             ]
           },
-          "levelized_cost_of_storage_kwh": {
+          "levelized_cost_of_storage_amt_kwh": {
             "type": "number",
             "title": "Levelized Cost Of Storage Kwh",
             "description": "Levelized cost of storage (LCOS), the average lifetime cost of delivering one kWh [\u20ac/kWh].",
@@ -2129,7 +2129,7 @@
               0.88
             ]
           },
-          "levelized_cost_of_storage_kwh": {
+          "levelized_cost_of_storage_amt_kwh": {
             "type": "number",
             "title": "Levelized Cost Of Storage Kwh",
             "description": "Levelized cost of storage (LCOS), the average lifetime cost of delivering one kWh [\u20ac/kWh].",

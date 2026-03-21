@@ -54,7 +54,7 @@ a warning.
                    "capacity_wh": 8000,
                    "charging_efficiency": 0.88,
                    "discharging_efficiency": 0.88,
-                   "levelized_cost_of_storage_kwh": 0.0,
+                   "levelized_cost_of_storage_amt_kwh": 0.0,
                    "max_charge_power_w": 5000,
                    "min_charge_power_w": 50,
                    "charge_rates": [
@@ -84,7 +84,7 @@ a warning.
                    "capacity_wh": 60000,
                    "charging_efficiency": 0.88,
                    "discharging_efficiency": 0.88,
-                   "levelized_cost_of_storage_kwh": 0.0,
+                   "levelized_cost_of_storage_amt_kwh": 0.0,
                    "max_charge_power_w": 5000,
                    "min_charge_power_w": 50,
                    "charge_rates": [
@@ -168,7 +168,7 @@ a warning.
                    "capacity_wh": 8000,
                    "charging_efficiency": 0.88,
                    "discharging_efficiency": 0.88,
-                   "levelized_cost_of_storage_kwh": 0.0,
+                   "levelized_cost_of_storage_amt_kwh": 0.0,
                    "max_charge_power_w": 5000,
                    "min_charge_power_w": 50,
                    "charge_rates": [
@@ -210,7 +210,7 @@ a warning.
                    "capacity_wh": 60000,
                    "charging_efficiency": 0.88,
                    "discharging_efficiency": 0.88,
-                   "levelized_cost_of_storage_kwh": 0.0,
+                   "levelized_cost_of_storage_amt_kwh": 0.0,
                    "max_charge_power_w": 5000,
                    "min_charge_power_w": 50,
                    "charge_rates": [

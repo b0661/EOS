@@ -54,7 +54,7 @@ class BatteriesCommonSettings(DevicesBaseSettings):
             "examples": [0.88],
         },
     )
-    levelized_cost_of_storage_kwh: float = Field(
+    levelized_cost_of_storage_amt_kwh: float = Field(
         default=0.0,
         json_schema_extra={
             "description": (

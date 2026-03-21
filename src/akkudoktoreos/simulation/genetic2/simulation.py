@@ -156,19 +156,23 @@ class SimulationContext:
     @cache_energy_management
     def resolve_measurement(self, key: str) -> Optional[float]:
         """Resolve an arbitrary measurement key aligned to this run.
-
+ 
         This method is intended to be called by devices during
         ``setup_run()`` to extract required measurement data.
-
+ 
         Args:
-            key: Unique identifier of the measurement.
-
+            key: Unique identifier of the measurement. An empty or blank
+                string is treated as "not configured" and returns ``None``
+                immediately without querying the measurement store.
+ 
         Returns:
             Float aligned to the simulation start or None if not found.
-
+ 
         Raises:
             KeyError: If the key does not exist in the store.
         """
+        if not key or not key.strip():
+            return None
         return get_measurement().key_to_value(
             key=key,
             target_datetime=self.step_times[0],

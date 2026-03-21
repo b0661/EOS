@@ -354,10 +354,19 @@ class HybridInverterDevice(EnergyDevice):
 
     @property
     def objective_names(self) -> list[str]:
-        names = []
+        # The inverter contributes no objectives of its own. The financial
+        # outcome of battery cycling is fully captured by GridConnectionDevice
+        # via the import/export price applied to the arbitrated AC bus energy.
+        # A separate LCOS penalty here creates a conflicting signal: it
+        # penalises every cycle regardless of whether that cycle was profitable
+        # on the price spread, which suppresses battery use even when cycling
+        # is clearly beneficial.
+        #
+        # Set levelized_cost_of_storage_amt_kwh > 0 only to model true battery
+        # wear cost when comparing scenarios where cycling degrades the battery.
         if self.param.levelized_cost_of_storage_amt_kwh > 0.0:
-            names.append("energy_cost_amt")
-        return names
+            return ["energy_cost_amt"]
+        return []
 
     # ------------------------------------------------------------------
     # Structure Phase
@@ -383,11 +392,14 @@ class HybridInverterDevice(EnergyDevice):
             self._pv_power_w = pv
 
         if self.param.inverter_type in (InverterType.BATTERY, InverterType.HYBRID):
-            soc_factor = None
-            if self.param.battery_initial_soc_factor_key:  # skip if empty string
-                soc_factor = context.resolve_measurement(self.param.battery_initial_soc_factor_key)
+            soc_factor = context.resolve_measurement(self.param.battery_initial_soc_factor_key)
             if soc_factor is None:
-                soc_factor = self.param.battery_min_soc_factor  # use min_soc
+                # No measurement available — default to the midpoint of the usable
+                # SoC range [min_soc_factor, max_soc_factor].  This guarantees that
+                # repair never zeros out charge genes (headroom available) nor
+                # discharge genes (energy available), so the GA can explore both
+                # directions from generation 0.
+                soc_factor = (self.param.battery_min_soc_factor + self.param.battery_max_soc_factor) / 2.0
             if not (0.0 <= soc_factor <= 1.0):
                 raise ValueError(
                     f"{self.device_id}: initial SoC factor {soc_factor} outside allowed bounds "
@@ -515,17 +527,16 @@ class HybridInverterDevice(EnergyDevice):
     def compute_cost(self, state: HybridInverterBatchState) -> np.ndarray:
         """Compute levelized cost of storage (LCOS) for battery cycling.
 
-        Penalises every Wh cycled through the battery (charge + discharge)
-        by ``levelized_cost_of_storage_amt_kwh``.  This gives the GA a
-        signal to avoid unnecessary cycling when there is no price-spread
-        benefit — preventing the pathological case of charging to maximum
-        from the grid and staying there.
+        Only active when ``levelized_cost_of_storage_amt_kwh > 0``.
+        When zero (default), returns an empty array -- the grid connection
+        device's import/export cost is the sole fitness signal and correctly
+        rewards profitable cycling without penalising it.
 
-        Returns shape ``(population_size, 1)`` when LCOS > 0, else
-        ``(population_size, 0)``.
+        Returns shape ``(population_size, 1)`` when LCOS > 0,
+        else ``(population_size, 0)``.
         """
         p = self.param
-        if p.levelized_cost_of_storage_amt_kwh == 0.0:
+        if p.levelized_cost_of_storage_amt_kwh == 0.0 or p.inverter_type == InverterType.SOLAR:
             return np.zeros((state.population_size, 0))
 
         if self._step_interval_sec is None:
@@ -539,8 +550,7 @@ class HybridInverterDevice(EnergyDevice):
         cycled_wh = (
             np.abs(bat_f) * p.battery_max_charge_rate * p.battery_capacity_wh * step_h
         ).sum(axis=1)  # (population_size,)
-
-        lcos = cycled_wh / 1000.0 * p.levelized_cost_of_storage_amt_kwh  # (population_size,)
+        lcos = cycled_wh / 1000.0 * p.levelized_cost_of_storage_amt_kwh
         return lcos[:, np.newaxis]  # (population_size, 1)
 
     # ------------------------------------------------------------------

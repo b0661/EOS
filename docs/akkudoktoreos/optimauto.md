@@ -324,7 +324,7 @@ The inverter supports separate AC↔DC conversion efficiencies:
                 "capacity_wh": 8000,
                 "charging_efficiency": 0.88,
                 "discharging_efficiency": 0.88,
-                "levelized_cost_of_storage_kwh": 0.12,
+                "levelized_cost_of_storage_amt_kwh": 0.12,
                 "max_charge_power_w": 8000,
                 "min_charge_power_w": 50,
                 "charge_rates": null,

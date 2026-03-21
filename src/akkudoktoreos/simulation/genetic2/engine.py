@@ -319,11 +319,13 @@ class EnergySimulationEngine:
         # 2. Build device requests for bus arbitration
         # ---------------------------------------------------------
         device_requests = []
+        request_map: dict[int, tuple] = {}  # device_index -> (device, request)
         for device in devices:
             device_state = batch_state.device_states[device.device_id]
             req = device.build_device_request(device_state)
             if req is not None:
                 device_requests.append(req)
+                request_map[req.device_index] = (device, req)
 
         # ---------------------------------------------------------
         # 3. Run bus arbitration
@@ -334,13 +336,11 @@ class EnergySimulationEngine:
         # ---------------------------------------------------------
         # 4. Apply grants to device states
         # ---------------------------------------------------------
-        for device in devices:
-            device_state = batch_state.device_states[device.device_id]
-            req = device.build_device_request(device_state)
-            if req is not None:
-                grant = grant_map.get(req.device_index)
-                if grant is not None:
-                    device.apply_device_grant(device_state, grant)
+        for device_index, (device, req) in request_map.items():
+            grant = grant_map.get(device_index)
+            if grant is not None:
+                device_state = batch_state.device_states[device.device_id]
+                device.apply_device_grant(device_state, grant)
 
         # ---------------------------------------------------------
         # 5. Accumulate local costs into global objective columns

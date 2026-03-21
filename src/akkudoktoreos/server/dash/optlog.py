@@ -154,8 +154,9 @@ def _RunSummarySection(summary: dict, dark: bool) -> Grid:
     forecasts: dict = summary.get("forecasts", {})
     forecast_rows = []
     metric_groups = [
-        ("PV power",     "pv_power_w_min",      "pv_power_w_mean",      "pv_power_w_max",      "W"),
-        ("Import price", "import_price_min",    "import_price_mean",    "import_price_max",    "amt/kWh"),
+        ("PV power",      "pv_power_w_min",   "pv_power_w_mean",   "pv_power_w_max",   "W"),
+        ("Import price",  "import_price_min",  "import_price_mean",  "import_price_max",  "amt/kWh"),
+        ("Export price",  "export_price_min",  "export_price_mean",  "export_price_max",  "amt/kWh"),
     ]
     for label, k_min, k_mean, k_max, unit in metric_groups:
         if k_min in forecasts:
@@ -183,7 +184,7 @@ def _RunSummarySection(summary: dict, dark: bool) -> Grid:
 # ── Convergence chart ─────────────────────────────────────────────────────────
 
 
-def _ConvergenceChart(df, best_improved_at: Optional[int], dark: bool) -> Div:
+def _ConvergenceChart(df, best_improved_at: Optional[int], summary: dict, dark: bool) -> Div:
     """Dual-axis Bokeh chart: fitness curves + repair counts."""
 
     # Build source with a plain integer x-axis (generation number).
@@ -273,6 +274,27 @@ def _ConvergenceChart(df, best_improved_at: Optional[int], dark: bool) -> Div:
             text=f" converged gen {best_improved_at}",
             text_font_size="11px",
             text_color=_colors[2],
+        ))
+
+    # Vertical markers for each stagnation mutation boost
+    boost_gens: list[int] = summary.get("stagnation_boosts_at_generations", [])
+    for boost_gen in boost_gens:
+        plot.add_layout(Span(
+            location=boost_gen,
+            dimension="height",
+            line_color=_colors[3],
+            line_dash="dashed",
+            line_width=1.0,
+            line_alpha=0.6,
+        ))
+    if boost_gens:
+        from bokeh.models import Label
+        plot.add_layout(Label(
+            x=boost_gens[0],
+            y=fitness_min,
+            text=f" boost×{len(boost_gens)}",
+            text_font_size="10px",
+            text_color=_colors[3],
         ))
 
     plot.legend.location = "top_right"
@@ -425,7 +447,7 @@ def OptLog(
         ),
         # Convergence chart
         Card(
-            _ConvergenceChart(log_df, best_improved_at, dark),
+            _ConvergenceChart(log_df, best_improved_at, summary, dark),
             header=CardTitle("Convergence"),
         ),
         # Per-objective chart
