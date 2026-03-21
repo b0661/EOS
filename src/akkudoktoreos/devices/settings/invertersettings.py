@@ -449,6 +449,9 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             battery_max_soc_factor=self.battery_max_soc_factor,
             battery_initial_soc_factor_key=self.battery_initial_soc_factor_key,
             levelized_cost_of_storage_amt_kwh=self.levelized_cost_of_storage_amt_kwh,
+            # Pass the same import price key used by GridConnectionDevice so the
+            # terminal SoC correction in compute_cost uses the actual tariff.
+            import_price_key="elecprice_marketprice_amt_kwh",
         )
 
     @computed_field  # type: ignore[prop-decorator]

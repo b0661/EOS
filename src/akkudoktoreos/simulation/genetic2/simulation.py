@@ -22,7 +22,6 @@ Typical usage:
 
 from __future__ import annotations
 
-# Module-level tracking dict — weak so it doesn't prevent GC
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -114,7 +113,7 @@ class SimulationContext:
         return get_prediction().key_to_array(
             key=key,
             start_datetime=self.step_times[0],
-            end_datetime=self.step_times[-1] + self.step_interval,
+            end_datetime=self.step_times[-1] + self.step_interval,  # exclusive
             interval=self.step_interval,
             dropna=True,
             boundary="context",
@@ -156,18 +155,18 @@ class SimulationContext:
     @cache_energy_management
     def resolve_measurement(self, key: str) -> Optional[float]:
         """Resolve an arbitrary measurement key aligned to this run.
- 
+
         This method is intended to be called by devices during
         ``setup_run()`` to extract required measurement data.
- 
+
         Args:
             key: Unique identifier of the measurement. An empty or blank
                 string is treated as "not configured" and returns ``None``
                 immediately without querying the measurement store.
- 
+
         Returns:
             Float aligned to the simulation start or None if not found.
- 
+
         Raises:
             KeyError: If the key does not exist in the store.
         """

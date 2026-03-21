@@ -217,6 +217,13 @@ class HybridInverterParam(DeviceParam):
     # Set to 0.0 to disable.
     levelized_cost_of_storage_amt_kwh: float = 0.0
 
+    # Key for resolving the per-step import price forecast used by the
+    # terminal SoC correction in compute_cost.  Should match the key used
+    # by GridConnectionDevice (typically "elecprice_marketprice_amt_kwh").
+    # None disables the price-aware correction and falls back to a flat
+    # 0.10 EUR/kWh estimate.
+    import_price_key: str | None = None
+
     def __post_init__(self) -> None:
         self._validate()
 
@@ -347,6 +354,7 @@ class HybridInverterDevice(EnergyDevice):
         self._step_interval_sec: float | None = None
         self._pv_power_w: np.ndarray | None = None  # shape (horizon,), SOLAR/HYBRID
         self._battery_initial_soc_wh: float | None = None  # BATTERY/HYBRID
+        self._import_price_per_kwh: np.ndarray | None = None  # shape (horizon,), for terminal SoC correction
 
     @property
     def ports(self) -> tuple[EnergyPort, ...]:
@@ -354,17 +362,9 @@ class HybridInverterDevice(EnergyDevice):
 
     @property
     def objective_names(self) -> list[str]:
-        # The inverter contributes no objectives of its own. The financial
-        # outcome of battery cycling is fully captured by GridConnectionDevice
-        # via the import/export price applied to the arbitrated AC bus energy.
-        # A separate LCOS penalty here creates a conflicting signal: it
-        # penalises every cycle regardless of whether that cycle was profitable
-        # on the price spread, which suppresses battery use even when cycling
-        # is clearly beneficial.
-        #
-        # Set levelized_cost_of_storage_amt_kwh > 0 only to model true battery
-        # wear cost when comparing scenarios where cycling degrades the battery.
-        if self.param.levelized_cost_of_storage_amt_kwh > 0.0:
+        # BATTERY/HYBRID always contributes energy_cost_amt via the terminal
+        # SoC correction (and optionally LCOS).  SOLAR has no battery.
+        if self.param.inverter_type != InverterType.SOLAR:
             return ["energy_cost_amt"]
         return []
 
@@ -406,6 +406,15 @@ class HybridInverterDevice(EnergyDevice):
                     "[0.0, 1.0]."
                 )
             self._battery_initial_soc_wh = soc_factor * self.param.battery_capacity_wh
+
+            # Resolve import price for terminal SoC correction in compute_cost.
+            if self.param.import_price_key:
+                try:
+                    self._import_price_per_kwh = context.resolve_prediction(self.param.import_price_key)
+                except Exception:
+                    self._import_price_per_kwh = None
+            else:
+                self._import_price_per_kwh = None
 
     def genome_requirements(self) -> GenomeSlice:
         """Return genome slice descriptor for the two-gene-per-step encoding.
@@ -525,33 +534,64 @@ class HybridInverterDevice(EnergyDevice):
         state.ac_power_w[:] = grant.port_grants[0].granted_wh / step_h
 
     def compute_cost(self, state: HybridInverterBatchState) -> np.ndarray:
-        """Compute levelized cost of storage (LCOS) for battery cycling.
+        """Compute battery terminal SoC correction and optional LCOS.
 
+        Terminal SoC correction
+        -----------------------
+        Without this, the GA exploits "free" stored energy: it can discharge
+        the battery cheaply in one horizon without paying to recharge it,
+        making that schedule look artificially profitable.
+
+        The correction adds back the replacement cost of energy net-consumed
+        from the battery over the horizon, valued at the mean import price:
+
+            delta_soc_wh = initial_soc_wh - terminal_soc_wh
+            correction   = max(0, delta_soc_wh) / 1000 * mean_import_price
+
+        A positive delta (net discharge) is penalised proportionally.
+        A negative delta (net charge) is not rewarded -- the grid import
+        cost already accounts for it.  This makes the horizon self-consistent
+        in expected-value terms: the battery is treated as if it ends where
+        it started.
+
+        LCOS (optional)
+        ---------------
         Only active when ``levelized_cost_of_storage_amt_kwh > 0``.
-        When zero (default), returns an empty array -- the grid connection
-        device's import/export cost is the sole fitness signal and correctly
-        rewards profitable cycling without penalising it.
 
-        Returns shape ``(population_size, 1)`` when LCOS > 0,
-        else ``(population_size, 0)``.
+        Returns shape ``(population_size, 1)`` always for BATTERY/HYBRID,
+        ``(population_size, 0)`` for SOLAR.
         """
         p = self.param
-        if p.levelized_cost_of_storage_amt_kwh == 0.0 or p.inverter_type == InverterType.SOLAR:
+        if p.inverter_type == InverterType.SOLAR:
             return np.zeros((state.population_size, 0))
 
-        if self._step_interval_sec is None:
+        if self._step_interval_sec is None or self._battery_initial_soc_wh is None:
             raise RuntimeError("Call setup_run() before compute_cost().")
 
-        step_h = self._step_interval_sec / 3600.0
-        # bat_factors > 0 → charging; < 0 → discharging.
-        # Total cycled energy per individual = sum of |bat_factor| × max_rate × capacity × step_h
-        # (bat_factors are already repaired so they reflect what actually happened).
-        bat_f = state.bat_factors  # (population_size, horizon)
-        cycled_wh = (
-            np.abs(bat_f) * p.battery_max_charge_rate * p.battery_capacity_wh * step_h
-        ).sum(axis=1)  # (population_size,)
-        lcos = cycled_wh / 1000.0 * p.levelized_cost_of_storage_amt_kwh
-        return lcos[:, np.newaxis]  # (population_size, 1)
+        # Terminal SoC correction.
+        initial_soc_wh = self._battery_initial_soc_wh
+        terminal_soc_wh = state.soc_wh[:, -1]          # (population_size,)
+        delta_wh = initial_soc_wh - terminal_soc_wh     # positive = net discharged
+        mean_import_price = (
+            float(self._import_price_per_kwh.mean())
+            if self._import_price_per_kwh is not None
+            else 0.10
+        )
+        terminal_correction = np.maximum(0.0, delta_wh) / 1000.0 * mean_import_price
+
+        # Optional LCOS.
+        if p.levelized_cost_of_storage_amt_kwh > 0.0:
+            step_h = self._step_interval_sec / 3600.0
+            bat_f = state.bat_factors
+            cycled_wh = (
+                np.abs(bat_f) * p.battery_max_charge_rate * p.battery_capacity_wh * step_h
+            ).sum(axis=1)
+            lcos = cycled_wh / 1000.0 * p.levelized_cost_of_storage_amt_kwh
+        else:
+            lcos = np.zeros(state.population_size)
+
+        total = terminal_correction + lcos
+        return total[:, np.newaxis]  # (population_size, 1)
 
     # ------------------------------------------------------------------
     # S2 instruction extraction
