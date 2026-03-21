@@ -119,7 +119,7 @@ class FixedLoadBatchState:
             Ordered ``DateTime`` timestamps, length == horizon.
     """
 
-    granted_wh: np.ndarray          # (population_size, horizon)  float64
+    granted_wh: np.ndarray  # (population_size, horizon)  float64
     population_size: int
     horizon: int
     step_times: tuple[DateTime, ...]
@@ -203,8 +203,7 @@ class FixedLoadDevice(EnergyDevice):
         load = context.resolve_prediction(self.param.load_power_w_key)
         if load.shape != (horizon,):
             raise ValueError(
-                f"{self.device_id}: load forecast must have shape ({horizon},), "
-                f"got {load.shape}."
+                f"{self.device_id}: load forecast must have shape ({horizon},), got {load.shape}."
             )
         # Clamp to non-negative: a fixed load only consumes, never injects.
         self._load_power_w = np.maximum(0.0, load)

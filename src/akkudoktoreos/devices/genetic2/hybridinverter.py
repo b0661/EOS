@@ -210,6 +210,13 @@ class HybridInverterParam(DeviceParam):
     battery_max_soc_factor: float
     battery_initial_soc_factor_key: str
 
+    # Battery wear cost — penalises unnecessary cycling so the GA does not
+    # charge from the grid when there is no price-spread benefit.
+    # Typical value: 0.05 EUR/kWh cycled (half-cycle cost of a residential
+    # Li-ion battery at ~4000 cycles over 10 kWh capacity).
+    # Set to 0.0 to disable.
+    levelized_cost_of_storage_amt_kwh: float = 0.0
+
     def __post_init__(self) -> None:
         self._validate()
 
@@ -347,7 +354,10 @@ class HybridInverterDevice(EnergyDevice):
 
     @property
     def objective_names(self) -> list[str]:
-        return []
+        names = []
+        if self.param.levelized_cost_of_storage_amt_kwh > 0.0:
+            names.append("energy_cost_eur")
+        return names
 
     # ------------------------------------------------------------------
     # Structure Phase
@@ -503,7 +513,35 @@ class HybridInverterDevice(EnergyDevice):
         state.ac_power_w[:] = grant.port_grants[0].granted_wh / step_h
 
     def compute_cost(self, state: HybridInverterBatchState) -> np.ndarray:
-        return np.zeros((state.population_size, 0))
+        """Compute levelized cost of storage (LCOS) for battery cycling.
+
+        Penalises every Wh cycled through the battery (charge + discharge)
+        by ``levelized_cost_of_storage_amt_kwh``.  This gives the GA a
+        signal to avoid unnecessary cycling when there is no price-spread
+        benefit — preventing the pathological case of charging to maximum
+        from the grid and staying there.
+
+        Returns shape ``(population_size, 1)`` when LCOS > 0, else
+        ``(population_size, 0)``.
+        """
+        p = self.param
+        if p.levelized_cost_of_storage_amt_kwh == 0.0:
+            return np.zeros((state.population_size, 0))
+
+        if self._step_interval_sec is None:
+            raise RuntimeError("Call setup_run() before compute_cost().")
+
+        step_h = self._step_interval_sec / 3600.0
+        # bat_factors > 0 → charging; < 0 → discharging.
+        # Total cycled energy per individual = sum of |bat_factor| × max_rate × capacity × step_h
+        # (bat_factors are already repaired so they reflect what actually happened).
+        bat_f = state.bat_factors  # (population_size, horizon)
+        cycled_wh = (
+            np.abs(bat_f) * p.battery_max_charge_rate * p.battery_capacity_wh * step_h
+        ).sum(axis=1)  # (population_size,)
+
+        lcos = cycled_wh / 1000.0 * p.levelized_cost_of_storage_amt_kwh  # (population_size,)
+        return lcos[:, np.newaxis]  # (population_size, 1)
 
     # ------------------------------------------------------------------
     # S2 instruction extraction
@@ -520,16 +558,16 @@ class HybridInverterDevice(EnergyDevice):
         The first carries the battery command:
 
         * ``operation_mode_id = "SELF_CONSUMPTION"`` when the arbitrated
-          grid exchange at this step is within ``_SELF_CONSUMPTION_THRESHOLD_W``
-          of zero *and* the battery is active (discharging or charging).  In
-          this mode the inverter firmware autonomously balances local supply
-          and demand without an explicit power setpoint.  Requires an
-          ``InstructionContext`` with a non-``None`` ``grid_granted_wh``
-          vector; falls back to explicit ``CHARGE``/``DISCHARGE``/``IDLE``
-          if context is absent.  ``operation_mode_factor`` carries the
-          optimised ``abs(bat_factor)`` magnitude so that the GA's decision
-          is visible in the solution DataFrame even though the firmware
-          ignores the explicit setpoint.
+            grid exchange at this step is within ``_SELF_CONSUMPTION_THRESHOLD_W``
+            of zero *and* the battery is active (discharging or charging).  In
+            this mode the inverter firmware autonomously balances local supply
+            and demand without an explicit power setpoint.  Requires an
+            ``InstructionContext`` with a non-``None`` ``grid_granted_wh``
+            vector; falls back to explicit ``CHARGE``/``DISCHARGE``/``IDLE``
+            if context is absent.  ``operation_mode_factor`` carries the
+            optimised ``abs(bat_factor)`` magnitude so that the GA's decision
+            is visible in the solution DataFrame even though the firmware
+            ignores the explicit setpoint.
         * ``operation_mode_id = "CHARGE"``   when ``bat_factor > 0``
         * ``operation_mode_id = "DISCHARGE"`` when ``bat_factor < 0``
         * ``operation_mode_id = "IDLE"``      when ``bat_factor = 0``
@@ -989,5 +1027,21 @@ class HybridInverterDevice(EnergyDevice):
                 min_e[pop_idx, step_idx] = -total_min_inject * step_h
             else:
                 min_e[discharge_mask] = -min_dis_bat_ac_w * step_h
+
+        # Idle battery + PV generating: the inverter must inject the PV surplus.
+        # Without this, min_energy_wh stays 0 and the arbitrator may grant 0,
+        # causing apply_device_grant to overwrite ac_power_w with 0 and
+        # silently drop all PV generation on idle-battery steps.
+        idle_mask = state.bat_factors == 0.0
+        if idle_mask.any() and p.inverter_type in (
+            InverterType.SOLAR, InverterType.HYBRID
+        ) and pv_power_w is not None:
+            pv_clipped = np.clip(pv_power_w, p.pv_min_power_w, p.pv_max_power_w)
+            pop_idx, step_idx = np.where(idle_mask)
+            pv_util_at_step = state.pv_util_factors[pop_idx, step_idx]
+            pv_ac_w = pv_util_at_step * pv_clipped[step_idx] * p.pv_to_ac_efficiency
+            # Only set minimum where PV is actually generating (negative = injection).
+            pv_injection = -pv_ac_w * step_h  # negative Wh = injection
+            min_e[pop_idx, step_idx] = np.minimum(min_e[pop_idx, step_idx], pv_injection)
 
         return min_e

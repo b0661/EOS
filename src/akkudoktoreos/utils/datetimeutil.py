@@ -907,17 +907,17 @@ def to_datetime(
         in_timezone = to_timezone()
     elif isinstance(in_timezone, str) and in_timezone.startswith("UTC"):
         offset = in_timezone[3:]
-        match = re.match(r'([+-])(\d{2}):(\d{2})', offset)
+        match = re.match(r"([+-])(\d{2}):(\d{2})", offset)
         if match:
             sign, hour, minute = match.groups()
-            utc_offset: float = int(hour) + int(minute)/60.0
+            utc_offset: float = int(hour) + int(minute) / 60.0
             if sign == "-":
                 utc_offset = utc_offset * -1.0
         elif offset:
             utc_offset = float(offset)
         else:
             utc_offset = 0.0
-        in_timezone = to_timezone(utc_offset = utc_offset)
+        in_timezone = to_timezone(utc_offset=utc_offset)
     elif not isinstance(in_timezone, Timezone):
         in_timezone = pendulum.timezone(in_timezone)
 

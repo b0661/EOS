@@ -34,10 +34,9 @@ from pendulum import DateTime, Duration
 
 from akkudoktoreos.core.cache import cache_energy_management
 from akkudoktoreos.core.coreabc import get_config, get_measurement, get_prediction
-from akkudoktoreos.utils.datetimeutil import to_datetime
-
 
 _prediction_key_tracker: set[str] = set()
+
 
 def reset_prediction_key_tracker() -> None:
     _prediction_key_tracker.clear()

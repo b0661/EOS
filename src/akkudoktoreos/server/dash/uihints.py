@@ -268,7 +268,6 @@ UI_HINTS: dict[str, UiHint] = {
         form="select",
         options=["pvforecast_dc_power_w", "null"]
     ),
-
     # ------------------------------------------------------------------
     # Electricity price — fixed time windows
     # ------------------------------------------------------------------

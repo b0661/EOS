@@ -1,10 +1,10 @@
 """Fixed (non-controllable) household load settings."""
 
 from typing import TYPE_CHECKING
+
 from pydantic import Field, computed_field
 
 from akkudoktoreos.config.configabc import ConfigScope
-from akkudoktoreos.devices.devicesabc import DeviceParam
 from akkudoktoreos.devices.settings.devicebasesettings import (
     DevicesBaseSettings,
     PortsMixin,
@@ -52,7 +52,7 @@ class FixedLoadCommonSettings(PortsMixin, DevicesBaseSettings):
         return FixedLoadParam(
             device_id=self.device_id,
             ports=self.ports_to_genetic2_param(),
-            load_power_w_key = self.load_power_w_key,
+            load_power_w_key=self.load_power_w_key,
         )
 
     @computed_field  # type: ignore[prop-decorator]

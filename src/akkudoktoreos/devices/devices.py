@@ -2,7 +2,6 @@
 
 Concepts
 --------
-
 1. **Pydantic Config Models (mutable, user-facing)**
     - Read, validate, and document user-provided configuration.
     - Each device type has a corresponding CommonSettings class defined
@@ -31,7 +30,6 @@ Concepts
 
 Usage (GENETIC2)
 ----------------
-
 1. Load ``BusesCommonSettings`` + ``DevicesCommonSettings`` from YAML/JSON.
 2. Pydantic validates all fields and constraints.
 3. ``buses_config.to_domain()``  →  ``list[EnergyBus]``
@@ -54,7 +52,9 @@ from akkudoktoreos.devices.settings.devicebasesettings import (
     BusConfig,
 )
 from akkudoktoreos.devices.settings.fixedloadsettings import FixedLoadCommonSettings
-from akkudoktoreos.devices.settings.gridconnectionsettings import GridConnectionCommonSettings
+from akkudoktoreos.devices.settings.gridconnectionsettings import (
+    GridConnectionCommonSettings,
+)
 from akkudoktoreos.devices.settings.heatpumpsettings import HeatPumpCommonSettings
 from akkudoktoreos.devices.settings.homeappliancesettings import (
     HomeApplianceCommonSettings,
@@ -148,7 +148,11 @@ class DevicesCommonSettings(SettingsBaseModel):
     max_batteries: Optional[int] = Field(
         default=None,
         ge=0,
-        json_schema_extra={"description": "Maximum number of batteries allowed.", "examples": [1]},
+        json_schema_extra={
+            "description": "Maximum number of batteries allowed.",
+            "examples": [1],
+            "x-scope": [str(ConfigScope.GENETIC)],
+        },
     )
 
     # ---- Electric vehicles ----
@@ -163,7 +167,11 @@ class DevicesCommonSettings(SettingsBaseModel):
     max_electric_vehicles: Optional[int] = Field(
         default=None,
         ge=0,
-        json_schema_extra={"description": "Maximum number of EVs allowed.", "examples": [1]},
+        json_schema_extra={
+            "description": "Maximum number of EVs allowed.",
+            "examples": [1],
+            "x-scope": [str(ConfigScope.GENETIC)],
+        },
     )
 
     # ---- Inverters ----
@@ -226,8 +234,8 @@ class DevicesCommonSettings(SettingsBaseModel):
                 {
                     "base_load": {
                         "device_id": "base_load",
-                        "peak_power_w": 500,
-                        "ports": [{"bus_id": "bus_ac", "port_id": "p_ac", "direction": "sink"}],
+                        "load_power_w_key": "loadforecast_power_w",
+                        "ports": [{"port_id": "p_ac", "bus_id": "bus_ac", "direction": "sink"}],
                     }
                 }
             ],
@@ -255,8 +263,8 @@ class DevicesCommonSettings(SettingsBaseModel):
                         "consumption_wh": 1500,
                         "duration_h": 2.0,  # required field
                         "ports": [{"bus_id": "bus_ac", "port_id": "p_ac", "direction": "sink"}],
-                    }
-                }
+                    },
+                },
             ],
             "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
         },
@@ -296,15 +304,15 @@ class DevicesCommonSettings(SettingsBaseModel):
         """Return a flat list of GENETIC2 domain objects for all devices.
 
         Device types whose domain class is not yet implemented
-        (``GridConnectionCommonSettings``, ``FixedLoadCommonSettings``) are skipped
-        with a warning rather than raising, so a partial system can still
-        be configured and optimised.
+        (``GridConnectionCommonSettings``) are skipped with a warning rather
+        than raising, so a partial system can still be configured and
+        optimised.
 
         Returns:
             Ordered list of ``DeviceParam`` subclass instances, in the
-            order: batteries, electric_vehicles, inverters, pvs,
-            heat_pumps, home_appliances. Grid connections and fixed loads
-            are skipped until their domain classes exist.
+            order: fixed_loads, heat_pumps, home_appliances, inverters,
+            grid_connections. Batteries and EVs are GENETIC-only and
+            are not included.
         """
         params: list[DeviceParam] = []
 

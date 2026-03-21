@@ -119,11 +119,20 @@ class BestIndividualResult:
             - ``{id}_energy_wh``             Per-step granted energy for each device [Wh].
             - ``{id}_soc_factor``            SoC as fraction of capacity
                                              (inverter/battery devices only).
-            - ``{id}_{mode]_op_mode``        Operation mode {mode} active = 1.0, inactive = 0.0
-                                             (inverter + appliance devices).
-            - ``{id}_{mode}_op_factor``      Operation mode factor per step
-                                             (follows op_mode for home appliances, for inverters
-                                             defines the charge/ discharge factor for the mode).
+            - ``{id}_{mode}_op_mode``        1.0 when operation mode ``mode`` is active at
+                                             that step, 0.0 otherwise. One column per
+                                             distinct mode emitted by the device's S2
+                                             instructions. Examples:
+                                             ``inverter1_charge_op_mode``,
+                                             ``inverter1_pv_utilise_op_mode``,
+                                             ``dishwasher_run_op_mode``.
+                                             ``PV_UTILISE`` columns are only emitted when
+                                             at least one step has non-zero PV utilisation.
+            - ``{id}_{mode}_op_factor``      Operation mode factor at that step (float in
+                                             ``[0, 1]``). For inverter battery modes this is
+                                             the charge/discharge magnitude; for home
+                                             appliances it mirrors ``op_mode`` (1.0 when
+                                             running, 0.0 otherwise). Zero when inactive.
         total_costs_amt: Aggregate gross import cost over the horizon [currency].
         total_revenues_amt: Aggregate gross export revenue over the horizon [currency].
     """
@@ -338,41 +347,6 @@ class GeneticOptimizer:
                 instructions[device_id] = instrs
             except NotImplementedError:
                 pass
-
-            # ---- Instruction-driven per-mode columns -------------------------
-            if device_id in instructions:
-
-                # 1. One-time lookup: execution_time → step index t ∈ [0, horizon)
-                time_to_step: dict[Any, int] = {ts: i for i, ts in enumerate(step_index)}
-
-                # 2. Accumulate per-mode float arrays (all start as zeros)
-                mode_op:     dict[str, np.ndarray] = {}   # mode_id → (horizon,) 0.0/1.0
-                mode_factor: dict[str, np.ndarray] = {}   # mode_id → (horizon,) factor
-
-                for instr in instructions[device_id]:
-                    mode_id = getattr(instr, "operation_mode_id", None)
-                    if mode_id is None:        # skip non-OMBC/FRBC instructions
-                        continue
-                    t = time_to_step.get(instr.execution_time)
-                    if t is None:              # instruction outside horizon (shouldn't happen)
-                        continue
-                    factor = float(getattr(instr, "operation_mode_factor", 1.0))
-
-                    if mode_id not in mode_op: # first time we see this mode: allocate arrays
-                        mode_op[mode_id]     = np.zeros(horizon)
-                        mode_factor[mode_id] = np.zeros(horizon)
-
-                    mode_op[mode_id][t]     = 1.0    # mark step t as active for this mode
-                    mode_factor[mode_id][t] = factor # store the factor at step t
-
-                # 3. Emit columns — one pair per mode, lowercased
-                for mode_id, op_arr in mode_op.items():
-                    # Special rule: suppress PV_UTILISE when PV was never used
-                    if mode_id == "PV_UTILISE" and not np.any(op_arr):
-                        continue
-                    columns[f"{device_id}_{mode_id.lower()}_op_mode"]   = op_arr
-                    columns[f"{device_id}_{mode_id.lower()}_op_factor"] = mode_factor[mode_id]
-
 
             # ---- Solution columns (duck-typed on batch state attributes) ----
             # state is typed as ``object`` in BatchSimulationState; cast both

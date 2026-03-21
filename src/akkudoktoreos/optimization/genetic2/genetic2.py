@@ -75,7 +75,6 @@ from akkudoktoreos.devices.genetic2.hybridinverter import (
 from akkudoktoreos.optimization.optimization import OptimizationSolution
 from akkudoktoreos.utils.datetimeutil import to_datetime
 
-
 if TYPE_CHECKING:
     from akkudoktoreos.optimization.genetic2.optimizer import (
         BestIndividualResult,
@@ -148,7 +147,6 @@ def _build_devices(
                 f"'{param.device_id}'. Skipping.",
                 stacklevel=3,
             )
-            #port_index += len(param.ports)
 
     return devices, buses
 
