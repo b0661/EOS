@@ -30,6 +30,7 @@ from akkudoktoreos.server.dash.context import (
     safe_asset_path,
 )
 from akkudoktoreos.server.dash.footer import Footer
+from akkudoktoreos.server.dash.optlog import OptLog
 from akkudoktoreos.server.dash.plan import Plan
 from akkudoktoreos.server.dash.prediction import Prediction
 from akkudoktoreos.server.server import (
@@ -258,6 +259,7 @@ def get_eosdash(request: Request):  # type: ignore
                 "Prediction": "/eosdash/prediction",
                 "Config": "/eosdash/configuration",
                 "Admin": "/eosdash/admin",
+                "OptLog": "/eosdash/optlog",
                 "About": "/eosdash/about",
             },
             About(),
@@ -387,6 +389,34 @@ def post_eosdash_plan(request: Request, data: dict):  # type: ignore
         Plan: The Plan page component.
     """
     return Plan(*eos_server(), data)
+
+
+@app.get("/eosdash/optlog")
+def get_eosdash_optlog(request: Request, data: dict):  # type: ignore
+    """Serve the EOSdash Optimization Log page.
+
+    Args:
+        request (Request): The incoming FastHTML request.
+        data (dict): Optional query data.
+
+    Returns:
+        OptLog: The Optimization Log page component.
+    """
+    return OptLog(*eos_server(), data)
+
+
+@app.post("/eosdash/optlog")
+def post_eosdash_optlog(request: Request, data: dict):  # type: ignore
+    """Provide control data to the Optimization Log page.
+
+    Args:
+        request (Request): The incoming FastHTML request.
+        data (dict): User-submitted data from the Optimization Log page.
+
+    Returns:
+        OptLog: The Optimization Log page component.
+    """
+    return OptLog(*eos_server(), data)@app.get("/eosdash/optlog")
 
 
 @app.get("/eosdash/prediction")

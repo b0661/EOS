@@ -247,7 +247,7 @@ class HomeApplianceDevice(EnergyDevice):
 
     @property
     def objective_names(self) -> list[str]:
-        return ["energy_cost_eur"]
+        return ["energy_cost_amt"]
 
     # ------------------------------------------------------------------
     # Structure Phase

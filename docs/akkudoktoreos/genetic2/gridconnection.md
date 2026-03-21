@@ -13,6 +13,6 @@ What GridConnectionDevice needs to do:
     Record the granted import/export per step.
 - compute_cost
     Import_wh *import_cost_per_kwh - export_wh* export_revenue_per_kwh, returning shape
-    (population_size, 1) under the "energy_cost_eur" objective name.
+    (population_size, 1) under the "energy_cost_amt" objective name.
 - extract_instructions
     No S2 instructions needed (the grid isn't controllable).

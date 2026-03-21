@@ -356,7 +356,7 @@ class HybridInverterDevice(EnergyDevice):
     def objective_names(self) -> list[str]:
         names = []
         if self.param.levelized_cost_of_storage_amt_kwh > 0.0:
-            names.append("energy_cost_eur")
+            names.append("energy_cost_amt")
         return names
 
     # ------------------------------------------------------------------

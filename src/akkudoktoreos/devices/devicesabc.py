@@ -426,7 +426,7 @@ class EnergyDevice(ABC):
 
         Returns:
             Ordered list of objective name strings,
-            e.g. ``["energy_cost_eur", "peak_power_kw"]``.
+            e.g. ``["energy_cost_amt", "peak_power_kw"]``.
         """
         raise NotImplementedError
 

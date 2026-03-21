@@ -10,7 +10,7 @@ Supported concrete devices
 ``GridConnectionDevice``
     Slack AC-bus device.  Holds no genome — absorbs the bus residual
     after all other devices have been settled and converts it to an
-    ``"energy_cost_eur"`` objective.
+    ``"energy_cost_amt"`` objective.
 
 ``HomeApplianceDevice``
     Shiftable fixed-duration load (dishwasher, washing machine, ...).
@@ -100,7 +100,10 @@ def _build_devices(
     port_index = 0
     dev: Union[FixedLoadDevice, GridConnectionDevice, HomeApplianceDevice, HybridInverterDevice]
 
+    logger.debug("_build_devices: {} params, {} buses", len(device_params), len(buses))
     for param in device_params:
+        logger.debug("  param type={} device_id={}", type(param).__name__, param.device_id)
+
         if isinstance(param, FixedLoadParam):
             dev = FixedLoadDevice(
                 param=param,
@@ -108,6 +111,7 @@ def _build_devices(
                 port_index=port_index,
             )
             devices.append(dev)
+            logger.debug("  → FixedLoadDevice device_index={} port_index={}", device_index, port_index)
             port_index += len(dev.ports)
             device_index += 1
 
@@ -118,6 +122,7 @@ def _build_devices(
                 port_index=port_index,
             )
             devices.append(dev)
+            logger.debug("  → GridConnectionDevice device_index={} port_index={}", device_index, port_index)
             port_index += len(dev.ports)
             device_index += 1
 
@@ -128,6 +133,7 @@ def _build_devices(
                 port_index=port_index,
             )
             devices.append(dev)
+            logger.debug("  → HomeApplianceDevice device_index={} port_index={}", device_index, port_index)
             port_index += len(dev.ports)
             device_index += 1
 
@@ -138,6 +144,15 @@ def _build_devices(
                 port_index=port_index,
             )
             devices.append(dev)
+            logger.debug(
+                "  → HybridInverterDevice device_index={} port_index={} type={} "
+                "capacity_wh={} pv_key={} lcos={}",
+                device_index, port_index,
+                param.inverter_type,
+                param.battery_capacity_wh,
+                param.pv_power_w_key,
+                param.levelized_cost_of_storage_amt_kwh,
+            )
             port_index += len(dev.ports)
             device_index += 1
 
@@ -147,7 +162,11 @@ def _build_devices(
                 f"'{param.device_id}'. Skipping.",
                 stacklevel=3,
             )
+            logger.warning("  → SKIPPED unknown param type {}", type(param).__name__)
 
+    logger.debug("_build_devices: built {} devices", len(devices))
+    for d in devices:
+        logger.debug("  device_id={} type={}", d.device_id, type(d).__name__)
     return devices, buses
 
 
@@ -226,6 +245,14 @@ def _best_to_solution(
     ``prediction``
         ``None`` -- GENETIC2 does not accumulate forecast inputs.
     """
+    optimization_log = None
+    if result.progress_df is not None:
+        import pandas as pd
+        df = result.progress_df.reset_index()  # generation becomes a regular column
+        # PydanticDateTimeDataFrame needs a datetime index — use epoch + generation seconds
+        df.index = pd.to_datetime(df["generation"], unit="s", utc=True)
+        optimization_log = PydanticDateTimeDataFrame.from_dataframe(df)
+
     return OptimizationSolution(
         id=str(uuid.uuid4()),
         generated_at=to_datetime(),
@@ -237,6 +264,8 @@ def _best_to_solution(
         fitness_score={result.best_scalar_fitness},
         solution=PydanticDateTimeDataFrame.from_dataframe(best.solution_df),
         prediction=_collect_predictions(context),
+        optimization_log=optimization_log,
+        run_summary=result.run_summary if result.run_summary else None,
     )
 
 
@@ -293,6 +322,7 @@ class Genetic2Optimization(ConfigMixin, EnergyManagementSystemMixin):
         pop_size: int = genetic_cfg.individuals
         generations: int = genetic_cfg.generations
         random_seed: Optional[int] = genetic_cfg.seed
+        log_progress_interval: int = genetic_cfg.log_progress_interval
 
         # ------------------------------------------------------------------
         # 2. Build the time axis
@@ -352,6 +382,7 @@ class Genetic2Optimization(ConfigMixin, EnergyManagementSystemMixin):
             population_size=pop_size,
             generations=generations,
             random_seed=random_seed,
+            log_progress_interval=log_progress_interval,
         )
 
         result = optimizer.optimize(context)

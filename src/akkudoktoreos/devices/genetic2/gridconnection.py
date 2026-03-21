@@ -18,7 +18,7 @@ Role in the simulation pipeline
    settled first.
 
 2. **Cost evaluation** — ``compute_cost`` converts the granted import/
-   export energy into an ``"energy_cost_eur"`` fitness column using
+   export energy into an ``"energy_cost_amt"`` fitness column using
    per-step electricity prices. An optional second column
    ``"peak_import_kw"`` supports peak-shaving objectives.
 
@@ -242,11 +242,11 @@ class GridConnectionDevice(EnergyDevice):
     def objective_names(self) -> list[str]:
         """Fitness column names contributed to the global objective matrix.
 
-        Always includes ``"energy_cost_eur"``.
+        Always includes ``"energy_cost_amt"``.
         Includes ``"peak_import_kw"`` when
         ``param.include_peak_power_objective`` is ``True``.
         """
-        names = ["energy_cost_eur"]
+        names = ["energy_cost_amt"]
         if self.param.include_peak_power_objective:
             names.append("peak_import_kw")
         return names
@@ -421,7 +421,7 @@ class GridConnectionDevice(EnergyDevice):
     ) -> np.ndarray:
         """Compute electricity cost (and optionally peak power) objectives.
 
-        Energy cost column (``"energy_cost_eur"``)
+        Energy cost column (``"energy_cost_amt"``)
         -------------------------------------------
         For each individual ``i`` and step ``t``:
 

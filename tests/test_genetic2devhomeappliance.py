@@ -330,7 +330,7 @@ class TestHomeApplianceDeviceTopology:
         assert HomeApplianceDevice(param, 0, 0).ports == param.ports
 
     def test_objective_names(self) -> None:
-        assert HomeApplianceDevice(make_param(), 0, 0).objective_names == ["energy_cost_eur"]
+        assert HomeApplianceDevice(make_param(), 0, 0).objective_names == ["energy_cost_amt"]
 
     def test_device_index_stored(self) -> None:
         assert HomeApplianceDevice(make_param(), device_index=7, port_index=0)._device_index == 7

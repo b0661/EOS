@@ -38,7 +38,7 @@ A typical usage sequence is::
     # Once per generation:
     result = engine.evaluate_population(genome_population)
     # result.fitness:          (population_size, num_objectives)
-    # result.objective_names:  ["energy_cost_eur", "peak_power_kw", ...]
+    # result.objective_names:  ["energy_cost_amt", "peak_power_kw", ...]
     # result.repaired_genomes: {device_id: repaired_array, ...}
 
     # Write repairs back into the population before selection:
@@ -58,7 +58,7 @@ Objective Naming
 Objective names are arbitrary strings declared by each device via the
 ``objective_names`` property. The engine assigns global column indices in
 stable insertion order across all devices. Sharing a name across devices
-(e.g. two devices both contributing to ``"energy_cost_eur"``) is intentional
+(e.g. two devices both contributing to ``"energy_cost_amt"``) is intentional
 and correct — contributions are summed into the same column.
 
 Device index contract

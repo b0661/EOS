@@ -569,7 +569,7 @@ after a single-individual re-evaluation of the best genome. Raises
 Objective names are arbitrary strings declared by each device via
 `objective_names`. The engine assigns global column indices in stable
 insertion order across all devices. Sharing a name across devices is
-intentional — e.g. two devices both contributing to `"energy_cost_eur"`
+intentional — e.g. two devices both contributing to `"energy_cost_amt"`
 are summed into the same fitness column. The optimiser receives the raw
 `(population_size, num_objectives)` matrix and is responsible for
 aggregation.
@@ -931,7 +931,7 @@ class MyBattery(SingleStateEnergyDevice):
 
     @property
     def objective_names(self):
-        return ["energy_cost_eur"]
+        return ["energy_cost_amt"]
 
     # ---- Physics ----
 

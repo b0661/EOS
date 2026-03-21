@@ -60,6 +60,22 @@ class GeneticCommonSettings(SettingsBaseModel):
         },
     )
 
+    log_progress_interval: int = Field(
+        default=0,
+        ge=0,
+        json_schema_extra={
+            "description": (
+                "Log optimization progress every N generations. "
+                "0 = disabled (default, no overhead). "
+                "Positive integer = log every N generations plus the final generation. "
+                "Output includes generation index, best scalar fitness, mean scalar fitness, "
+                "and number of repaired genomes."
+            ),
+            "examples": [0, 10, 50],
+            "x-scope": [str(ConfigScope.GENETIC2)],
+        },
+    )
+
 
 class OptimizationCommonSettings(SettingsBaseModel):
     """General Optimization Configuration."""
@@ -198,10 +214,33 @@ class OptimizationSolution(PydanticBaseModel):
                 "- costs_amt: Costs in money amount"
                 "- revenue_amt: Revenue in money amount"
                 "- losses_energy_wh: Energy losses in wh"
-                "- <device-id>_<mode>_op_mode: Operation mode of the device."
-                "- <device-id>_<mode>_op_factor: Operation mode factor of the device."
                 "- <device-id>_soc_factor: State of charge of a battery/ electric vehicle device as factor of total capacity."
                 "- <device-id>_energy_wh: Energy consumption (positive) of a device in wh."
+                "- <device-id>_<mode>_op_mode: Operation mode <mode> active (1.0) or inactive (0.0)."
+                "- <device-id>_<mode>_op_factor: Operation mode factor for <mode> (0.0 when inactive)."
             )
         }
+    )
+
+    optimization_log: Optional[PydanticDateTimeDataFrame] = Field(
+        default=None,
+        json_schema_extra={
+            "description": (
+                "Per-generation optimization progress log. Only populated when "
+                "genetic.log_progress_interval > 0. Rows are indexed by generation number. "
+                "Columns include: best_scalar_fitness, mean_scalar_fitness, num_repaired, "
+                "obj_<name> per objective, bat_factor_min/mean/max, pv_util_min/mean/max."
+            )
+        },
+    )
+
+    run_summary: Optional[dict] = Field(
+        default=None,
+        json_schema_extra={
+            "description": (
+                "JSON-serialisable run-level metadata. Only populated when "
+                "genetic.log_progress_interval > 0. Includes device list, "
+                "PV/price forecast summary, convergence generation, and elapsed time."
+            )
+        },
     )

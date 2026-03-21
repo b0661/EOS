@@ -401,7 +401,7 @@ def _make_opt_result(
     best_scalar_fitness: float = 0.0,
 ) -> OptimizationResult:
     if objective_names is None:
-        objective_names = ["energy_cost_eur"]
+        objective_names = ["energy_cost_amt"]
     assembled = MagicMock(spec=AssembledGenome)
     assembled.slices = {}
     return OptimizationResult(
@@ -783,7 +783,7 @@ class TestOptimizeContext:
                     best_genome=np.zeros(0),
                     best_fitness_vector=np.array([0.0]),
                     best_scalar_fitness=0.0,
-                    objective_names=["energy_cost_eur"],
+                    objective_names=["energy_cost_amt"],
                     generations_run=3,
                     history=[],
                     assembled=assembled,

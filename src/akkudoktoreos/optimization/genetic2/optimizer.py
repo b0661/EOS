@@ -71,17 +71,50 @@ def default_scalarize(fitness_matrix: np.ndarray) -> np.ndarray:
 
 @dataclass
 class GenerationStats:
-    """Statistics captured at the end of one generation."""
+    """Statistics captured at the end of one generation.
+
+    Attributes:
+        generation: Zero-based generation index.
+        best_scalar_fitness: Lowest scalarized fitness value in this generation.
+        mean_scalar_fitness: Mean scalarized fitness across the population.
+        num_repaired: Number of devices that modified genome values (Lamarckian repair).
+        best_objectives: Per-objective values for the best individual this generation,
+            keyed by objective name. Empty dict when progress logging is disabled.
+    """
 
     generation: int
     best_scalar_fitness: float
     mean_scalar_fitness: float
     num_repaired: int
+    # Per-objective breakdown of the best individual — only populated when
+    # log_progress_interval > 0.
+    best_objectives: dict[str, float] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.best_objectives is None:
+            self.best_objectives = {}
 
 
 @dataclass
 class OptimizationResult:
-    """Result of a full optimisation run."""
+    """Result of a full optimisation run.
+
+    Attributes:
+        best_genome: Flat genome of the best individual, shape ``(total_genome_size,)``.
+        best_fitness_vector: Per-objective costs for the best individual.
+        best_scalar_fitness: Scalarized fitness of the best individual.
+        objective_names: Column names for ``best_fitness_vector``.
+        generations_run: Total number of generations executed.
+        history: One ``GenerationStats`` entry per generation.
+        assembled: Genome slice layout — use to extract per-device schedules.
+        run_summary: JSON-serialisable dict with run-level metadata (device list,
+            PV/price forecast summary, convergence generation, duration).
+            Empty dict when ``log_progress_interval == 0``.
+        progress_df: DataFrame with one row per generation and columns for every
+            metric in ``GenerationStats``.  ``None`` when
+            ``log_progress_interval == 0``.  Index is the generation number.
+            Suitable for ``pd.concat`` across runs for cross-run comparison.
+    """
 
     best_genome: np.ndarray
     best_fitness_vector: np.ndarray
@@ -90,6 +123,12 @@ class OptimizationResult:
     generations_run: int
     history: list[GenerationStats]
     assembled: AssembledGenome
+    run_summary: dict = None       # type: ignore[assignment]
+    progress_df: pd.DataFrame | None = None
+
+    def __post_init__(self) -> None:
+        if self.run_summary is None:
+            self.run_summary = {}
 
 
 @dataclass
@@ -162,6 +201,7 @@ class GeneticOptimizer:
         tournament_size: int = 3,
         scalarize: ScalarizeFunction = default_scalarize,
         random_seed: int | None = None,
+        log_progress_interval: int = 0,
     ) -> None:
         self._engine = engine
         self.population_size = population_size
@@ -172,6 +212,9 @@ class GeneticOptimizer:
         self.tournament_size = tournament_size
         self._scalarize = scalarize
         self._rng = np.random.default_rng(random_seed)
+        # 0 = disabled; positive = log every N generations.
+        # Stored as-is; a single bool check before the loop gates all logging.
+        self._log_interval = log_progress_interval
 
     # ------------------------------------------------------------------
     # Public API
@@ -179,6 +222,9 @@ class GeneticOptimizer:
 
     def optimize(self, context: SimulationContext) -> OptimizationResult:
         """Run the genetic optimisation for one horizon."""
+        import time
+        from loguru import logger
+
         self._engine.setup_run(context)
         slices = self._engine.genome_requirements()
 
@@ -195,7 +241,13 @@ class GeneticOptimizer:
         best_genome: np.ndarray | None = None
         best_fitness_vector: np.ndarray | None = None
         best_scalar: float = np.inf
+        best_improved_at: int = 0
         history: list[GenerationStats] = []
+
+        # _do_log is evaluated once — only a bool test in the hot path.
+        _do_log: bool = self._log_interval > 0
+        _last_gen = self.generations - 1
+        _t_start = time.monotonic() if _do_log else 0.0
 
         for gen in range(self.generations):
             genome_dict = self._split_population(population, assembled)
@@ -213,16 +265,41 @@ class GeneticOptimizer:
                 best_scalar = gen_best_scalar
                 best_genome = population[gen_best_idx].copy()
                 best_fitness_vector = result.fitness[gen_best_idx].copy()
+                best_improved_at = gen
 
-            history.append(
-                GenerationStats(
+            if _do_log:
+                best_objectives = {
+                    name: float(result.fitness[gen_best_idx, i])
+                    for i, name in enumerate(result.objective_names)
+                }
+                stats = GenerationStats(
+                    generation=gen,
+                    best_scalar_fitness=gen_best_scalar,
+                    mean_scalar_fitness=float(scalar_fitness.mean()),
+                    num_repaired=num_repaired,
+                    best_objectives=best_objectives,
+                )
+                if gen % self._log_interval == 0 or gen == _last_gen:
+                    obj_str = " ".join(
+                        f"{k}={v:.4f}" for k, v in best_objectives.items()
+                    )
+                    logger.info(
+                        "gen {:4d}/{}: best={:.4f} mean={:.4f} repaired={} {}",
+                        gen, _last_gen,
+                        gen_best_scalar,
+                        float(scalar_fitness.mean()),
+                        num_repaired,
+                        obj_str,
+                    )
+            else:
+                stats = GenerationStats(
                     generation=gen,
                     best_scalar_fitness=gen_best_scalar,
                     mean_scalar_fitness=float(scalar_fitness.mean()),
                     num_repaired=num_repaired,
                 )
-            )
 
+            history.append(stats)
             population = self._breed(population, scalar_fitness, assembled)
 
         if best_genome is None or best_fitness_vector is None:
@@ -230,6 +307,78 @@ class GeneticOptimizer:
                 f"Optimization failed with best genome: {best_genome}, "
                 f"best fitness vector: {best_fitness_vector}"
             )
+
+        # Build run_summary and progress_df only when logging is enabled.
+        run_summary: dict = {}
+        progress_df: pd.DataFrame | None = None
+
+        if _do_log:
+            elapsed = time.monotonic() - _t_start
+
+            # Device summary
+            device_summary = []
+            for device in self._engine._registry.all_devices():
+                d: Any = device
+                entry: dict = {
+                    "device_id": device.device_id,
+                    "type": type(device).__name__,
+                    "objective_names": device.objective_names,
+                }
+                if hasattr(d, 'param'):
+                    p = d.param
+                    if hasattr(p, 'battery_capacity_wh'):
+                        entry["battery_capacity_wh"] = p.battery_capacity_wh
+                        entry["inverter_type"] = str(p.inverter_type)
+                        entry["lcos"] = getattr(p, 'levelized_cost_of_storage_amt_kwh', None)
+                        entry["pv_key"] = getattr(p, 'pv_power_w_key', None)
+                    if hasattr(p, 'load_power_w_key'):
+                        entry["load_key"] = p.load_power_w_key
+                device_summary.append(entry)
+
+            # PV and price forecast summary from context
+            forecast_summary: dict = {}
+            for device in self._engine._registry.all_devices():
+                d = device
+                if hasattr(d, '_pv_power_w') and d._pv_power_w is not None:
+                    pv = d._pv_power_w
+                    forecast_summary["pv_power_w_min"] = float(pv.min())
+                    forecast_summary["pv_power_w_mean"] = float(pv.mean())
+                    forecast_summary["pv_power_w_max"] = float(pv.max())
+                if hasattr(d, '_import_price_per_kwh') and d._import_price_per_kwh is not None:
+                    pr = d._import_price_per_kwh
+                    forecast_summary["import_price_min"] = float(pr.min())
+                    forecast_summary["import_price_mean"] = float(pr.mean())
+                    forecast_summary["import_price_max"] = float(pr.max())
+
+            run_summary = {
+                "generations_run": self.generations,
+                "population_size": self.population_size,
+                "horizon": len(context.step_times),
+                "step_interval_sec": context.step_interval.total_seconds(),
+                "best_scalar_fitness": float(best_scalar),
+                "best_improved_at_generation": best_improved_at,
+                "elapsed_sec": round(elapsed, 2),
+                "objective_names": list(self._engine.objective_names),
+                "devices": device_summary,
+                "forecasts": forecast_summary,
+            }
+            logger.info(
+                "Optimization complete: best={:.4f} converged_at_gen={} elapsed={:.1f}s",
+                best_scalar, best_improved_at, elapsed,
+            )
+
+            # Build DataFrame — one row per generation.
+            rows = []
+            for s in history:
+                row: dict = {
+                    "generation": s.generation,
+                    "best_scalar_fitness": s.best_scalar_fitness,
+                    "mean_scalar_fitness": s.mean_scalar_fitness,
+                    "num_repaired": s.num_repaired,
+                }
+                row.update({f"obj_{k}": v for k, v in s.best_objectives.items()})
+                rows.append(row)
+            progress_df = pd.DataFrame(rows).set_index("generation")
 
         return OptimizationResult(
             best_genome=best_genome,
@@ -239,6 +388,8 @@ class GeneticOptimizer:
             generations_run=self.generations,
             history=history,
             assembled=assembled,
+            run_summary=run_summary,
+            progress_df=progress_df,
         )
 
     # ------------------------------------------------------------------

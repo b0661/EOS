@@ -284,11 +284,11 @@ class TestGridConnectionDeviceTopology:
 
     def test_objective_names_without_peak(self) -> None:
         device = GridConnectionDevice(make_param(include_peak=False), 0, 0)
-        assert device.objective_names == ["energy_cost_eur"]
+        assert device.objective_names == ["energy_cost_amt"]
 
     def test_objective_names_with_peak(self) -> None:
         device = GridConnectionDevice(make_param(include_peak=True), 0, 0)
-        assert device.objective_names == ["energy_cost_eur", "peak_import_kw"]
+        assert device.objective_names == ["energy_cost_amt", "peak_import_kw"]
 
     def test_device_index_stored(self) -> None:
         device = GridConnectionDevice(make_param(), device_index=3, port_index=0)
