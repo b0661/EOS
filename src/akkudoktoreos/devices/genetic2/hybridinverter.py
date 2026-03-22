@@ -354,9 +354,7 @@ class HybridInverterDevice(EnergyDevice):
         self._pv_power_w: np.ndarray | None = None  # shape (horizon,), SOLAR/HYBRID
         self._battery_initial_soc_wh: float | None = None  # BATTERY/HYBRID
         self._import_price_per_kwh: np.ndarray | None = None  # shape (horizon,)
-        self._export_price_per_kwh: np.ndarray | None = (
-            None  # shape (horizon,), for SoC value accounting
-        )
+        self._export_price_per_kwh: np.ndarray | None = None  # shape (horizon,), for SoC value accounting
 
     @property
     def ports(self) -> tuple[EnergyPort, ...]:
@@ -395,17 +393,14 @@ class HybridInverterDevice(EnergyDevice):
             self._pv_power_w = pv
             if not np.isfinite(self.param.pv_max_power_w):
                 from loguru import logger as _log
-
                 _log.warning(
                     "{}: pv_max_power_w is not set (null). PV power will not be clipped. "
                     "Set devices.inverters.{}.pv_max_power_w to the rated DC peak power [W] "
                     "of your PV array for accurate simulation.",
-                    self.device_id,
-                    self.device_id,
+                    self.device_id, self.device_id,
                 )
             _log_pv_stats = f"min={pv.min():.0f} mean={pv.mean():.0f} max={pv.max():.0f} W"
             from loguru import logger as _log
-
             _log.info("{}: PV forecast resolved: {}", self.device_id, _log_pv_stats)
 
         if self.param.inverter_type in (InverterType.BATTERY, InverterType.HYBRID):
@@ -416,9 +411,7 @@ class HybridInverterDevice(EnergyDevice):
                 # compute_cost, so the GA cannot exploit it as free energy.
                 # Set battery_initial_soc_factor_key to the actual SoC measurement
                 # key for accurate real-world planning.
-                soc_factor = (
-                    self.param.battery_min_soc_factor + self.param.battery_max_soc_factor
-                ) / 2.0
+                soc_factor = (self.param.battery_min_soc_factor + self.param.battery_max_soc_factor) / 2.0
             if not (0.0 <= soc_factor <= 1.0):
                 raise ValueError(
                     f"{self.device_id}: initial SoC factor {soc_factor} outside allowed bounds "
@@ -429,9 +422,7 @@ class HybridInverterDevice(EnergyDevice):
             # Resolve import and export prices for SoC value accounting in compute_cost.
             if self.param.import_price_amt_kwh_key:
                 try:
-                    self._import_price_per_kwh = context.resolve_prediction(
-                        self.param.import_price_amt_kwh_key
-                    )
+                    self._import_price_per_kwh = context.resolve_prediction(self.param.import_price_key)
                 except Exception:
                     self._import_price_per_kwh = None
             else:
@@ -440,32 +431,35 @@ class HybridInverterDevice(EnergyDevice):
             # Export price for SoC value accounting
             if self.param.export_price_amt_kwh_key:
                 try:
-                    self._export_price_per_kwh = context.resolve_prediction(
-                        self.param.export_price_amt_kwh_key
-                    )
+                    self._export_price_per_kwh = context.resolve_prediction(self.param.export_price_amt_kwh_key)
                 except Exception:
                     self._export_price_per_kwh = None
             else:
                 self._export_price_per_kwh = None
 
     def genome_requirements(self) -> GenomeSlice:
-        """Return genome slice descriptor for the two-gene-per-step encoding.
+        """Return genome slice descriptor for the one-gene-per-step encoding.
 
-        Layout: ``[bat_factor₀, pv_util₀, bat_factor₁, pv_util₁, …]``
+        Only ``bat_factor`` is a genome gene. ``pv_util`` is always 1.0 —
+        PV is always fully utilised. Curtailment (pv_util < 1) is almost
+        never optimal in a home energy system: available PV either offsets
+        import cost or earns export revenue, both of which are better than
+        curtailing. Making it a gene only adds noise and halves the effective
+        search resolution on the battery, which is the actual decision variable.
+
+        Layout: ``[bat_factor₀, bat_factor₁, …, bat_factor_{n-1}]``
 
         * ``bat_factor`` bounds: ``[−1.0, +1.0]``
-        * ``pv_util``    bounds: ``[ 0.0,  1.0]``
         """
         if self._num_steps is None:
             raise RuntimeError("Call setup_run() before genome_requirements().")
         n = self._num_steps
-        lower = np.empty(2 * n)
-        upper = np.empty(2 * n)
-        lower[0::2] = -1.0  # bat_factor lower bound
-        upper[0::2] = +1.0  # bat_factor upper bound
-        lower[1::2] = 0.0  # pv_util lower bound
-        upper[1::2] = 1.0  # pv_util upper bound
-        return GenomeSlice(start=0, size=2 * n, lower_bound=lower, upper_bound=upper)
+        return GenomeSlice(
+            start=0,
+            size=n,
+            lower_bound=np.full(n, -1.0),
+            upper_bound=np.full(n, +1.0),
+        )
 
     # ------------------------------------------------------------------
     # Batch Lifecycle
@@ -515,28 +509,23 @@ class HybridInverterDevice(EnergyDevice):
         p = self.param
 
         # One-shot diagnostic: log PV availability and genome summary on first call.
-        if not hasattr(self, "_diag_logged"):
+        if not hasattr(self, '_diag_logged'):
             self._diag_logged = True
             from loguru import logger as _log
-
             if pv_power_w is not None:
                 nonzero_pv_steps = int((pv_power_w > 0).sum())
                 _log.info(
                     "{}: apply_genome_batch first call — "
                     "inverter_type={} pv_steps_with_power={}/{} "
                     "pv_max={:.0f}W pv_min_threshold={:.0f}W",
-                    self.device_id,
-                    p.inverter_type.name,
-                    nonzero_pv_steps,
-                    len(pv_power_w),
-                    float(pv_power_w.max()),
-                    p.pv_min_power_w,
+                    self.device_id, p.inverter_type.name,
+                    nonzero_pv_steps, len(pv_power_w),
+                    float(pv_power_w.max()), p.pv_min_power_w,
                 )
             else:
                 _log.info(
                     "{}: apply_genome_batch first call — inverter_type={} no PV",
-                    self.device_id,
-                    p.inverter_type.name,
+                    self.device_id, p.inverter_type.name,
                 )
 
         soc = np.full(
@@ -545,15 +534,15 @@ class HybridInverterDevice(EnergyDevice):
         )
 
         for t in range(state.horizon):
-            raw_bat = genome_batch[:, 2 * t]  # shape (pop,)
-            raw_pv = genome_batch[:, 2 * t + 1]  # shape (pop,)
+            raw_bat = genome_batch[:, t]  # shape (pop,)  — one gene per step
+            # pv_util is always 1.0: PV is always fully utilised.
+            # Curtailment is never optimal — available PV always offsets import
+            # cost or earns export revenue.  Making it a gene only adds noise
+            # and halves effective search resolution on the battery.
+            raw_pv = np.ones(state.population_size)
 
             pv_dc_avail_w = (
-                float(
-                    np.clip(pv_power_w[t], 0.0, p.pv_max_power_w)
-                    if pv_power_w[t] >= p.pv_min_power_w
-                    else 0.0
-                )
+                float(np.clip(pv_power_w[t], 0.0, p.pv_max_power_w) if pv_power_w[t] >= p.pv_min_power_w else 0.0)
                 if p.inverter_type in (InverterType.SOLAR, InverterType.HYBRID)
                 else 0.0
             )
@@ -568,16 +557,8 @@ class HybridInverterDevice(EnergyDevice):
             soc = self._advance_soc(soc, bat_t, pv_t, pv_dc_avail_w)
             state.soc_wh[:, t] = soc
 
-            # Lamarckian write-back.
-            # bat gene: always write back (repair is always meaningful).
-            genome_batch[:, 2 * t] = bat_t
-            # pv gene: only write back when PV is actually available at this step.
-            # When pv_dc_avail_w == 0, repair forces pv_t to zero regardless of
-            # the gene value — writing that zero back would permanently destroy
-            # gene diversity at no-PV steps, and crossover would then spread
-            # those zeros to steps where PV is available, suppressing utilisation.
-            if pv_dc_avail_w > 0.0:
-                genome_batch[:, 2 * t + 1] = pv_t
+            # Lamarckian write-back — bat_factor only (one gene per step).
+            genome_batch[:, t] = bat_t
 
         return genome_batch
 
@@ -664,15 +645,11 @@ class HybridInverterDevice(EnergyDevice):
         export_price_per_kwh: float
         if self._export_price_per_kwh is not None:
             export_price_per_kwh = float(self._export_price_per_kwh.mean())
-        elif hasattr(p, "export_revenue_per_kwh"):
-            export_price_per_kwh = (
-                float(p.export_revenue_per_kwh) if hasattr(p, "export_revenue_per_kwh") else 0.08
-            )
         else:
-            export_price_per_kwh = 0.08
+            export_price_per_kwh = float(getattr(p, "export_revenue_per_kwh", 0.08))
 
         initial_soc_wh = self._battery_initial_soc_wh
-        terminal_soc_wh = state.soc_wh[:, -1]  # (population_size,)
+        terminal_soc_wh = state.soc_wh[:, -1]           # (population_size,)
         soc_delta_wh = initial_soc_wh - terminal_soc_wh  # positive = net discharged
         soc_cost = soc_delta_wh / 1000.0 * export_price_per_kwh  # (population_size,)
 
@@ -719,7 +696,7 @@ class HybridInverterDevice(EnergyDevice):
         * ``operation_mode_id = "DISCHARGE"`` when ``bat_factor < 0``
         * ``operation_mode_id = "IDLE"``      when ``bat_factor = 0``
         * ``operation_mode_factor = abs(bat_factor)``  always non-negative;
-          the mode name carries the direction.
+            the mode name carries the direction.
 
         The second carries the PV command:
 
@@ -755,7 +732,7 @@ class HybridInverterDevice(EnergyDevice):
                 # downstream consumers (logging, dashboards) can see what the GA
                 # decided, even though the firmware ignores the explicit setpoint.
                 bat_mode = "SELF_CONSUMPTION"
-                bat_factor_out = 1.0  # abs(float(bat_f))
+                bat_factor_out = 1.0 # abs(float(bat_f))
             elif bat_f > 0.0:
                 bat_mode = "CHARGE"
                 bat_factor_out = abs(float(bat_f))
@@ -1142,9 +1119,7 @@ class HybridInverterDevice(EnergyDevice):
 
         if charge_mask.any():
             if p.inverter_type == InverterType.HYBRID and pv_power_w is not None:
-                pv_clipped = np.where(
-                    pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0
-                )
+                pv_clipped = np.where(pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0)
                 # Use the per-step PV utilisation to determine how much PV assists
                 # the minimum charge.  We look at each step that is charging.
                 pop_idx, step_idx = np.where(charge_mask)
@@ -1167,9 +1142,7 @@ class HybridInverterDevice(EnergyDevice):
 
         if discharge_mask.any():
             if p.inverter_type == InverterType.HYBRID and pv_power_w is not None:
-                pv_clipped = np.where(
-                    pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0
-                )
+                pv_clipped = np.where(pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0)
                 pop_idx, step_idx = np.where(discharge_mask)
                 pv_util_at_step = state.pv_util_factors[pop_idx, step_idx]
                 pv_dc_used = pv_util_at_step * pv_clipped[step_idx]
@@ -1184,14 +1157,10 @@ class HybridInverterDevice(EnergyDevice):
         # causing apply_device_grant to overwrite ac_power_w with 0 and
         # silently drop all PV generation on idle-battery steps.
         idle_mask = state.bat_factors == 0.0
-        if (
-            idle_mask.any()
-            and p.inverter_type in (InverterType.SOLAR, InverterType.HYBRID)
-            and pv_power_w is not None
-        ):
-            pv_clipped = np.where(
-                pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0
-            )
+        if idle_mask.any() and p.inverter_type in (
+            InverterType.SOLAR, InverterType.HYBRID
+        ) and pv_power_w is not None:
+            pv_clipped = np.where(pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0)
             pop_idx, step_idx = np.where(idle_mask)
             pv_util_at_step = state.pv_util_factors[pop_idx, step_idx]
             pv_ac_w = pv_util_at_step * pv_clipped[step_idx] * p.pv_to_ac_efficiency
