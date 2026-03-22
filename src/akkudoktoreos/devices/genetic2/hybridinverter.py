@@ -644,7 +644,16 @@ class HybridInverterDevice(EnergyDevice):
         # cost of keeping it in the battery.
         export_price_per_kwh: float
         if self._export_price_per_kwh is not None:
-            export_price_per_kwh = float(self._export_price_per_kwh.mean())
+            # Use the mean of non-negative export prices only.
+            # Negative feed-in tariff hours should not pull the mean below zero —
+            # that would make stored energy appear to have negative value and
+            # perversely incentivise discharging even when export costs money.
+            # The opportunity cost of stored energy is what you could earn by
+            # exporting at a favourable hour, which is zero when all hours are
+            # penalised.
+            prices = self._export_price_per_kwh
+            nonneg = prices[prices >= 0.0]
+            export_price_per_kwh = float(nonneg.mean()) if len(nonneg) > 0 else 0.0
         else:
             export_price_per_kwh = float(getattr(p, "export_revenue_per_kwh", 0.08))
 

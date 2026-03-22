@@ -57,12 +57,16 @@ class GridConnectionCommonSettings(PortsMixin, DevicesBaseSettings):
     )
     export_revenue_per_kwh: float = Field(
         default=0.08,
-        ge=0,
         json_schema_extra={
-            "description": "Revenue from exporting 1 kWh to the grid [currency/kWh].",
-            "examples": [0.08],
+            "description": (
+                "Flat-rate revenue from exporting 1 kWh to the grid [currency/kWh]. "
+                "May be negative when grid charges for export (e.g. negative spot price). "
+                "Overridden per-step by export_price_key when configured."
+            ),
+            "examples": [0.08, -0.05],
         },
     )
+
     include_peak_power_objective: bool = Field(
         default=False,
         json_schema_extra={

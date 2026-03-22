@@ -148,8 +148,8 @@ class GridConnectionParam(DeviceParam):
             raise ValueError("max_export_power_w must be >= 0")
         if self.import_cost_per_kwh < 0:
             raise ValueError("import_cost_per_kwh must be >= 0")
-        if self.export_revenue_per_kwh < 0:
-            raise ValueError("export_revenue_per_kwh must be >= 0")
+        if self.export_revenue_per_kwh < -1.0:
+            raise ValueError("export_revenue_per_kwh must be >= -1.0 (sanity check)")
 
 
 # ============================================================
