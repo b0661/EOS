@@ -451,7 +451,8 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             levelized_cost_of_storage_amt_kwh=self.levelized_cost_of_storage_amt_kwh,
             # Pass the same import price key used by GridConnectionDevice so the
             # terminal SoC correction in compute_cost uses the actual tariff.
-            import_price_key="elecprice_marketprice_amt_kwh",
+            import_price_amt_kwh_key="elecprice_marketprice_amt_kwh",
+            export_price_amt_kwh_key="feed_in_tariff_amt_kwh",
         )
 
     @computed_field  # type: ignore[prop-decorator]

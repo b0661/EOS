@@ -227,25 +227,12 @@ class EnergyManagement(
 
         cls._stage = EnergyManagementStage.FORECAST_RETRIEVAL
 
+        # Update the predictions
+        logger.info("Starting energy management prediction update.")
+        cls.prediction.update_data(force_enable=force_enable, force_update=force_update)
+
         if mode == EnergyManagementMode.PREDICTION:
-            # Update the predictions
-            cls.prediction.update_data(force_enable=force_enable, force_update=force_update)
             logger.info("Energy management run done (predictions updated)")
-            cls._stage = EnergyManagementStage.IDLE
-            return
-
-        # Prepare optimization parameters
-        # This also creates default configurations for missing values and updates the predictions
-        logger.info(
-            "Starting energy management prediction update and optimzation parameter preparation."
-        )
-        if genetic_parameters is None:
-            genetic_parameters = GeneticOptimizationParameters.prepare()
-
-        if not genetic_parameters:
-            logger.error(
-                "Energy management run canceled. Could not prepare optimisation parameters."
-            )
             cls._stage = EnergyManagementStage.IDLE
             return
 
@@ -256,6 +243,19 @@ class EnergyManagement(
         if algorithm is None:
             algorithm = cls.config.optimization.algorithm
         if algorithm == "GENETIC":
+            # Prepare optimization parameters
+            # This also creates default configurations for missing values and updates the predictions
+            logger.info("Starting optimzation parameter preparation.")
+            if genetic_parameters is None:
+                genetic_parameters = GeneticOptimizationParameters.prepare()
+
+            if not genetic_parameters:
+                logger.error(
+                    "Energy management run canceled. Could not prepare optimisation parameters."
+                )
+                cls._stage = EnergyManagementStage.IDLE
+                return
+
             # Take values from config if not given
             if genetic_individuals is None:
                 genetic_individuals = cls.config.optimization.genetic.individuals

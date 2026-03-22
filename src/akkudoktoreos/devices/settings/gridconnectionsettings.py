@@ -63,6 +63,19 @@ class GridConnectionCommonSettings(PortsMixin, DevicesBaseSettings):
             "examples": [0.08],
         },
     )
+    include_peak_power_objective: bool = Field(
+        default=False,
+        json_schema_extra={
+            "description": (
+                "Include peak import power [kW] as a second fitness objective. "
+                "When True, the optimiser minimises both energy cost and peak grid import. "
+                "Note: peak_import_kw is in kW while energy_cost is in EUR — they are summed "
+                "with equal weight by default, so a 5 kW peak dominates a 0.50 EUR cost. "
+                "Only enable when peak demand charges apply to your tariff. Default False."
+            ),
+            "examples": [False, True],
+        },
+    )
 
     def to_genetic2_param(self) -> "GridConnectionParam":
         """Return an immutable parameter object for the GENETIC2 optimizer."""
@@ -77,7 +90,7 @@ class GridConnectionCommonSettings(PortsMixin, DevicesBaseSettings):
             export_revenue_per_kwh=self.export_revenue_per_kwh,
             import_price_amt_kwh_key="elecprice_marketprice_amt_kwh",
             export_price_amt_kwh_key="feed_in_tariff_amt_kwh",
-            include_peak_power_objective=True,
+            include_peak_power_objective=self.include_peak_power_objective,
         )
 
     @computed_field  # type: ignore[prop-decorator]

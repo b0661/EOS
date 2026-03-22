@@ -123,7 +123,7 @@ class OptimizationResult:
     generations_run: int
     history: list[GenerationStats]
     assembled: AssembledGenome
-    run_summary: dict = None       # type: ignore[assignment]
+    run_summary: dict = None  # type: ignore[assignment]
     progress_df: pd.DataFrame | None = None
 
     def __post_init__(self) -> None:
@@ -232,6 +232,7 @@ class GeneticOptimizer:
     def optimize(self, context: SimulationContext) -> OptimizationResult:
         """Run the genetic optimisation for one horizon."""
         import time
+
         from loguru import logger
 
         self._engine.setup_run(context)
@@ -290,17 +291,42 @@ class GeneticOptimizer:
                     best_objectives=best_objectives,
                 )
                 if gen % self._log_interval == 0 or gen == _last_gen:
-                    obj_str = " ".join(
-                        f"{k}={v:.4f}" for k, v in best_objectives.items()
-                    )
+                    obj_str = " ".join(f"{k}={v:.4f}" for k, v in best_objectives.items())
                     logger.info(
                         "gen {:4d}/{}: best={:.4f} mean={:.4f} repaired={} {}",
-                        gen, _last_gen,
+                        gen,
+                        _last_gen,
                         gen_best_scalar,
                         float(scalar_fitness.mean()),
                         num_repaired,
                         obj_str,
                     )
+
+                # Genome diagnostic: log bat_factor and pv_util of best
+                # individual for the first 2 generations so we can see
+                # what the GA is actually scheduling.
+                if gen < 2:
+                    for device_id, slc in assembled.slices.items():
+                        genes = population[gen_best_idx, slc.start : slc.end]
+                        genome_size = slc.end - slc.start
+                        if genome_size >= 2 and genome_size % 2 == 0:
+                            bat = genes[0::2]
+                            pv = genes[1::2]
+                            logger.info(
+                                "gen {:d} best genome [{}]: "
+                                "bat min={:.2f} mean={:.2f} max={:.2f} nonzero={} | "
+                                "pv  min={:.2f} mean={:.2f} max={:.2f} nonzero={}",
+                                gen,
+                                device_id,
+                                float(bat.min()),
+                                float(bat.mean()),
+                                float(bat.max()),
+                                int((bat != 0).sum()),
+                                float(pv.min()),
+                                float(pv.mean()),
+                                float(pv.max()),
+                                int((pv > 0.01).sum()),
+                            )
             else:
                 stats = GenerationStats(
                     generation=gen,
@@ -320,19 +346,24 @@ class GeneticOptimizer:
                 and gens_since_improvement > 0
                 and gens_since_improvement % self._stagnation_window == 0
             ):
-                boosted_rate  = min(self.mutation_rate  * self._stagnation_boost, 0.5)
+                boosted_rate = min(self.mutation_rate * self._stagnation_boost, 0.5)
                 boosted_sigma = min(self.mutation_sigma * self._stagnation_boost, 0.5)
                 stagnation_boosts.append(gen)
                 if _do_log:
                     logger.info(
                         "gen {:4d}: stagnation detected ({} gens), boosting mutation "
                         "rate {:.3f}→{:.3f} sigma {:.3f}→{:.3f}",
-                        gen, gens_since_improvement,
-                        self.mutation_rate, boosted_rate,
-                        self.mutation_sigma, boosted_sigma,
+                        gen,
+                        gens_since_improvement,
+                        self.mutation_rate,
+                        boosted_rate,
+                        self.mutation_sigma,
+                        boosted_sigma,
                     )
                 population = self._breed(
-                    population, scalar_fitness, assembled,
+                    population,
+                    scalar_fitness,
+                    assembled,
                     mutation_rate_override=boosted_rate,
                     mutation_sigma_override=boosted_sigma,
                 )
@@ -368,14 +399,14 @@ class GeneticOptimizer:
                     "type": type(device).__name__,
                     "objective_names": device.objective_names,
                 }
-                if hasattr(d, 'param'):
+                if hasattr(d, "param"):
                     p = d.param
-                    if hasattr(p, 'battery_capacity_wh'):
+                    if hasattr(p, "battery_capacity_wh"):
                         entry["battery_capacity_wh"] = p.battery_capacity_wh
                         entry["inverter_type"] = str(p.inverter_type)
-                        entry["lcos"] = getattr(p, 'levelized_cost_of_storage_amt_kwh', None)
-                        entry["pv_key"] = getattr(p, 'pv_power_w_key', None)
-                    if hasattr(p, 'load_power_w_key'):
+                        entry["lcos"] = getattr(p, "levelized_cost_of_storage_amt_kwh", None)
+                        entry["pv_key"] = getattr(p, "pv_power_w_key", None)
+                    if hasattr(p, "load_power_w_key"):
                         entry["load_key"] = p.load_power_w_key
                 device_summary.append(entry)
 
@@ -385,40 +416,40 @@ class GeneticOptimizer:
                 d: Any = device
 
                 # PV forecast (HybridInverterDevice)
-                if hasattr(d, '_pv_power_w') and d._pv_power_w is not None:
+                if hasattr(d, "_pv_power_w") and d._pv_power_w is not None:
                     pv = d._pv_power_w
-                    forecast_summary["pv_power_w_min"]  = float(pv.min())
+                    forecast_summary["pv_power_w_min"] = float(pv.min())
                     forecast_summary["pv_power_w_mean"] = float(pv.mean())
-                    forecast_summary["pv_power_w_max"]  = float(pv.max())
+                    forecast_summary["pv_power_w_max"] = float(pv.max())
 
                 # Import price — prefer dynamic time-series, fall back to flat param
-                if hasattr(d, '_import_price_per_kwh'):
+                if hasattr(d, "_import_price_per_kwh"):
                     if d._import_price_per_kwh is not None:
                         pr = d._import_price_per_kwh
-                    elif hasattr(d, 'param') and hasattr(d.param, 'import_cost_per_kwh'):
+                    elif hasattr(d, "param") and hasattr(d.param, "import_cost_per_kwh"):
                         # Flat rate: build a uniform array for consistent reporting
                         horizon = len(context.step_times)
                         pr = np.full(horizon, float(d.param.import_cost_per_kwh))
                     else:
                         pr = None
                     if pr is not None:
-                        forecast_summary["import_price_min"]  = float(pr.min())
+                        forecast_summary["import_price_min"] = float(pr.min())
                         forecast_summary["import_price_mean"] = float(pr.mean())
-                        forecast_summary["import_price_max"]  = float(pr.max())
+                        forecast_summary["import_price_max"] = float(pr.max())
 
                 # Export price — prefer dynamic time-series, fall back to flat param
-                if hasattr(d, '_export_price_per_kwh'):
+                if hasattr(d, "_export_price_per_kwh"):
                     if d._export_price_per_kwh is not None:
                         ep = d._export_price_per_kwh
-                    elif hasattr(d, 'param') and hasattr(d.param, 'export_revenue_per_kwh'):
+                    elif hasattr(d, "param") and hasattr(d.param, "export_revenue_per_kwh"):
                         horizon = len(context.step_times)
                         ep = np.full(horizon, float(d.param.export_revenue_per_kwh))
                     else:
                         ep = None
                     if ep is not None:
-                        forecast_summary["export_price_min"]  = float(ep.min())
+                        forecast_summary["export_price_min"] = float(ep.min())
                         forecast_summary["export_price_mean"] = float(ep.mean())
-                        forecast_summary["export_price_max"]  = float(ep.max())
+                        forecast_summary["export_price_max"] = float(ep.max())
 
             run_summary = {
                 "generations_run": self.generations,
@@ -435,7 +466,9 @@ class GeneticOptimizer:
             }
             logger.info(
                 "Optimization complete: best={:.4f} converged_at_gen={} elapsed={:.1f}s",
-                best_scalar, best_improved_at, elapsed,
+                best_scalar,
+                best_improved_at,
+                elapsed,
             )
 
             # Build DataFrame — one row per generation.
@@ -551,7 +584,8 @@ class GeneticOptimizer:
         # ------------------------------------------------------------------
         instructions: dict[str, list[EnergyManagementInstruction]] = {}
         columns: dict[str, np.ndarray] = {}
-        load_energy_wh = np.zeros(horizon)
+        load_energy_wh = np.zeros(horizon)  # sum of pure load devices (fixed + appliances)
+        pv_energy_wh = np.zeros(horizon)  # sum of inverter injections onto bus [Wh]
 
         for device in self._engine._registry.all_devices():
             device_id = device.device_id
@@ -606,7 +640,8 @@ class GeneticOptimizer:
                 export_wh = np.maximum(0.0, -granted)
                 columns["costs_amt"] = (import_wh / 1000.0) * import_price
                 columns["revenue_amt"] = (export_wh / 1000.0) * export_price
-                load_energy_wh += import_wh
+                # grid import is NOT added to load_energy_wh — load is computed
+                # from the energy balance after all devices are processed.
 
             # FixedLoadDevice: has granted_wh, no bat_factors, and the param
             # carries load_power_w_key (distinguishes it from GridConnection).
@@ -630,13 +665,16 @@ class GeneticOptimizer:
                     s.soc_wh[0] / capacity_wh if capacity_wh > 0 else np.zeros(horizon)
                 )
 
-                load_energy_wh += np.maximum(0.0, energy_wh)
+                # Net AC injection onto bus (negative ac_power = PV surplus after
+                # covering battery charge and on-state draw). This is not pure PV
+                # generation — it is already net of battery charging — so it is
+                # tracked separately and not added to load_energy_wh.
+                pv_energy_wh += np.maximum(0.0, -energy_wh)
 
             # HomeApplianceDevice: has granted_energy_wh + schedule
             elif hasattr(state, "granted_energy_wh") and hasattr(state, "schedule"):
                 energy_wh = s.granted_energy_wh[0]  # (horizon,)
                 columns[f"{device_id}_energy_wh"] = energy_wh
-
                 load_energy_wh += np.maximum(0.0, energy_wh)
 
             # ---- Instruction-driven per-mode columns -------------------------
@@ -651,8 +689,16 @@ class GeneticOptimizer:
             # sharing the same execution_time (e.g. bat + PV_UTILISE from
             # HybridInverterDevice) each get their own mode column.
             if device_id in instructions:
-                # Build a fast lookup: execution_time → step index
-                time_to_step: dict[Any, int] = {t: i for i, t in enumerate(step_index)}
+                # Build a fast lookup: int timestamp → step index.
+                # Using int_timestamp avoids hash/equality issues that arise
+                # when DateTime objects are reconstructed through Pydantic
+                # validation (e.g. in OMBCInstruction.execution_time), which
+                # may produce objects that are equal in value but not identical
+                # in identity — causing dict lookups to silently fail and leaving
+                # all op_factor columns at the default 0.0.
+                time_to_step: dict[int, int] = {
+                    int(t.int_timestamp): i for i, t in enumerate(step_index)
+                }
 
                 # Accumulate per-mode arrays keyed by mode string
                 mode_op: dict[str, np.ndarray] = {}
@@ -662,7 +708,10 @@ class GeneticOptimizer:
                     mode_id: str | None = getattr(instr, "operation_mode_id", None)
                     if mode_id is None:
                         continue
-                    t = time_to_step.get(instr.execution_time)
+                    exec_ts = getattr(instr.execution_time, "int_timestamp", None)
+                    if exec_ts is None:
+                        continue
+                    t = time_to_step.get(int(exec_ts))
                     if t is None:
                         continue
                     factor = float(getattr(instr, "operation_mode_factor", 1.0))
@@ -681,7 +730,14 @@ class GeneticOptimizer:
                     columns[f"{device_id}_{mode_id.lower()}_op_mode"] = op_arr
                     columns[f"{device_id}_{mode_id.lower()}_op_factor"] = mode_factor[mode_id]
 
+        # load_energy_wh: sum of all pure load devices (FixedLoad + HomeAppliance).
+        # These are the only devices whose granted energy is unambiguously household
+        # consumption. The inverter's ac_power_w is a net signal (PV minus battery
+        # charging minus losses) and cannot be decomposed reliably, so it is excluded.
+        # pv_energy_wh is the net AC injection from all inverters onto the bus —
+        # useful for dashboarding but not added to load.
         columns["load_energy_wh"] = load_energy_wh
+        columns["pv_energy_wh"] = pv_energy_wh
         # Conversion losses are embedded in device physics but not surfaced
         # as a discrete signal by the engine.
         columns["losses_energy_wh"] = np.zeros(horizon)
@@ -780,10 +836,10 @@ class GeneticOptimizer:
             for k in range(n_seeded):
                 if seed_idx >= self.population_size:
                     break
-                g = population[seed_idx, slc.start:slc.end].copy()
+                g = population[seed_idx, slc.start : slc.end].copy()
                 # Divide horizon into charge window (first third) and discharge
                 # window (last third), idle in between.
-                charge_end   = horizon // 3
+                charge_end = horizon // 3
                 discharge_start = (2 * horizon) // 3
                 for t in range(horizon):
                     bat_gene_idx = 2 * t
@@ -792,11 +848,11 @@ class GeneticOptimizer:
                     elif t >= discharge_start:
                         g[bat_gene_idx] = bat_lo  # full discharge
                     else:
-                        g[bat_gene_idx] = 0.0     # idle
+                        g[bat_gene_idx] = 0.0  # idle
                     # PV utilisation: full where upper bound > 0
                     pv_gene_idx = 2 * t + 1
                     g[pv_gene_idx] = assembled.upper_bounds[slc.start + pv_gene_idx]
-                population[seed_idx, slc.start:slc.end] = g
+                population[seed_idx, slc.start : slc.end] = g
                 seed_idx += 1
 
         return population
@@ -882,7 +938,7 @@ class GeneticOptimizer:
         mutation_rate: float | None = None,
         mutation_sigma: float | None = None,
     ) -> None:
-        rate  = mutation_rate  if mutation_rate  is not None else self.mutation_rate
+        rate = mutation_rate if mutation_rate is not None else self.mutation_rate
         sigma = mutation_sigma if mutation_sigma is not None else self.mutation_sigma
         mask = self._rng.random(genome.shape) < rate
         if not np.any(mask):

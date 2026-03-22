@@ -217,12 +217,11 @@ class HybridInverterParam(DeviceParam):
     # Set to 0.0 to disable.
     levelized_cost_of_storage_amt_kwh: float = 0.0
 
-    # Key for resolving the per-step import price forecast used by the
-    # terminal SoC correction in compute_cost.  Should match the key used
-    # by GridConnectionDevice (typically "elecprice_marketprice_amt_kwh").
-    # None disables the price-aware correction and falls back to a flat
-    # 0.10 EUR/kWh estimate.
-    import_price_key: str | None = None
+    # Keys for resolving per-step price forecasts used by SoC value
+    # accounting in compute_cost.  Should match the keys used by
+    # GridConnectionDevice.
+    import_price_amt_kwh_key: str | None = None
+    export_price_amt_kwh_key: str | None = None
 
     def __post_init__(self) -> None:
         self._validate()
@@ -354,7 +353,10 @@ class HybridInverterDevice(EnergyDevice):
         self._step_interval_sec: float | None = None
         self._pv_power_w: np.ndarray | None = None  # shape (horizon,), SOLAR/HYBRID
         self._battery_initial_soc_wh: float | None = None  # BATTERY/HYBRID
-        self._import_price_per_kwh: np.ndarray | None = None  # shape (horizon,), for terminal SoC correction
+        self._import_price_per_kwh: np.ndarray | None = None  # shape (horizon,)
+        self._export_price_per_kwh: np.ndarray | None = (
+            None  # shape (horizon,), for SoC value accounting
+        )
 
     @property
     def ports(self) -> tuple[EnergyPort, ...]:
@@ -362,8 +364,9 @@ class HybridInverterDevice(EnergyDevice):
 
     @property
     def objective_names(self) -> list[str]:
-        # BATTERY/HYBRID always contributes energy_cost_amt via the terminal
-        # SoC correction (and optionally LCOS).  SOLAR has no battery.
+        # BATTERY/HYBRID always contributes energy_cost_amt via the SoC value
+        # accounting (initial vs terminal SoC valued at export price) and
+        # optionally LCOS. SOLAR has no battery.
         if self.param.inverter_type != InverterType.SOLAR:
             return ["energy_cost_amt"]
         return []
@@ -390,16 +393,32 @@ class HybridInverterDevice(EnergyDevice):
                     f"{self.device_id}: PV forecast must have shape ({horizon},), got {pv.shape}."
                 )
             self._pv_power_w = pv
+            if not np.isfinite(self.param.pv_max_power_w):
+                from loguru import logger as _log
+
+                _log.warning(
+                    "{}: pv_max_power_w is not set (null). PV power will not be clipped. "
+                    "Set devices.inverters.{}.pv_max_power_w to the rated DC peak power [W] "
+                    "of your PV array for accurate simulation.",
+                    self.device_id,
+                    self.device_id,
+                )
+            _log_pv_stats = f"min={pv.min():.0f} mean={pv.mean():.0f} max={pv.max():.0f} W"
+            from loguru import logger as _log
+
+            _log.info("{}: PV forecast resolved: {}", self.device_id, _log_pv_stats)
 
         if self.param.inverter_type in (InverterType.BATTERY, InverterType.HYBRID):
             soc_factor = context.resolve_measurement(self.param.battery_initial_soc_factor_key)
             if soc_factor is None:
-                # No measurement available — default to the midpoint of the usable
-                # SoC range [min_soc_factor, max_soc_factor].  This guarantees that
-                # repair never zeros out charge genes (headroom available) nor
-                # discharge genes (energy available), so the GA can explore both
-                # directions from generation 0.
-                soc_factor = (self.param.battery_min_soc_factor + self.param.battery_max_soc_factor) / 2.0
+                # No measurement available — default to midpoint of usable range.
+                # The initial SoC is assigned a monetary value (export price) in
+                # compute_cost, so the GA cannot exploit it as free energy.
+                # Set battery_initial_soc_factor_key to the actual SoC measurement
+                # key for accurate real-world planning.
+                soc_factor = (
+                    self.param.battery_min_soc_factor + self.param.battery_max_soc_factor
+                ) / 2.0
             if not (0.0 <= soc_factor <= 1.0):
                 raise ValueError(
                     f"{self.device_id}: initial SoC factor {soc_factor} outside allowed bounds "
@@ -407,14 +426,27 @@ class HybridInverterDevice(EnergyDevice):
                 )
             self._battery_initial_soc_wh = soc_factor * self.param.battery_capacity_wh
 
-            # Resolve import price for terminal SoC correction in compute_cost.
-            if self.param.import_price_key:
+            # Resolve import and export prices for SoC value accounting in compute_cost.
+            if self.param.import_price_amt_kwh_key:
                 try:
-                    self._import_price_per_kwh = context.resolve_prediction(self.param.import_price_key)
+                    self._import_price_per_kwh = context.resolve_prediction(
+                        self.param.import_price_amt_kwh_key
+                    )
                 except Exception:
                     self._import_price_per_kwh = None
             else:
                 self._import_price_per_kwh = None
+
+            # Export price for SoC value accounting
+            if self.param.export_price_amt_kwh_key:
+                try:
+                    self._export_price_per_kwh = context.resolve_prediction(
+                        self.param.export_price_amt_kwh_key
+                    )
+                except Exception:
+                    self._export_price_per_kwh = None
+            else:
+                self._export_price_per_kwh = None
 
     def genome_requirements(self) -> GenomeSlice:
         """Return genome slice descriptor for the two-gene-per-step encoding.
@@ -472,11 +504,40 @@ class HybridInverterDevice(EnergyDevice):
         Returns:
             The mutated ``genome_batch``.
         """
+        pv_power_w = self._pv_power_w
         if self._step_interval_sec is None:
             raise RuntimeError("Call setup_run() before apply_genome_batch().")
-        pv_power_w = self._pv_power_w
-        pv_min_power_w = self.param.pv_min_power_w
-        pv_max_power_w = self.param.pv_max_power_w
+        if pv_power_w is None and self.param.inverter_type in (
+            InverterType.SOLAR,
+            InverterType.HYBRID,
+        ):
+            raise RuntimeError("Call setup_run() before apply_genome_batch().")
+        p = self.param
+
+        # One-shot diagnostic: log PV availability and genome summary on first call.
+        if not hasattr(self, "_diag_logged"):
+            self._diag_logged = True
+            from loguru import logger as _log
+
+            if pv_power_w is not None:
+                nonzero_pv_steps = int((pv_power_w > 0).sum())
+                _log.info(
+                    "{}: apply_genome_batch first call — "
+                    "inverter_type={} pv_steps_with_power={}/{} "
+                    "pv_max={:.0f}W pv_min_threshold={:.0f}W",
+                    self.device_id,
+                    p.inverter_type.name,
+                    nonzero_pv_steps,
+                    len(pv_power_w),
+                    float(pv_power_w.max()),
+                    p.pv_min_power_w,
+                )
+            else:
+                _log.info(
+                    "{}: apply_genome_batch first call — inverter_type={} no PV",
+                    self.device_id,
+                    p.inverter_type.name,
+                )
 
         soc = np.full(
             state.population_size,
@@ -487,10 +548,15 @@ class HybridInverterDevice(EnergyDevice):
             raw_bat = genome_batch[:, 2 * t]  # shape (pop,)
             raw_pv = genome_batch[:, 2 * t + 1]  # shape (pop,)
 
-            if pv_power_w is not None:
-                pv_dc_avail_w = float(np.clip(pv_power_w[t], pv_min_power_w, pv_max_power_w))
-            else:
-                pv_dc_avail_w = 0.0
+            pv_dc_avail_w = (
+                float(
+                    np.clip(pv_power_w[t], 0.0, p.pv_max_power_w)
+                    if pv_power_w[t] >= p.pv_min_power_w
+                    else 0.0
+                )
+                if p.inverter_type in (InverterType.SOLAR, InverterType.HYBRID)
+                else 0.0
+            )
 
             bat_t, pv_t = self._repair_genes(raw_bat, raw_pv, soc, pv_dc_avail_w)
 
@@ -502,9 +568,16 @@ class HybridInverterDevice(EnergyDevice):
             soc = self._advance_soc(soc, bat_t, pv_t, pv_dc_avail_w)
             state.soc_wh[:, t] = soc
 
-            # Lamarckian write-back
+            # Lamarckian write-back.
+            # bat gene: always write back (repair is always meaningful).
             genome_batch[:, 2 * t] = bat_t
-            genome_batch[:, 2 * t + 1] = pv_t
+            # pv gene: only write back when PV is actually available at this step.
+            # When pv_dc_avail_w == 0, repair forces pv_t to zero regardless of
+            # the gene value — writing that zero back would permanently destroy
+            # gene diversity at no-PV steps, and crossover would then spread
+            # those zeros to steps where PV is available, suppressing utilisation.
+            if pv_dc_avail_w > 0.0:
+                genome_batch[:, 2 * t + 1] = pv_t
 
         return genome_batch
 
@@ -568,34 +641,42 @@ class HybridInverterDevice(EnergyDevice):
         if self._step_interval_sec is None or self._battery_initial_soc_wh is None:
             raise RuntimeError("Call setup_run() before compute_cost().")
 
-        # Terminal SoC correction.
+        # SoC value accounting + optional LCOS.
         #
-        # The GA must not profit from either direction of SoC deviation:
+        # The battery holds energy with real monetary value. To prevent the GA
+        # from exploiting initial stored energy as "free" and to correctly
+        # value energy left at the end of the horizon, both initial and
+        # terminal SoC are credited at the export price:
         #
-        # Net discharge (delta > 0): the battery consumed stored energy that
-        #   must be replaced — penalised at the mean import price.
+        #   soc_cost = (initial_soc_wh - terminal_soc_wh) / 1000 * export_price
         #
-        # Net charge (delta < 0): the battery stored imported energy that
-        #   goes unused this horizon — penalised at the export price (the
-        #   opportunity cost of not exporting that energy instead).
+        # A positive value (net discharge) means the battery consumed stored
+        # energy — that energy is debited at export price (it could have been
+        # exported instead).  A negative value (net charge) means the battery
+        # gained energy — that is credited at export price (it can be exported
+        # or used later).  This makes the planning horizon financially
+        # self-consistent: the GA correctly prices charge-then-discharge cycles
+        # against exporting directly, without perverse incentives.
         #
-        # Both corrections use the same magnitude so neither direction is
-        # artificially preferred.
-        initial_soc_wh = self._battery_initial_soc_wh
-        terminal_soc_wh = state.soc_wh[:, -1]           # (population_size,)
-        delta_wh = initial_soc_wh - terminal_soc_wh      # positive = net discharged
-        mean_import_price = (
-            float(self._import_price_per_kwh.mean())
-            if self._import_price_per_kwh is not None
-            else 0.10
-        )
-        # Net-discharged energy → replace at import price
-        discharge_correction = np.maximum(0.0,  delta_wh) / 1000.0 * mean_import_price
-        # Net-charged energy → opportunity cost at export price (stranded import)
-        charge_correction    = np.maximum(0.0, -delta_wh) / 1000.0 * mean_import_price
-        terminal_correction  = discharge_correction + charge_correction
+        # Export price is used (not import price) because the marginal value of
+        # stored energy is what you could get by exporting it — the opportunity
+        # cost of keeping it in the battery.
+        export_price_per_kwh: float
+        if self._export_price_per_kwh is not None:
+            export_price_per_kwh = float(self._export_price_per_kwh.mean())
+        elif hasattr(p, "export_revenue_per_kwh"):
+            export_price_per_kwh = (
+                float(p.export_revenue_per_kwh) if hasattr(p, "export_revenue_per_kwh") else 0.08
+            )
+        else:
+            export_price_per_kwh = 0.08
 
-        # Optional LCOS.
+        initial_soc_wh = self._battery_initial_soc_wh
+        terminal_soc_wh = state.soc_wh[:, -1]  # (population_size,)
+        soc_delta_wh = initial_soc_wh - terminal_soc_wh  # positive = net discharged
+        soc_cost = soc_delta_wh / 1000.0 * export_price_per_kwh  # (population_size,)
+
+        # Optional LCOS: penalise battery cycling for wear cost.
         if p.levelized_cost_of_storage_amt_kwh > 0.0:
             step_h = self._step_interval_sec / 3600.0
             bat_f = state.bat_factors
@@ -606,7 +687,7 @@ class HybridInverterDevice(EnergyDevice):
         else:
             lcos = np.zeros(state.population_size)
 
-        total = terminal_correction + lcos
+        total = soc_cost + lcos
         return total[:, np.newaxis]  # (population_size, 1)
 
     # ------------------------------------------------------------------
@@ -674,7 +755,7 @@ class HybridInverterDevice(EnergyDevice):
                 # downstream consumers (logging, dashboards) can see what the GA
                 # decided, even though the firmware ignores the explicit setpoint.
                 bat_mode = "SELF_CONSUMPTION"
-                bat_factor_out = 1.0 # abs(float(bat_f))
+                bat_factor_out = 1.0  # abs(float(bat_f))
             elif bat_f > 0.0:
                 bat_mode = "CHARGE"
                 bat_factor_out = abs(float(bat_f))
@@ -1061,7 +1142,9 @@ class HybridInverterDevice(EnergyDevice):
 
         if charge_mask.any():
             if p.inverter_type == InverterType.HYBRID and pv_power_w is not None:
-                pv_clipped = np.where(pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0)
+                pv_clipped = np.where(
+                    pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0
+                )
                 # Use the per-step PV utilisation to determine how much PV assists
                 # the minimum charge.  We look at each step that is charging.
                 pop_idx, step_idx = np.where(charge_mask)
@@ -1084,7 +1167,9 @@ class HybridInverterDevice(EnergyDevice):
 
         if discharge_mask.any():
             if p.inverter_type == InverterType.HYBRID and pv_power_w is not None:
-                pv_clipped = np.where(pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0)
+                pv_clipped = np.where(
+                    pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0
+                )
                 pop_idx, step_idx = np.where(discharge_mask)
                 pv_util_at_step = state.pv_util_factors[pop_idx, step_idx]
                 pv_dc_used = pv_util_at_step * pv_clipped[step_idx]
@@ -1099,10 +1184,14 @@ class HybridInverterDevice(EnergyDevice):
         # causing apply_device_grant to overwrite ac_power_w with 0 and
         # silently drop all PV generation on idle-battery steps.
         idle_mask = state.bat_factors == 0.0
-        if idle_mask.any() and p.inverter_type in (
-            InverterType.SOLAR, InverterType.HYBRID
-        ) and pv_power_w is not None:
-            pv_clipped = np.where(pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0)
+        if (
+            idle_mask.any()
+            and p.inverter_type in (InverterType.SOLAR, InverterType.HYBRID)
+            and pv_power_w is not None
+        ):
+            pv_clipped = np.where(
+                pv_power_w >= p.pv_min_power_w, np.clip(pv_power_w, 0.0, p.pv_max_power_w), 0.0
+            )
             pop_idx, step_idx = np.where(idle_mask)
             pv_util_at_step = state.pv_util_factors[pop_idx, step_idx]
             pv_ac_w = pv_util_at_step * pv_clipped[step_idx] * p.pv_to_ac_efficiency
