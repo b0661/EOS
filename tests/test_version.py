@@ -55,7 +55,8 @@ def guard_version_date_file():
             pytest.fail(
                 f"Test modified VERSION_DATE_FILE: {VERSION_DATE_FILE}\n"
                 f"Original content:\n{before_content}\n"
-                f"Modified content:\n{after_content}"
+                f"Modified content:\n{after_content}\n"
+                f"Did you check in all files?"
             )
     else:
         if before_content is not None:
