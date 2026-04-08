@@ -50,14 +50,14 @@ class PVForecastPlaneSetting(SettingsBaseModel):
         },
     )
     userhorizon: Optional[List[float]] = Field(
-        default=None,
+        default=[10.0, 20.0, 30.0],
         json_schema_extra={
             "description": "Elevation of horizon in degrees, at equally spaced azimuth clockwise from north.",
             "examples": [[10.0, 20.0, 30.0], [5.0, 15.0, 25.0]],
         },
     )
     peakpower: Optional[float] = Field(
-        default=None,
+        default=5.0,
         json_schema_extra={
             "description": "Nominal power of PV system in kW.",
             "examples": [5.0, 3.5],
@@ -79,7 +79,7 @@ class PVForecastPlaneSetting(SettingsBaseModel):
         default=14.0, json_schema_extra={"description": "Sum of PV system losses in percent"}
     )
     trackingtype: Optional[int] = Field(
-        default=None,
+        default=0,
         ge=0,
         le=5,
         json_schema_extra={
@@ -123,21 +123,21 @@ class PVForecastPlaneSetting(SettingsBaseModel):
         },
     )
     inverter_paco: Optional[int] = Field(
-        default=None,
+        default=6000,
         json_schema_extra={
             "description": "AC power rating of the inverter [W].",
             "examples": [6000, 4000],
         },
     )
     modules_per_string: Optional[int] = Field(
-        default=None,
+        default=20,
         json_schema_extra={
             "description": "Number of the PV modules of the strings of this plane.",
             "examples": [20],
         },
     )
     strings_per_inverter: Optional[int] = Field(
-        default=None,
+        default=2,
         json_schema_extra={
             "description": "Number of the strings of the inverter of this plane.",
             "examples": [2],
@@ -190,7 +190,7 @@ class PVForecastCommonSettings(SettingsBaseModel):
     #     https://pvlib-python.readthedocs.io/en/stable/_modules/pvlib/inverter.html
 
     provider: Optional[str] = Field(
-        default=None,
+        default="PVForecastAkkudoktor",
         json_schema_extra={
             "description": "PVForecast provider id of provider to be used.",
             "examples": ["PVForecastAkkudoktor"],
@@ -212,7 +212,7 @@ class PVForecastCommonSettings(SettingsBaseModel):
     )
 
     planes: Optional[list[PVForecastPlaneSetting]] = Field(
-        default=None,
+        default=[PVForecastPlaneSetting()],
         json_schema_extra={
             "description": "Plane configuration.",
             "examples": [
@@ -259,7 +259,7 @@ class PVForecastCommonSettings(SettingsBaseModel):
     )
 
     max_planes: Optional[int] = Field(
-        default=0,
+        default=1,
         ge=0,
         json_schema_extra={
             "description": "Maximum number of planes that can be set",

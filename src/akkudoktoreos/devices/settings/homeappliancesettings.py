@@ -113,7 +113,7 @@ class HomeApplianceCommonSettings(PortsMixin, DevicesBaseSettings):
     """
 
     consumption_wh: int = Field(
-        ...,
+        default=3000,
         gt=0,
         json_schema_extra={
             "description": "Energy consumption per run cycle [Wh].",
@@ -121,7 +121,7 @@ class HomeApplianceCommonSettings(PortsMixin, DevicesBaseSettings):
         },
     )
     duration_h: int = Field(
-        ...,
+        default=3,
         gt=0,
         le=24,
         json_schema_extra={

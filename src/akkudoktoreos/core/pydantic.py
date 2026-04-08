@@ -1135,7 +1135,7 @@ class PydanticDateTimeDataFrame(PydanticBaseModel):
                     if tz is not None:
                         tz_str = str(tz)
                         break
-            if tz_str.startswith("UTC") and len(tz_str) > 3:
+            if tz_str and tz_str.startswith("UTC") and len(tz_str) > 3:
                 # Regression test
                 raise ValueError(f"Invalid Timezone {tz_str} in data column {col}")
 

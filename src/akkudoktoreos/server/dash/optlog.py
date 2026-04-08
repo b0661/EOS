@@ -21,6 +21,7 @@ All charts follow the same Bokeh / MonsterUI styling used in the Plan tab.
 
 from typing import Optional, Union
 
+import pandas as pd
 import requests
 from bokeh.models import ColumnDataSource, LinearAxis, Range1d, Span
 from bokeh.plotting import figure
@@ -49,16 +50,16 @@ from akkudoktoreos.server.dash.components import Error
 # ── colour palette (reused from plan.py) ────────────────────────────────────
 
 color_palette = {
-    "blue-500":    "#3B82F6",
-    "orange-500":  "#F97316",
-    "green-500":   "#22C55E",
-    "violet-500":  "#8B5CF6",
-    "pink-500":    "#EC4899",
-    "amber-500":   "#F59E0B",
-    "cyan-500":    "#06B6D4",
-    "rose-500":    "#F43F5E",
-    "lime-500":    "#84CC16",
-    "teal-500":    "#14B8A6",
+    "blue-500": "#3B82F6",
+    "orange-500": "#F97316",
+    "green-500": "#22C55E",
+    "violet-500": "#8B5CF6",
+    "pink-500": "#EC4899",
+    "amber-500": "#F59E0B",
+    "cyan-500": "#06B6D4",
+    "rose-500": "#F43F5E",
+    "lime-500": "#84CC16",
+    "teal-500": "#14B8A6",
 }
 _colors = list(color_palette.values())
 
@@ -95,21 +96,19 @@ def _fmt(value: object, decimals: int = 4) -> str:
 
 def _RunSummarySection(summary: dict, dark: bool) -> Grid:
     """Build the three-column run-summary card row."""
-
     # ── Left card: optimiser parameters ─────────────────────────────────────
     params = [
-        ("Generations",    summary.get("generations_run",   "—")),
-        ("Population",     summary.get("population_size",   "—")),
-        ("Horizon steps",  summary.get("horizon",           "—")),
-        ("Step interval",  f"{summary.get('step_interval_sec', '—')} s"),
-        ("Elapsed",        f"{summary.get('elapsed_sec', '—')} s"),
-        ("Converged at",   f"gen {summary.get('best_improved_at_generation', '—')}"),
-        ("Best fitness",   _fmt(summary.get("best_scalar_fitness", None))),
-        ("Objectives",     ", ".join(summary.get("objective_names", []))),
+        ("Generations", summary.get("generations_run", "—")),
+        ("Population", summary.get("population_size", "—")),
+        ("Horizon steps", summary.get("horizon", "—")),
+        ("Step interval", f"{summary.get('step_interval_sec', '—')} s"),
+        ("Elapsed", f"{summary.get('elapsed_sec', '—')} s"),
+        ("Converged at", f"gen {summary.get('best_improved_at_generation', '—')}"),
+        ("Best fitness", _fmt(summary.get("best_scalar_fitness", None))),
+        ("Objectives", ", ".join(summary.get("objective_names", []))),
     ]
     param_rows = [
-        Tr(Td(P(k, cls="font-semibold text-sm")), Td(P(str(v), cls="text-sm")))
-        for k, v in params
+        Tr(Td(P(k, cls="font-semibold text-sm")), Td(P(str(v), cls="text-sm"))) for k, v in params
     ]
     params_card = Card(
         Table(Tbody(*param_rows), cls="w-full"),
@@ -135,7 +134,9 @@ def _RunSummarySection(summary: dict, dark: bool) -> Grid:
         objs = ", ".join(dev.get("objective_names", []))
         device_rows.append(
             Tr(
-                Td(DivLAligned(UkIcon(icon=icon), P(dev.get("device_id", "?"), cls="text-sm ml-1"))),
+                Td(
+                    DivLAligned(UkIcon(icon=icon), P(dev.get("device_id", "?"), cls="text-sm ml-1"))
+                ),
                 Td(P(dev.get("type", ""), cls="text-sm text-gray-500")),
                 Td(P(", ".join(details), cls="text-sm")),
                 Td(P(objs or "—", cls="text-sm text-gray-400")),
@@ -144,7 +145,9 @@ def _RunSummarySection(summary: dict, dark: bool) -> Grid:
     devices_card = Card(
         Table(
             Thead(Tr(Th("Device"), Th("Type"), Th("Params"), Th("Objectives"))),
-            Tbody(*device_rows) if device_rows else P("No device info available.", cls="text-sm text-gray-400"),
+            Tbody(*device_rows)
+            if device_rows
+            else P("No device info available.", cls="text-sm text-gray-400"),
             cls="w-full text-left",
         ),
         header=CardTitle("Devices"),
@@ -154,25 +157,27 @@ def _RunSummarySection(summary: dict, dark: bool) -> Grid:
     forecasts: dict = summary.get("forecasts", {})
     forecast_rows = []
     metric_groups = [
-        ("PV power",      "pv_power_w_min",   "pv_power_w_mean",   "pv_power_w_max",   "W"),
-        ("Import price",  "import_price_min",  "import_price_mean",  "import_price_max",  "amt/kWh"),
-        ("Export price",  "export_price_min",  "export_price_mean",  "export_price_max",  "amt/kWh"),
+        ("PV power", "pv_power_w_min", "pv_power_w_mean", "pv_power_w_max", "W"),
+        ("Import price", "import_price_min", "import_price_mean", "import_price_max", "amt/kWh"),
+        ("Export price", "export_price_min", "export_price_mean", "export_price_max", "amt/kWh"),
     ]
     for label, k_min, k_mean, k_max, unit in metric_groups:
         if k_min in forecasts:
             forecast_rows.append(
                 Tr(
                     Td(P(label, cls="font-semibold text-sm")),
-                    Td(P(_fmt(forecasts[k_min],  2), cls="text-sm")),
+                    Td(P(_fmt(forecasts[k_min], 2), cls="text-sm")),
                     Td(P(_fmt(forecasts[k_mean], 2), cls="text-sm font-bold")),
-                    Td(P(_fmt(forecasts[k_max],  2), cls="text-sm")),
+                    Td(P(_fmt(forecasts[k_max], 2), cls="text-sm")),
                     Td(P(unit, cls="text-xs text-gray-400")),
                 )
             )
     forecasts_card = Card(
         Table(
             Thead(Tr(Th("Forecast"), Th("Min"), Th("Mean"), Th("Max"), Th("Unit"))),
-            Tbody(*forecast_rows) if forecast_rows else P("No forecast info available.", cls="text-sm text-gray-400"),
+            Tbody(*forecast_rows)
+            if forecast_rows
+            else P("No forecast info available.", cls="text-sm text-gray-400"),
             cls="w-full text-left",
         ),
         header=CardTitle("Forecast Summary"),
@@ -184,20 +189,23 @@ def _RunSummarySection(summary: dict, dark: bool) -> Grid:
 # ── Convergence chart ─────────────────────────────────────────────────────────
 
 
-def _ConvergenceChart(df, best_improved_at: Optional[int], summary: dict, dark: bool) -> Div:
+def _ConvergenceChart(
+    df: pd.DataFrame, best_improved_at: Optional[int], summary: dict, dark: bool
+) -> Div:
     """Dual-axis Bokeh chart: fitness curves + repair counts."""
-
     # Build source with a plain integer x-axis (generation number).
     # The generation column was reset_index'd to a regular column when
     # we built optimization_log, so it must be present.
     gen_col = "generation" if "generation" in df.columns else df.columns[0]
     gens = df[gen_col].astype(int).tolist()
-    source = ColumnDataSource(dict(
-        generation=gens,
-        best_scalar_fitness=df["best_scalar_fitness"].tolist(),
-        mean_scalar_fitness=df["mean_scalar_fitness"].tolist(),
-        num_repaired=df["num_repaired"].tolist(),
-    ))
+    source = ColumnDataSource(
+        dict(
+            generation=gens,
+            best_scalar_fitness=df["best_scalar_fitness"].tolist(),
+            mean_scalar_fitness=df["mean_scalar_fitness"].tolist(),
+            num_repaired=df["num_repaired"].tolist(),
+        )
+    )
 
     fitness_min = min(
         float(df["best_scalar_fitness"].min()),
@@ -268,34 +276,42 @@ def _ConvergenceChart(df, best_improved_at: Optional[int], summary: dict, dark: 
         plot.add_layout(conv_span)
         # Annotate with a text label at the top
         from bokeh.models import Label
-        plot.add_layout(Label(
-            x=best_improved_at,
-            y=fitness_max,
-            text=f" converged gen {best_improved_at}",
-            text_font_size="11px",
-            text_color=_colors[2],
-        ))
+
+        plot.add_layout(
+            Label(
+                x=best_improved_at,
+                y=fitness_max,
+                text=f" converged gen {best_improved_at}",
+                text_font_size="11px",
+                text_color=_colors[2],
+            )
+        )
 
     # Vertical markers for each stagnation mutation boost
     boost_gens: list[int] = summary.get("stagnation_boosts_at_generations", [])
     for boost_gen in boost_gens:
-        plot.add_layout(Span(
-            location=boost_gen,
-            dimension="height",
-            line_color=_colors[3],
-            line_dash="dashed",
-            line_width=1.0,
-            line_alpha=0.6,
-        ))
+        plot.add_layout(
+            Span(
+                location=boost_gen,
+                dimension="height",
+                line_color=_colors[3],
+                line_dash="dashed",
+                line_width=1.0,
+                line_alpha=0.6,
+            )
+        )
     if boost_gens:
         from bokeh.models import Label
-        plot.add_layout(Label(
-            x=boost_gens[0],
-            y=fitness_min,
-            text=f" boost×{len(boost_gens)}",
-            text_font_size="10px",
-            text_color=_colors[3],
-        ))
+
+        plot.add_layout(
+            Label(
+                x=boost_gens[0],
+                y=fitness_min,
+                text=f" boost×{len(boost_gens)}",
+                text_font_size="10px",
+                text_color=_colors[3],
+            )
+        )
 
     plot.legend.location = "top_right"
     plot.legend.click_policy = "hide"
@@ -308,13 +324,17 @@ def _ConvergenceChart(df, best_improved_at: Optional[int], summary: dict, dark: 
 # ── Per-objective chart ───────────────────────────────────────────────────────
 
 
-def _ObjectivesChart(df, dark: bool) -> Div:
+def _ObjectivesChart(df: pd.DataFrame, dark: bool) -> Div:
     """One line per obj_* column so each objective can be traced individually."""
-
     gen_col = "generation" if "generation" in df.columns else df.columns[0]
     obj_cols = [c for c in df.columns if c.startswith("obj_")]
     if not obj_cols:
-        return Div(P("No per-objective data available (all objectives summed into scalar).", cls="text-sm text-gray-400"))
+        return Div(
+            P(
+                "No per-objective data available (all objectives summed into scalar).",
+                cls="text-sm text-gray-400",
+            )
+        )
 
     gens = df[gen_col].astype(int).tolist()
     data: dict = {"generation": gens}

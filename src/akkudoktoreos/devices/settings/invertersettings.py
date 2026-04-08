@@ -46,6 +46,7 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
 
     GENETIC2 inverter type inference
     ---------------------------------
+
     The ``inverter_type`` passed to ``HybridInverterParam`` is inferred
     automatically from the fields that are set:
 
@@ -57,7 +58,7 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
       ``battery_capacity_wh`` is set (and > 0).
 
     Notes:
-    -----
+    ------
     ``battery_id`` is retained for backward compatibility with GENETIC
     configurations but is not used by ``to_genetic2_param()`` or the
     GENETIC2 simulation engine. Port wiring replaces that coupling.
@@ -248,7 +249,8 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
         le=1,
         json_schema_extra={
             "description": (
-                "Minimum non-zero charge rate as a fraction of battery_max_charge_rate. "
+                "Minimum non-zero charge rate as a fraction of the 1C rate "
+                "(1C = battery_capacity_wh W). "
                 "Charge commands below this threshold are rounded to zero. Default 0.0."
             ),
             "examples": [0.1, 0.0],
@@ -262,8 +264,8 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
         json_schema_extra={
             "description": (
                 "Maximum charge rate as a fraction of the 1C rate "
-                "(1C = battery_capacity_wh W). bat_factor=+1 maps to this rate. "
-                "Default 1.0 (full 1C charge)."
+                "(1C = battery_capacity_wh W). "
+                "bat_factor=+1 maps to this rate. Default 1.0."
             ),
             "examples": [0.5, 1.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
@@ -275,7 +277,8 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
         le=1,
         json_schema_extra={
             "description": (
-                "Minimum non-zero discharge rate as a fraction of battery_max_discharge_rate. "
+                "Minimum discharge rate as a fraction of the 1C rate "
+                "(1C = battery_capacity_wh W). "
                 "Discharge commands below this threshold are rounded to zero. Default 0.0."
             ),
             "examples": [0.1, 0.0],
@@ -289,7 +292,8 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
         json_schema_extra={
             "description": (
                 "Maximum discharge rate as a fraction of the 1C rate. "
-                "bat_factor=−1 maps to this rate. Default 1.0 (full 1C discharge)."
+                "(1C = battery_capacity_wh W). "
+                "bat_factor=−1 maps to this rate. Default 1.0."
             ),
             "examples": [0.5, 1.0],
             "x-scope": [str(ConfigScope.GENETIC2)],
@@ -330,21 +334,40 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
                 "An empty string means the device uses battery_min_soc_factor as the "
                 "initial SoC (fully depleted to the minimum)."
             ),
-            "examples": ["battery1.soc_factor", ""],
+            "examples": ["battery1_soc_factor", ""],
             "x-scope": [str(ConfigScope.GENETIC2)],
         },
     )
-    levelized_cost_of_storage_amt_kwh: float = Field(
-        default=0.05,
+    battery_lcos_amt_kwh: float = Field(
+        default=0.0,
         ge=0,
         json_schema_extra={
             "description": (
                 "Levelized cost of battery storage [Amt./kWh cycled]. "
                 "Penalises unnecessary charging/discharging so the GA avoids "
                 "grid-charge→discharge cycles with no price-spread benefit. "
-                "Typical residential Li-ion value: 0.05 Amt./kWh. Set to 0.0 to disable."
+                "Typical residential Li-ion value: 0.05 Amt./kWh. "
+                "Set to 0.0 to encourage the optimizer to use the battery. "
+                "Defaults to 0.0."
             ),
             "examples": [0.05, 0.0],
+            "x-scope": [str(ConfigScope.GENETIC2)],
+        },
+    )
+    battery_discharge_reward_amt_kwh: float = Field(
+        default=0.02,
+        ge=0,
+        json_schema_extra={
+            "description": (
+                "Shadow price rewarding battery discharge [Amt./kWh discharged AC]. "
+                "Adds a direct fitness benefit per kWh the battery delivers, on top of "
+                "the grid import cost reduction already captured by GridConnectionDevice. "
+                "Helps the GA discover discharge when the load-matching rate is small "
+                "relative to mutation noise. "
+                "Suggested value: import_price - export_price - lcos "
+                "(e.g. 0.30 - 0.08 - 0.05 = 0.17). Set to 0.0 to disable."
+            ),
+            "examples": [0.0, 0.17],
             "x-scope": [str(ConfigScope.GENETIC2)],
         },
     )
@@ -448,7 +471,8 @@ class InverterCommonSettings(PortsMixin, DevicesBaseSettings):
             battery_min_soc_factor=self.battery_min_soc_factor,
             battery_max_soc_factor=self.battery_max_soc_factor,
             battery_initial_soc_factor_key=self.battery_initial_soc_factor_key,
-            levelized_cost_of_storage_amt_kwh=self.levelized_cost_of_storage_amt_kwh,
+            battery_lcos_amt_kwh=self.battery_lcos_amt_kwh,
+            battery_discharge_reward_amt_kwh=self.battery_discharge_reward_amt_kwh,
             # Pass the same import price key used by GridConnectionDevice so the
             # terminal SoC correction in compute_cost uses the actual tariff.
             import_price_amt_kwh_key="elecprice_marketprice_amt_kwh",

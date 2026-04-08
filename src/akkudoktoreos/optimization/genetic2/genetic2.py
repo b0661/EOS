@@ -17,8 +17,11 @@ Supported concrete devices
     One integer start-step gene per remaining run cycle.
 
 ``HybridInverterDevice``
-    Hybrid inverter with continuous two-gene encoding (battery factor +
-    PV utilisation factor) in BATTERY, SOLAR, or HYBRID topology.
+    Hybrid inverter with continuous one-gene encoding (battery factor)
+    in BATTERY, SOLAR, or HYBRID topology.
+
+``EVChargerDevice``
+    Electric vehicle charger with one-gene encoding (charge factor).
 
 Return type
 -----------
@@ -56,6 +59,10 @@ from akkudoktoreos.core.coreabc import ConfigMixin, EnergyManagementSystemMixin
 from akkudoktoreos.core.emplan import EnergyManagementPlan
 from akkudoktoreos.core.pydantic import PydanticDateTimeDataFrame
 from akkudoktoreos.devices.devicesabc import EnergyBus, EnergyCarrier
+from akkudoktoreos.devices.genetic2.evcharger import (
+    EVChargerDevice,
+    EVChargerParam,
+)
 from akkudoktoreos.devices.genetic2.fixedload import (
     FixedLoadDevice,
     FixedLoadParam,
@@ -89,29 +96,52 @@ if TYPE_CHECKING:
 
 
 def _build_devices(
-    device_params: list[Union[GridConnectionParam, HomeApplianceParam, HybridInverterParam]],
+    device_params: list[Union[EVChargerParam, FixedLoadParam, GridConnectionParam, HomeApplianceParam, HybridInverterParam]],
     buses: list[EnergyBus],
 ) -> tuple[list, list[EnergyBus]]:
     """Instantiate concrete EnergyDevice objects from immutable param objects."""
     import warnings
 
-    devices: list[Union[FixedLoadDevice, GridConnectionDevice, HomeApplianceDevice, HybridInverterDevice]] = []
+    devices: list[
+        Union[EVChargerDevice, FixedLoadDevice, GridConnectionDevice, HomeApplianceDevice, HybridInverterDevice]
+    ] = []
     device_index = 0
     port_index = 0
-    dev: Union[FixedLoadDevice, GridConnectionDevice, HomeApplianceDevice, HybridInverterDevice]
+    dev: Union[EVChargerDevice, FixedLoadDevice, GridConnectionDevice, HomeApplianceDevice, HybridInverterDevice]
 
     logger.debug("_build_devices: {} params, {} buses", len(device_params), len(buses))
     for param in device_params:
         logger.debug("  param type={} device_id={}", type(param).__name__, param.device_id)
 
-        if isinstance(param, FixedLoadParam):
+
+        if isinstance(param, EVChargerParam):
+            dev = EVChargerDevice(
+                param=param,
+                device_index=device_index,
+                port_index=port_index,
+            )
+            devices.append(dev)
+            logger.debug(
+                "  → EVChargerDevice device_index={} port_index={} "
+                "capacity_wh={} ev_connected_measurement_key={}",
+                device_index,
+                port_index,
+                param.ev_battery_capacity_wh,
+                param.ev_connected_measurement_key,
+            )
+            port_index += len(dev.ports)
+            device_index += 1
+
+        elif isinstance(param, FixedLoadParam):
             dev = FixedLoadDevice(
                 param=param,
                 device_index=device_index,
                 port_index=port_index,
             )
             devices.append(dev)
-            logger.debug("  → FixedLoadDevice device_index={} port_index={}", device_index, port_index)
+            logger.debug(
+                "  → FixedLoadDevice device_index={} port_index={}", device_index, port_index
+            )
             port_index += len(dev.ports)
             device_index += 1
 
@@ -122,7 +152,9 @@ def _build_devices(
                 port_index=port_index,
             )
             devices.append(dev)
-            logger.debug("  → GridConnectionDevice device_index={} port_index={}", device_index, port_index)
+            logger.debug(
+                "  → GridConnectionDevice device_index={} port_index={}", device_index, port_index
+            )
             port_index += len(dev.ports)
             device_index += 1
 
@@ -133,7 +165,9 @@ def _build_devices(
                 port_index=port_index,
             )
             devices.append(dev)
-            logger.debug("  → HomeApplianceDevice device_index={} port_index={}", device_index, port_index)
+            logger.debug(
+                "  → HomeApplianceDevice device_index={} port_index={}", device_index, port_index
+            )
             port_index += len(dev.ports)
             device_index += 1
 
@@ -147,11 +181,12 @@ def _build_devices(
             logger.debug(
                 "  → HybridInverterDevice device_index={} port_index={} type={} "
                 "capacity_wh={} pv_key={} lcos={}",
-                device_index, port_index,
+                device_index,
+                port_index,
                 param.inverter_type,
                 param.battery_capacity_wh,
                 param.pv_power_w_key,
-                param.levelized_cost_of_storage_amt_kwh,
+                param.battery_lcos_amt_kwh,
             )
             port_index += len(dev.ports)
             device_index += 1
@@ -215,8 +250,6 @@ def _build_topology(
 
 def _collect_predictions(context: SimulationContext) -> PydanticDateTimeDataFrame:
     """Collect all the predictions that were used in the simulation."""
-    import pandas as pd
-
     predictions = context.resolved_predictions()
     logger.debug("Resolved predictions keys: {}", list(predictions.keys()))
 
@@ -248,6 +281,7 @@ def _best_to_solution(
     optimization_log = None
     if result.progress_df is not None:
         import pandas as pd
+
         df = result.progress_df.reset_index()  # generation becomes a regular column
         # PydanticDateTimeDataFrame needs a datetime index — use epoch + generation seconds
         df.index = pd.to_datetime(df["generation"], unit="s", utc=True)
@@ -296,11 +330,17 @@ class Genetic2Optimization(ConfigMixin, EnergyManagementSystemMixin):
             ``(OptimizationSolution, EnergyManagementPlan)``
         """
         # Deferred imports to prevent circular imports during package init.
-        from akkudoktoreos.optimization.genetic2.optimizer import GeneticOptimizer
+        from pendulum import (
+            Duration,  # Do not use utils, we do not need and want pydantic here
+        )
+
+        from akkudoktoreos.optimization.genetic2.optimizer import (
+            GeneticOptimizer,
+            default_scalarize,
+        )
         from akkudoktoreos.simulation.genetic2.engine import EnergySimulationEngine
         from akkudoktoreos.simulation.genetic2.registry import DeviceRegistry
         from akkudoktoreos.simulation.genetic2.simulation import SimulationContext
-        from pendulum import Duration # Do not use utils, we do not need and want pydantic here
 
         # ------------------------------------------------------------------
         # 1. Resolve optimisation parameters from config
@@ -321,6 +361,13 @@ class Genetic2Optimization(ConfigMixin, EnergyManagementSystemMixin):
         genetic_cfg = self.config.optimization.genetic
         pop_size: int = genetic_cfg.individuals
         generations: int = genetic_cfg.generations
+        crossover_rate: float = genetic_cfg.crossover_rate
+        mutation_rate: float = genetic_cfg.mutation_rate
+        mutation_sigma: float = genetic_cfg.mutation_sigma
+        tournament_size: int = genetic_cfg.tournament_size
+        elitism_count: int = genetic_cfg.elitism_count
+        stagnation_window: int = genetic_cfg.stagnation_window
+        stagnation_boost: float = genetic_cfg.stagnation_boost
         random_seed: Optional[int] = genetic_cfg.seed
         log_progress_interval: int = genetic_cfg.log_progress_interval
 
@@ -381,8 +428,16 @@ class Genetic2Optimization(ConfigMixin, EnergyManagementSystemMixin):
             engine=engine,
             population_size=pop_size,
             generations=generations,
+            crossover_rate=crossover_rate,
+            mutation_rate=mutation_rate,
+            mutation_sigma=mutation_sigma,
+            tournament_size=tournament_size,
+            scalarize=default_scalarize,
             random_seed=random_seed,
             log_progress_interval=log_progress_interval,
+            elitism_count=elitism_count,
+            stagnation_window=stagnation_window,
+            stagnation_boost=stagnation_boost,
         )
 
         result = optimizer.optimize(context)

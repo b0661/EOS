@@ -420,6 +420,9 @@ class TestInitPopulation:
         assert np.all(pop <= 30.0)
 
     def test_infinite_bounds_fall_back_to_zero(self):
+        # GenomeSlice with no bounds (±inf): the fallback in _init_population
+        # maps infinite lo/hi to 0.0 via np.where(isfinite, ..., 0.0).
+        # The seeding loop must not fire for unbounded slices (it would write ±inf).
         opt = self._make_optimizer()
         slc = GenomeSlice(start=0, size=4)  # no bounds → ±inf
         assembled = assembled_from_slices({"dev": slc})

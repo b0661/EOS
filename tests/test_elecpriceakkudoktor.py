@@ -60,9 +60,15 @@ def test_singleton_instance(provider):
 
 def test_invalid_provider(provider, monkeypatch):
     """Test requesting an unsupported provider."""
+    monkeypatch.setenv("EOS_ELECPRICE__ELECPRICE_PROVIDER", "ELecPriceFixed")
+    provider.config.reset_settings()
+    assert provider.config.elecprice.provider == "ElecPriceFixed"
+    assert not provider.enabled()
+
     monkeypatch.setenv("EOS_ELECPRICE__ELECPRICE_PROVIDER", "<invalid>")
     provider.config.reset_settings()
-    assert not provider.enabled()
+    assert provider.config.elecprice.provider == "ElecPriceAkkudoktor" # default
+    assert provider.enabled()
 
 
 # ------------------------------------------------

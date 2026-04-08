@@ -327,7 +327,7 @@ class ServerCommonSettings(SettingsBaseModel):
     """Server Configuration."""
 
     host: Optional[str] = Field(
-        default=get_default_host(),
+        default_factory=get_default_host,
         json_schema_extra={
             "description": "EOS server IP address. Defaults to 127.0.0.1.",
             "examples": ["127.0.0.1", "localhost"],
@@ -350,14 +350,14 @@ class ServerCommonSettings(SettingsBaseModel):
         json_schema_extra={"description": "EOS server to start EOSdash server. Defaults to True."},
     )
     eosdash_host: Optional[str] = Field(
-        default=None,
+        default_factory=get_default_host,
         json_schema_extra={
             "description": "EOSdash server IP address. Defaults to EOS server IP address.",
             "examples": ["127.0.0.1", "localhost"],
         },
     )
     eosdash_port: Optional[int] = Field(
-        default=None,
+        default=8504,
         json_schema_extra={
             "description": "EOSdash server IP port number. Defaults to EOS server IP port number + 1.",
             "examples": [

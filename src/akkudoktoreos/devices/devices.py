@@ -59,6 +59,7 @@ from akkudoktoreos.devices.settings.heatpumpsettings import HeatPumpCommonSettin
 from akkudoktoreos.devices.settings.homeappliancesettings import (
     HomeApplianceCommonSettings,
 )
+from akkudoktoreos.devices.settings.evchargersettings import EVChargerCommonSettings
 from akkudoktoreos.devices.settings.invertersettings import InverterCommonSettings
 
 # ============================================================
@@ -79,7 +80,9 @@ class BusesCommonSettings(SettingsBaseModel):
     """
 
     buses: list[BusConfig] = Field(
-        default_factory=list,
+        default=[
+            BusConfig(bus_id="bus_ac", carrier="ac"),
+        ],
         json_schema_extra={
             "description": "List of energy buses in the system.",
             "examples": [
@@ -278,6 +281,33 @@ class DevicesCommonSettings(SettingsBaseModel):
         },
     )
 
+    # ---- EV chargers ----
+    ev_chargers: Optional[dict[str, EVChargerCommonSettings]] = Field(
+        default=None,
+        json_schema_extra={
+            "description": "EV charger (wall-box / EVSE) devices, keyed by device_id.",
+            "examples": [
+                {
+                    "ev_charger1": {
+                        "device_id": "ev_charger1",
+                        "max_charge_power_w": 11000,
+                        "ev_battery_capacity_wh": 60000,
+                        "ports": [{"port_id": "p_ac", "bus_id": "bus_ac", "direction": "sink"}],
+                    }
+                }
+            ],
+            "x-scope": [str(ConfigScope.GENETIC2)],
+        },
+    )
+    max_ev_chargers: Optional[int] = Field(
+        default=None,
+        ge=0,
+        json_schema_extra={
+            "description": "Maximum number of EV chargers allowed.",
+            "examples": [2],
+        },
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def measurement_keys(self) -> list[str]:
@@ -291,6 +321,7 @@ class DevicesCommonSettings(SettingsBaseModel):
             self.heat_pumps,
             self.fixed_loads,
             self.home_appliances,
+            self.ev_chargers,
         ]:
             for device in (device_dict or {}).values():
                 keys.extend(device.measurement_keys)
@@ -332,6 +363,7 @@ class DevicesCommonSettings(SettingsBaseModel):
         _add(self.heat_pumps)
         _add(self.home_appliances)
         _add(self.inverters)
+        _add(self.ev_chargers)
         _add(self.grid_connections)
 
         return params

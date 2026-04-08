@@ -61,6 +61,7 @@ IGNORE_LOCATIONS = [
     r"\.ColumnDataSource.*",
     r"\.LinearAxis.*",
     r"\.Range1d.*",
+    r"\.Span.*",
 
     # BeautifulSoup
     r"\.BeautifulSoup.*",

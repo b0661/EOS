@@ -1,6 +1,6 @@
 """Generic expandable list-of-sub-model configuration card for EOSdash.
 
-This module provides :func:`ConfigItemsCard`, a reusable FastHTML/MonsterUI
+This module provides `ConfigItemsCard`, a reusable FastHTML/MonsterUI
 card component that renders any ``list[PydanticSubModel]`` config field as a
 collapsible outer card containing one collapsible inner card per list item.
 
@@ -26,7 +26,7 @@ Typical usage in ``configuration.py``::
 """
 
 import json
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 from loguru import logger
 from monsterui.franken import (
@@ -45,6 +45,7 @@ from monsterui.franken import (
     Summary,
     UkIcon,
 )
+from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 from akkudoktoreos.server.dash.components import (
@@ -88,7 +89,12 @@ def _item_model_defaults(item_model: Any) -> dict:
         A plain JSON-safe dict suitable for use as the initial value of a
         newly added list item.
     """
-    model_cls = item_model if isinstance(item_model, type) else type(item_model)
+    # Determine the model class, then tell mypy it's a BaseModel subclass
+    if isinstance(item_model, type):
+        model_cls = cast(type[BaseModel], item_model)
+    else:
+        model_cls = cast(type[BaseModel], type(item_model))
+
     kwargs = {}
     for field_name, field_info in model_cls.model_fields.items():
         if field_info.default is not PydanticUndefined:
@@ -395,6 +401,8 @@ def ConfigItemsCard(
 
     item_model = resolve_item_model(hint)
     item_path = hint.item_path  # e.g. "pvforecast.planes"
+    if item_path is None:
+        raise ValueError(f"Hint needs item_path to be listed. Got {hint}")
     path_parts = item_path.split(".")  # e.g. ["pvforecast", "planes"]
 
     items_list = json.loads(value) or []

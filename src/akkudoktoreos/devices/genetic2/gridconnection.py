@@ -143,13 +143,15 @@ class GridConnectionParam(DeviceParam):
 
     def __post_init__(self) -> None:
         if self.max_import_power_w <= 0:
-            raise ValueError("max_import_power_w must be > 0")
+            raise ValueError(f"{self.device_id}: max_import_power_w must be > 0")
         if self.max_export_power_w < 0:
-            raise ValueError("max_export_power_w must be >= 0")
+            raise ValueError(f"{self.device_id}: max_export_power_w must be >= 0")
         if self.import_cost_per_kwh < 0:
-            raise ValueError("import_cost_per_kwh must be >= 0")
+            raise ValueError(f"{self.device_id}: import_cost_per_kwh must be >= 0")
         if self.export_revenue_per_kwh < -1.0:
-            raise ValueError("export_revenue_per_kwh must be >= -1.0 (sanity check)")
+            raise ValueError(
+                f"{self.device_id}: export_revenue_per_kwh must be >= -1.0 (sanity check)"
+            )
 
 
 # ============================================================

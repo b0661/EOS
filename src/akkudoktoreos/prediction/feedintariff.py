@@ -29,7 +29,7 @@ class FeedInTariffCommonSettings(SettingsBaseModel):
     """Feed In Tariff Prediction Configuration."""
 
     provider: Optional[str] = Field(
-        default=None,
+        default="FeedInTariffFixed",
         json_schema_extra={
             "description": "Feed in tariff provider id of provider to be used.",
             "examples": ["FeedInTariffFixed", "FeedInTarifImport"],

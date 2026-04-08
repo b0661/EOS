@@ -45,7 +45,7 @@ import pandas as pd
 
 from akkudoktoreos.core.emplan import EnergyManagementInstruction
 from akkudoktoreos.devices.devicesabc import InstructionContext
-from akkudoktoreos.optimization.genetic2.genome import AssembledGenome
+from akkudoktoreos.optimization.genetic2.genome import AssembledGenome, GenomeSlice
 from akkudoktoreos.simulation.genetic2.engine import (
     EnergySimulationEngine,
     EvaluationResult,
@@ -123,7 +123,7 @@ class OptimizationResult:
     generations_run: int
     history: list[GenerationStats]
     assembled: AssembledGenome
-    run_summary: dict = None       # type: ignore[assignment]
+    run_summary: dict = None  # type: ignore[assignment]
     progress_df: pd.DataFrame | None = None
 
     def __post_init__(self) -> None:
@@ -197,7 +197,7 @@ class GeneticOptimizer:
         generations: int,
         crossover_rate: float = 0.9,
         mutation_rate: float = 0.05,
-        mutation_sigma: float = 0.1,
+        mutation_sigma: float = 0.03,
         tournament_size: int = 3,
         scalarize: ScalarizeFunction = default_scalarize,
         random_seed: int | None = None,
@@ -232,10 +232,11 @@ class GeneticOptimizer:
     def optimize(self, context: SimulationContext) -> OptimizationResult:
         """Run the genetic optimisation for one horizon."""
         import time
+
         from loguru import logger
 
         self._engine.setup_run(context)
-        slices = self._engine.genome_requirements()
+        slices: dict[str, GenomeSlice] = self._engine.genome_requirements()
 
         assembled = self._build_assembled_genome(slices)
         if assembled.total_size == 0:
@@ -290,12 +291,11 @@ class GeneticOptimizer:
                     best_objectives=best_objectives,
                 )
                 if gen % self._log_interval == 0 or gen == _last_gen:
-                    obj_str = " ".join(
-                        f"{k}={v:.4f}" for k, v in best_objectives.items()
-                    )
+                    obj_str = " ".join(f"{k}={v:.4f}" for k, v in best_objectives.items())
                     logger.info(
                         "gen {:4d}/{}: best={:.4f} mean={:.4f} repaired={} {}",
-                        gen, _last_gen,
+                        gen,
+                        _last_gen,
                         gen_best_scalar,
                         float(scalar_fitness.mean()),
                         num_repaired,
@@ -306,7 +306,7 @@ class GeneticOptimizer:
                 # the first 2 generations so we can see what the GA schedules.
                 if gen < 2:
                     for device_id, slc in assembled.slices.items():
-                        genes = population[gen_best_idx, slc.start:slc.end]
+                        genes = population[gen_best_idx, slc.start : slc.end]
                         genome_size = slc.end - slc.start
                         bat_lo = assembled.lower_bounds[slc.start]
                         bat_hi = assembled.upper_bounds[slc.start]
@@ -315,8 +315,11 @@ class GeneticOptimizer:
                             logger.info(
                                 "gen {:d} best genome [{}]: "
                                 "bat min={:.2f} mean={:.2f} max={:.2f} nonzero={}",
-                                gen, device_id,
-                                float(bat.min()), float(bat.mean()), float(bat.max()),
+                                gen,
+                                device_id,
+                                float(bat.min()),
+                                float(bat.mean()),
+                                float(bat.max()),
                                 int((bat != 0).sum()),
                             )
             else:
@@ -338,19 +341,24 @@ class GeneticOptimizer:
                 and gens_since_improvement > 0
                 and gens_since_improvement % self._stagnation_window == 0
             ):
-                boosted_rate  = min(self.mutation_rate  * self._stagnation_boost, 0.5)
+                boosted_rate = min(self.mutation_rate * self._stagnation_boost, 0.5)
                 boosted_sigma = min(self.mutation_sigma * self._stagnation_boost, 0.5)
                 stagnation_boosts.append(gen)
                 if _do_log:
                     logger.info(
                         "gen {:4d}: stagnation detected ({} gens), boosting mutation "
                         "rate {:.3f}→{:.3f} sigma {:.3f}→{:.3f}",
-                        gen, gens_since_improvement,
-                        self.mutation_rate, boosted_rate,
-                        self.mutation_sigma, boosted_sigma,
+                        gen,
+                        gens_since_improvement,
+                        self.mutation_rate,
+                        boosted_rate,
+                        self.mutation_sigma,
+                        boosted_sigma,
                     )
                 population = self._breed(
-                    population, scalar_fitness, assembled,
+                    population,
+                    scalar_fitness,
+                    assembled,
                     mutation_rate_override=boosted_rate,
                     mutation_sigma_override=boosted_sigma,
                 )
@@ -386,57 +394,57 @@ class GeneticOptimizer:
                     "type": type(device).__name__,
                     "objective_names": device.objective_names,
                 }
-                if hasattr(d, 'param'):
+                if hasattr(d, "param"):
                     p = d.param
-                    if hasattr(p, 'battery_capacity_wh'):
+                    if hasattr(p, "battery_capacity_wh"):
                         entry["battery_capacity_wh"] = p.battery_capacity_wh
                         entry["inverter_type"] = str(p.inverter_type)
-                        entry["lcos"] = getattr(p, 'levelized_cost_of_storage_amt_kwh', None)
-                        entry["pv_key"] = getattr(p, 'pv_power_w_key', None)
-                    if hasattr(p, 'load_power_w_key'):
+                        entry["lcos"] = getattr(p, "battery_lcos_amt_kwh", None)
+                        entry["pv_key"] = getattr(p, "pv_power_w_key", None)
+                    if hasattr(p, "load_power_w_key"):
                         entry["load_key"] = p.load_power_w_key
                 device_summary.append(entry)
 
             # PV and price forecast summary from context
             forecast_summary: dict = {}
             for device in self._engine._registry.all_devices():
-                d: Any = device
+                d = device
 
                 # PV forecast (HybridInverterDevice)
-                if hasattr(d, '_pv_power_w') and d._pv_power_w is not None:
+                if hasattr(d, "_pv_power_w") and d._pv_power_w is not None:
                     pv = d._pv_power_w
-                    forecast_summary["pv_power_w_min"]  = float(pv.min())
+                    forecast_summary["pv_power_w_min"] = float(pv.min())
                     forecast_summary["pv_power_w_mean"] = float(pv.mean())
-                    forecast_summary["pv_power_w_max"]  = float(pv.max())
+                    forecast_summary["pv_power_w_max"] = float(pv.max())
 
                 # Import price — prefer dynamic time-series, fall back to flat param
-                if hasattr(d, '_import_price_per_kwh'):
+                if hasattr(d, "_import_price_per_kwh"):
                     if d._import_price_per_kwh is not None:
                         pr = d._import_price_per_kwh
-                    elif hasattr(d, 'param') and hasattr(d.param, 'import_cost_per_kwh'):
+                    elif hasattr(d, "param") and hasattr(d.param, "import_cost_per_kwh"):
                         # Flat rate: build a uniform array for consistent reporting
                         horizon = len(context.step_times)
                         pr = np.full(horizon, float(d.param.import_cost_per_kwh))
                     else:
                         pr = None
                     if pr is not None:
-                        forecast_summary["import_price_min"]  = float(pr.min())
+                        forecast_summary["import_price_min"] = float(pr.min())
                         forecast_summary["import_price_mean"] = float(pr.mean())
-                        forecast_summary["import_price_max"]  = float(pr.max())
+                        forecast_summary["import_price_max"] = float(pr.max())
 
                 # Export price — prefer dynamic time-series, fall back to flat param
-                if hasattr(d, '_export_price_per_kwh'):
+                if hasattr(d, "_export_price_per_kwh"):
                     if d._export_price_per_kwh is not None:
                         ep = d._export_price_per_kwh
-                    elif hasattr(d, 'param') and hasattr(d.param, 'export_revenue_per_kwh'):
+                    elif hasattr(d, "param") and hasattr(d.param, "export_revenue_per_kwh"):
                         horizon = len(context.step_times)
                         ep = np.full(horizon, float(d.param.export_revenue_per_kwh))
                     else:
                         ep = None
                     if ep is not None:
-                        forecast_summary["export_price_min"]  = float(ep.min())
+                        forecast_summary["export_price_min"] = float(ep.min())
                         forecast_summary["export_price_mean"] = float(ep.mean())
-                        forecast_summary["export_price_max"]  = float(ep.max())
+                        forecast_summary["export_price_max"] = float(ep.max())
 
             run_summary = {
                 "generations_run": self.generations,
@@ -453,7 +461,9 @@ class GeneticOptimizer:
             }
             logger.info(
                 "Optimization complete: best={:.4f} converged_at_gen={} elapsed={:.1f}s",
-                best_scalar, best_improved_at, elapsed,
+                best_scalar,
+                best_improved_at,
+                elapsed,
             )
 
             # Build DataFrame — one row per generation.
@@ -570,7 +580,7 @@ class GeneticOptimizer:
         instructions: dict[str, list[EnergyManagementInstruction]] = {}
         columns: dict[str, np.ndarray] = {}
         load_energy_wh = np.zeros(horizon)  # sum of pure load devices (fixed + appliances)
-        pv_energy_wh = np.zeros(horizon)    # sum of inverter injections onto bus [Wh]
+        pv_energy_wh = np.zeros(horizon)  # sum of inverter injections onto bus [Wh]
 
         for device in self._engine._registry.all_devices():
             device_id = device.device_id
@@ -759,7 +769,7 @@ class GeneticOptimizer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_assembled_genome(slices: dict) -> AssembledGenome:
+    def _build_assembled_genome(slices: dict[str, GenomeSlice]) -> AssembledGenome:
         if not slices:
             return AssembledGenome(
                 total_size=0,
@@ -786,6 +796,64 @@ class GeneticOptimizer:
         )
 
     def _init_population(self, assembled: AssembledGenome) -> np.ndarray:
+        lo = np.where(np.isfinite(assembled.lower_bounds), assembled.lower_bounds, 0.0)
+        hi = np.where(np.isfinite(assembled.upper_bounds), assembled.upper_bounds, 0.0)
+        population = self._rng.uniform(lo, hi, size=(self.population_size, assembled.total_size))
+
+        n_seeded = max(1, self.population_size // 10)
+        seed_idx = 0
+
+        for device_id, slc in assembled.slices.items():
+            genome_size = slc.end - slc.start
+            if genome_size < 1:
+                continue
+            bat_lo = assembled.lower_bounds[slc.start]
+            bat_hi = assembled.upper_bounds[slc.start]
+            if not (np.isfinite(bat_lo) and np.isfinite(bat_hi) and bat_lo < 0 < bat_hi):
+                continue
+
+            horizon = genome_size
+
+            # Compute rate magnitudes that survive mutation (> mutation_sigma * range)
+            # and span the useful range. mutation_sigma=0.1, range=2.0, so noise std=0.2.
+            # Use rates from 0.25 to 1.0 so they are at least 1x the noise std.
+            dis_rates = [-0.25, -0.5, -0.75, -1.0]   # varied magnitudes
+            chg_rates = [ 0.25,  0.5,  0.75,  1.0]
+
+            # Build patterns from these rates at the step level
+            # Each pattern applies a FIXED rate for the full horizon.
+            # The SoC cap in repair will naturally limit how long discharge continues.
+            patterns = []
+
+            # Pure discharge at each rate magnitude
+            for r in dis_rates:
+                patterns.append(np.full(horizon, r))
+
+            # Pure charge at each rate magnitude
+            for r in chg_rates:
+                patterns.append(np.full(horizon, r))
+
+            # Charge first half, discharge second half
+            p = np.zeros(horizon)
+            p[:horizon//2] = 0.5
+            p[horizon//2:] = -0.5
+            patterns.append(p)
+
+            # Discharge first half, charge second half
+            p = np.zeros(horizon)
+            p[:horizon//2] = -0.5
+            p[horizon//2:] = 0.5
+            patterns.append(p)
+
+            for k in range(n_seeded):
+                if seed_idx >= self.population_size:
+                    break
+                population[seed_idx, slc.start : slc.end] = patterns[k % len(patterns)]
+                seed_idx += 1
+
+        return population
+
+    def _init_population_org(self, assembled: AssembledGenome) -> np.ndarray:
         """Initialise population with uniform random genes plus seeded charge/discharge patterns.
 
         Pure random initialisation fails when the battery starts empty because
@@ -812,7 +880,8 @@ class GeneticOptimizer:
                 continue
             bat_lo = assembled.lower_bounds[slc.start]
             bat_hi = assembled.upper_bounds[slc.start]
-            if not (bat_lo < 0 < bat_hi):  # bat gene must span negative and positive
+            if not (np.isfinite(bat_lo) and np.isfinite(bat_hi) and bat_lo < 0 < bat_hi):
+                # bat gene must span negative and positive
                 continue
 
             horizon = genome_size  # one gene per step
@@ -820,17 +889,17 @@ class GeneticOptimizer:
             for k in range(n_seeded):
                 if seed_idx >= self.population_size:
                     break
-                g = population[seed_idx, slc.start:slc.end].copy()
-                charge_end      = horizon // 3
+                g = population[seed_idx, slc.start : slc.end].copy()
+                charge_end = horizon // 3
                 discharge_start = (2 * horizon) // 3
                 for t in range(horizon):
                     if t < charge_end:
-                        g[t] = bat_hi   # full charge
+                        g[t] = bat_hi  # full charge
                     elif t >= discharge_start:
-                        g[t] = bat_lo   # full discharge
+                        g[t] = bat_lo  # full discharge
                     else:
-                        g[t] = 0.0      # idle
-                population[seed_idx, slc.start:slc.end] = g
+                        g[t] = 0.0  # idle
+                population[seed_idx, slc.start : slc.end] = g
                 seed_idx += 1
 
         return population
@@ -916,7 +985,7 @@ class GeneticOptimizer:
         mutation_rate: float | None = None,
         mutation_sigma: float | None = None,
     ) -> None:
-        rate  = mutation_rate  if mutation_rate  is not None else self.mutation_rate
+        rate = mutation_rate if mutation_rate is not None else self.mutation_rate
         sigma = mutation_sigma if mutation_sigma is not None else self.mutation_sigma
         mask = self._rng.random(genome.shape) < rate
         if not np.any(mask):

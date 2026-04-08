@@ -23,7 +23,7 @@ Typical usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -34,6 +34,7 @@ from pendulum import DateTime, Duration
 from akkudoktoreos.core.cache import cache_energy_management
 from akkudoktoreos.core.coreabc import get_config, get_measurement, get_prediction
 
+# Track the prediction keys that were accessed during the simulation run
 _prediction_key_tracker: set[str] = set()
 
 
@@ -131,7 +132,7 @@ class SimulationContext:
             tz=tz,
         )
         keys = _prediction_key_tracker
-        data = {
+        data: dict[str, Any] = {
             "date_time": reference_index,
         }
         for key in keys:

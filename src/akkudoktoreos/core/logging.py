@@ -79,6 +79,9 @@ def logging_track_config(config_eos: Any, path: str, old_value: Any, value: Any)
         # No value given - check environment value - may also be None
         config_eos.logging.file_level = os.getenv("EOS_LOGGING__LEVEL")
 
+    # Set up global logging color
+    logger.level("WARNING", color="<magenta>")  # used to be <yellow> by default
+
     # Remove handlers
     if console_handler_id:
         try:

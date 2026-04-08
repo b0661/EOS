@@ -324,7 +324,10 @@ async def supervise_eosdash() -> None:
     eos_port = config_eos.server.port
 
     if host is None or port is None or eos_host is None or eos_port is None:
-        logger.error("EOSdash supervisor skipped: invalid configuration")
+        logger.error(
+            "EOSdash supervisor: skipped supervision - invalid configuration "
+            f"EOSdash host: {host}, port: {port}, EOS host {eos_host}, port {eos_port}"
+        )
         return
 
     # Check host validity
@@ -332,7 +335,7 @@ async def supervise_eosdash() -> None:
         validate_ip_or_hostname(host)
         validate_ip_or_hostname(eos_host)
     except Exception as ex:
-        logger.error(f"EOSdash supervisor: invalid host configuration: {ex}")
+        logger.error(f"EOSdash supervisor: skipped supervision - invalid host configuration: {ex}")
         return
 
     # Only start EOSdash if not already running

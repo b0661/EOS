@@ -20,6 +20,6 @@ class HeatPumpParam(DeviceParam):
 
     def __post_init__(self) -> None:
         if self.thermal_power_w <= 0:
-            raise ValueError("thermal_power_w must be > 0")
+            raise ValueError(f"{self.device_id}: thermal_power_w must be > 0")
         if self.cop <= 0:
-            raise ValueError("cop must be > 0")
+            raise ValueError(f"{self.device_id}: cop must be > 0")

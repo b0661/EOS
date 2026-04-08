@@ -32,7 +32,7 @@ class ElecPriceCommonSettings(SettingsBaseModel):
     """Electricity Price Prediction Configuration."""
 
     provider: Optional[str] = Field(
-        default=None,
+        default="ElecPriceAkkudoktor",
         json_schema_extra={
             "description": "Electricity price provider id of provider to be used.",
             "examples": ["ElecPriceAkkudoktor"],

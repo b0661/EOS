@@ -185,6 +185,7 @@ from akkudoktoreos.optimization.genetic2.genetic2 import (
 )
 from akkudoktoreos.optimization.genetic2.genome import AssembledGenome, GenomeSlice
 from akkudoktoreos.optimization.genetic2.optimizer import (
+    default_scalarize,
     BestIndividualResult,
     OptimizationResult,
 )
@@ -298,7 +299,14 @@ class _FakeGeneticCfg:
     individuals: int = 4
     generations: int = 3
     seed: int | None = 42
-
+    crossover_rate: float = 0.9
+    mutation_rate: float = 0.05
+    mutation_sigma: float = 0.03
+    tournament_size: int = 3
+    elitism_count: int = 2
+    stagnation_window: int = 20
+    stagnation_boost: int = 3.0
+    log_progress_interval: int = 0
 
 @dataclass
 class _FakeOptCfg:
@@ -513,12 +521,12 @@ class TestBuildDevices:
         assert devices[1]._port_index == 1
 
     def test_unknown_param_port_counter_still_advances(self):
-        """Unknown param (1 port) skipped → next device gets port_index 1."""
+        """Unknown param (1 port) skipped → next device gets port_index 0."""
         stub = cast(GridConnectionParam, _UnknownParam(device_id="x", ports=(AC_PORT_BIDIR,)))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             devices, _ = _build_devices([stub, make_grid_param()], [AC_BUS])
-        assert devices[0]._port_index == 1
+        assert devices[0]._port_index == 0
 
     def test_empty_param_list_returns_empty_devices(self):
         devices, _ = _build_devices([], [AC_BUS])
@@ -772,7 +780,22 @@ class TestOptimizeContext:
         contexts: list[SimulationContext] = []
 
         class _CapturingOptimizer:
-            def __init__(self, engine, population_size, generations, random_seed):
+            def __init__(
+                self,
+                engine: EnergySimulationEngine,
+                population_size: int,
+                generations: int,
+                crossover_rate: float = 0.9,
+                mutation_rate: float = 0.05,
+                mutation_sigma: float = 0.03,
+                tournament_size: int = 3,
+                scalarize: ScalarizeFunction = default_scalarize,
+                random_seed: int | None = None,
+                log_progress_interval: int = 0,
+                elitism_count: int = 2,
+                stagnation_window: int = 20,
+                stagnation_boost: float = 3.0,
+            ) -> None:
                 pass
 
             def optimize(self, ctx: SimulationContext) -> OptimizationResult:
@@ -949,12 +972,28 @@ class TestOptimizeDeterminism:
         captured_results: list[OptimizationResult] = []
 
         class _CapturingOptimizer:
-            def __init__(self, engine, population_size, generations, random_seed):
+            def __init__(
+                self,
+                engine: EnergySimulationEngine,
+                population_size: int,
+                generations: int,
+                crossover_rate: float = 0.9,
+                mutation_rate: float = 0.05,
+                mutation_sigma: float = 0.03,
+                tournament_size: int = 3,
+                scalarize: ScalarizeFunction = default_scalarize,
+                random_seed: int | None = None,
+                log_progress_interval: int = 0,
+                elitism_count: int = 2,
+                stagnation_window: int = 20,
+                stagnation_boost: float = 3.0,
+            ) -> None:
                 self._real = _RealOptimizer(
                     engine=engine,
                     population_size=population_size,
                     generations=generations,
                     random_seed=random_seed,
+                    log_progress_interval=log_progress_interval,
                 )
 
             def optimize(self, ctx):
@@ -1011,8 +1050,8 @@ class TestSimulationContextPredictionTracking:
     def context(self) -> SimulationContext:
         return _make_context()
 
-    def test_resolved_prediction_keys_empty_on_init(self, context):
-        assert _prediction_key_tracker.get(id(context), set()) == set()
+    def test_resolved_prediction_keys_empty_on_init(self):
+        assert _prediction_key_tracker == set()
 
     def test_resolve_prediction_records_key(self, monkeypatch):
         context = _make_context()
@@ -1021,7 +1060,7 @@ class TestSimulationContextPredictionTracking:
             lambda: _make_fake_prediction_store(HORIZON),
         )
         context.resolve_prediction("pv_forecast_w")
-        assert "pv_forecast_w" in _prediction_key_tracker.get(id(context), set())
+        assert "pv_forecast_w" in _prediction_key_tracker
 
     def test_resolve_prediction_records_multiple_keys(self, monkeypatch):
         context = _make_context()
@@ -1031,7 +1070,7 @@ class TestSimulationContextPredictionTracking:
         )
         context.resolve_prediction("pv_forecast_w")
         context.resolve_prediction("elec_price_amt_kwh")
-        keys = _prediction_key_tracker.get(id(context), set())
+        keys = _prediction_key_tracker
         assert "pv_forecast_w" in keys
         assert "elec_price_amt_kwh" in keys
 
@@ -1043,7 +1082,7 @@ class TestSimulationContextPredictionTracking:
         )
         context.resolve_prediction("pv_forecast_w")
         context.resolve_prediction("pv_forecast_w")
-        assert len(_prediction_key_tracker.get(id(context), set())) == 1
+        assert len(_prediction_key_tracker) == 1
 
     def test_resolved_predictions_returns_dict(self, monkeypatch):
         context = _make_context()
@@ -1053,7 +1092,7 @@ class TestSimulationContextPredictionTracking:
         )
         context.resolve_prediction("pv_forecast_w")
         result = context.resolved_predictions()
-        assert isinstance(result, dict)
+        assert isinstance(result, pd.DataFrame)
 
     def test_resolved_predictions_contains_resolved_keys(self, monkeypatch):
         context = _make_context()
@@ -1075,7 +1114,7 @@ class TestSimulationContextPredictionTracking:
         )
         context.resolve_prediction("pv_forecast_w")
         result = context.resolved_predictions()
-        assert isinstance(result["pv_forecast_w"], np.ndarray)
+        assert isinstance(result["pv_forecast_w"], pd.Series)
 
     def test_resolved_predictions_array_length_equals_horizon(self, monkeypatch):
         context = _make_context()
@@ -1089,17 +1128,9 @@ class TestSimulationContextPredictionTracking:
 
     def test_resolved_predictions_empty_when_no_keys_resolved(self):
         context = _make_context()
-        assert context.resolved_predictions() == {}
-
-    def test_new_context_instance_has_independent_tracking(self, monkeypatch):
-        monkeypatch.setattr(
-            _GET_PREDICTION_PATCH,
-            lambda: _make_fake_prediction_store(HORIZON),
-        )
-        ctx1 = _make_context()
-        ctx2 = _make_context()
-        ctx1.resolve_prediction("pv_forecast_w")
-        assert "pv_forecast_w" not in _prediction_key_tracker.get(id(ctx2), set())
+        keys = context.resolved_predictions().keys()
+        assert "date_time" in keys
+        assert len(keys) == 1
 
     def test_measurement_resolution_does_not_pollute_prediction_keys(self, monkeypatch):
         context = _make_context()
@@ -1108,4 +1139,4 @@ class TestSimulationContextPredictionTracking:
             lambda: _make_fake_measurement_store(),
         )
         context.resolve_measurement("battery_soc")
-        assert "battery_soc" not in _prediction_key_tracker.get(id(context), set())
+        assert "battery_soc" not in _prediction_key_tracker

@@ -1,6 +1,6 @@
 """Generic expandable map-of-sub-model configuration card for EOSdash.
 
-This module provides :func:`ConfigMapCard`, a reusable FastHTML/MonsterUI
+This module provides `ConfigMapCard`, a reusable FastHTML/MonsterUI
 card component that renders any ``dict[str, PydanticSubModel]`` config field
 as a collapsible outer card containing one collapsible inner card per map
 entry, keyed by a user-supplied string name.
@@ -36,7 +36,7 @@ Typical usage in ``configuration.py``::
 """
 
 import json
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 from loguru import logger
 from monsterui.franken import (
@@ -55,6 +55,7 @@ from monsterui.franken import (
     Summary,
     UkIcon,
 )
+from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 from akkudoktoreos.server.dash.components import (
@@ -98,7 +99,12 @@ def _item_model_defaults(item_model: Any) -> dict:
         A plain JSON-safe dict suitable for use as the initial value of a
         newly added list item or map entry.
     """
-    model_cls = item_model if isinstance(item_model, type) else type(item_model)
+    # Determine the model class, then tell mypy it's a BaseModel subclass
+    if isinstance(item_model, type):
+        model_cls = cast(type[BaseModel], item_model)
+    else:
+        model_cls = cast(type[BaseModel], type(item_model))
+
     kwargs = {}
     for field_name, field_info in model_cls.model_fields.items():
         if field_info.default is not PydanticUndefined:
@@ -153,7 +159,7 @@ def _add_control(
     new_entry_defaults: dict,
     config_id: str,
 ) -> Grid:
-    """Build the "Add entry" control rendered at the bottom of the outer card.
+    """Build the "Add entry" control.
 
     Consists of a text input for the new key name and a green "Add entry"
     button.  The button reads the input value at click time via inline JS
@@ -175,12 +181,6 @@ def _add_control(
     current_json = json.dumps(items_map)
     defaults_json = json.dumps(new_entry_defaults)
     return Grid(
-        Input(
-            placeholder="Entry name / key",
-            name=f"{config_id}_new_key",
-            id=f"{config_id}-new-key",
-            cls="border rounded px-3 py-2 text-sm",
-        ),
         ConfigButton(
             UkIcon("plus"),
             " Add entry",
@@ -197,6 +197,12 @@ def _add_control(
                     return JSON.stringify(updated);
                 }})()
             }}""",
+        ),
+        Input(
+            placeholder="Entry name / key",
+            name=f"{config_id}_new_key",
+            id=f"{config_id}-new-key",
+            cls="border rounded px-3 py-2 text-sm",
         ),
         cols=2,
         cls="gap-2 mt-3",
@@ -319,6 +325,8 @@ def _outer_card(
                 ),
                 cls="list-none",
             ),
+            # Add entry control below summary
+            add_control,
             Grid(
                 Div(
                     DivHStacked(*[Kbd(s) for s in scope]) if scope else None,
@@ -358,8 +366,6 @@ def _outer_card(
             else None,
             # Per-entry inner cards
             *rows,
-            # Add entry control below last card
-            add_control,
             cls="space-y-4 gap-4",
             open=items_update_open,
         ),
@@ -460,6 +466,8 @@ def ConfigMapCard(
 
     item_model = resolve_item_model(hint)
     item_path = hint.item_path  # e.g. "devices.batteries"
+    if item_path is None:
+        raise ValueError(f"Hint needs item_path to be mapped. Got {hint}")
     path_parts = item_path.split(".")  # e.g. ["devices", "batteries"]
 
     items_map = json.loads(value) or {}

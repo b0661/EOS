@@ -48,6 +48,7 @@ from akkudoktoreos.devices.devicesabc import (
     EnergyPort,
     InstructionContext,
 )
+from akkudoktoreos.optimization.genetic2.genome import GenomeSlice
 from akkudoktoreos.simulation.genetic2.arbitrator import (
     DeviceGrant,
     DeviceRequest,
@@ -88,9 +89,9 @@ class FixedLoadParam(DeviceParam):
 
     def __post_init__(self) -> None:
         if not self.ports:
-            raise ValueError("FixedLoadParam requires at least one port.")
+            raise ValueError(f"{self.device_id}: FixedLoadParam requires at least one port.")
         if not self.load_power_w_key:
-            raise ValueError("load_power_w_key must be a non-empty string.")
+            raise ValueError(f"{self.device_id}: load_power_w_key must be a non-empty string.")
 
 
 # ============================================================
@@ -208,7 +209,7 @@ class FixedLoadDevice(EnergyDevice):
         # Clamp to non-negative: a fixed load only consumes, never injects.
         self._load_power_w = np.maximum(0.0, load)
 
-    def genome_requirements(self) -> None:
+    def genome_requirements(self) -> GenomeSlice | None:
         """The fixed load has no genome — return ``None``.
 
         The engine excludes devices that return ``None`` from genome

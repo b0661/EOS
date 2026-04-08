@@ -14,9 +14,9 @@ from akkudoktoreos.utils.datetimeutil import compare_datetimes, to_datetime, to_
 class LoadAkkudoktorCommonSettings(SettingsBaseModel):
     """Common settings for load data import from file."""
 
-    loadakkudoktor_year_energy_kwh: Optional[float] = Field(
-        default=None,
-        json_schema_extra={"description": "Yearly energy consumption (kWh).", "examples": [40421]},
+    loadakkudoktor_year_energy_kwh: float = Field(
+        default=3000,
+        json_schema_extra={"description": "Yearly energy consumption (kWh).", "examples": [3000]},
     )
 
 

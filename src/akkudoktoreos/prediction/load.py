@@ -32,7 +32,7 @@ class LoadCommonSettings(SettingsBaseModel):
     """Load Prediction Configuration."""
 
     provider: Optional[str] = Field(
-        default=None,
+        default="LoadAkkudoktor",
         json_schema_extra={
             "description": "Load provider id of provider to be used.",
             "examples": ["LoadAkkudoktor"],

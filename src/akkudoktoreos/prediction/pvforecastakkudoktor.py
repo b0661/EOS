@@ -237,6 +237,8 @@ class PVForecastAkkudoktor(PVForecastProvider):
             # Akkudoktor orientation of pv modules in azimuth in degree:
             #   north=+-180, east=-90, south=0, west=90
             azimuth_akkudoktor = int(self.config.pvforecast.planes_azimuth[i]) - 180
+            if azimuth_akkudoktor == 0:
+                azimuth_akkudoktor = 1  # 0 produces error
             query_params.append(f"azimuth={azimuth_akkudoktor}")
             query_params.append(f"tilt={int(self.config.pvforecast.planes_tilt[i])}")
             query_params.append(

@@ -203,9 +203,11 @@ class TestGridConnectionParamValidation:
         with pytest.raises(ValueError, match="max_import_power_w"):
             make_param(max_import_w=0.0)
 
-    def test_negative_import_power_raises(self) -> None:
-        with pytest.raises(ValueError, match="max_import_power_w"):
-            make_param(max_import_w=-1.0)
+    def test_negative_export_revenue_raises(self) -> None:
+        # The implementation allows export_revenue_per_kwh >= -1.0 to support
+        # negative feed-in tariffs. Only values below -1.0 are rejected.
+        with pytest.raises(ValueError, match="export_revenue_per_kwh"):
+            make_param(export_rev=-1.01)
 
     def test_negative_export_power_raises(self) -> None:
         with pytest.raises(ValueError, match="max_export_power_w"):
@@ -214,10 +216,6 @@ class TestGridConnectionParamValidation:
     def test_negative_import_cost_raises(self) -> None:
         with pytest.raises(ValueError, match="import_cost_per_kwh"):
             make_param(import_cost=-0.01)
-
-    def test_negative_export_revenue_raises(self) -> None:
-        with pytest.raises(ValueError, match="export_revenue_per_kwh"):
-            make_param(export_rev=-0.01)
 
     def test_zero_export_power_allowed(self) -> None:
         p = make_param(max_export_w=0.0)
@@ -720,3 +718,76 @@ class TestExtractInstructions:
         state = device.create_batch_state(POP, HORIZON)
         for i in range(POP):
             assert device.extract_instructions(state, i) == []
+
+# EXTRA
+
+class TestExtra:
+    def test_negative_export_price_penalizes_export(self):
+        device = make_device(param=make_param(export_rev=-0.05))
+        state = device.create_batch_state(1, HORIZON)
+        state.granted_wh[0, :] = -1000.0
+
+        cost = device.compute_cost(state)
+
+        # Export now COSTS money
+        expected = HORIZON * 1.0 * 0.05
+        assert cost[0, 0] == pytest.approx(expected)
+
+    def test_mixed_tou_import_flat_export(self):
+        import_prices = np.full(HORIZON, 0.50)
+        param = make_param(import_price_amt_kwh_key=IMPORT_KEY, export_rev=0.10)
+
+        device = make_device(param=param, import_prices=import_prices)
+
+        state = device.create_batch_state(1, HORIZON)
+        state.granted_wh[0, :] = [1000, -1000] * (HORIZON // 2)
+
+        cost = device.compute_cost(state)
+
+        expected = (HORIZON/2)*(1.0*0.50 - 1.0*0.10)
+        assert cost[0, 0] == pytest.approx(expected)
+
+    def test_peak_respects_step_interval(self):
+        device = make_device(param=make_param(include_peak=True))
+        device._step_interval_sec = 1800.0
+
+        state = device.create_batch_state(1, 1)
+        state.granted_wh[0, 0] = 1000.0
+
+        cost = device.compute_cost(state)
+
+        assert cost[0, 1] == pytest.approx(2.0)
+
+    def test_zero_step_interval_produces_inf(self):
+        device = make_device(param=make_param(include_peak=True))
+        device._step_interval_sec = 0.0
+
+        state = device.create_batch_state(1, 1)
+        state.granted_wh[0, 0] = 1000.0
+
+        cost = device.compute_cost(state)
+
+        assert np.isinf(cost[0, 1])
+
+    def test_integer_price_array(self):
+        prices = np.ones(HORIZON, dtype=int)  # int!
+        param = make_param(import_price_amt_kwh_key=IMPORT_KEY)
+
+        device = make_device(param=param, import_prices=prices)
+
+        state = device.create_batch_state(1, HORIZON)
+        state.granted_wh[0, :] = 1000.0
+
+        cost = device.compute_cost(state)
+
+        assert cost.dtype == float
+
+    def test_nan_in_granted_propagates(self):
+        device = make_device()
+        state = device.create_batch_state(1, HORIZON)
+
+        state.granted_wh[0, 0] = np.nan
+
+        cost = device.compute_cost(state)
+
+        assert np.isnan(cost[0, 0])

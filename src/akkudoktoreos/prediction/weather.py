@@ -39,7 +39,7 @@ class WeatherCommonSettings(SettingsBaseModel):
     """Weather Forecast Configuration."""
 
     provider: Optional[str] = Field(
-        default=None,
+        default="OpenMeteo",
         json_schema_extra={
             "description": "Weather provider id of provider to be used.",
             "examples": ["WeatherImport"],

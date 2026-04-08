@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 from pydantic import Field, computed_field, model_validator
 
@@ -18,7 +18,7 @@ class GeneticCommonSettings(SettingsBaseModel):
         default=300,
         ge=10,
         json_schema_extra={
-            "description": "Number of individuals (solutions) to generate for the (initial) generation [>= 10]. Defaults to 300.",
+            "description": "Number of individuals (solutions) in the population [>= 10]. Defaults to 300.",
             "examples": [300],
             "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
         },
@@ -28,7 +28,7 @@ class GeneticCommonSettings(SettingsBaseModel):
         default=400,
         ge=10,
         json_schema_extra={
-            "description": "Number of generations to evaluate the optimal solution [>= 10]. Defaults to 400.",
+            "description": "Number of generations to evolve [>= 10]. Defaults to 400.",
             "examples": [400],
             "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
         },
@@ -38,27 +38,103 @@ class GeneticCommonSettings(SettingsBaseModel):
         default=None,
         ge=0,
         json_schema_extra={
-            "description": "Fixed seed for genetic algorithm. Defaults to 'None' which means random seed.",
-            "examples": [None],
+            "description": "Random seed for reproducibility. None = random.",
+            "examples": [None, 42],
             "x-scope": [str(ConfigScope.GENETIC), str(ConfigScope.GENETIC2)],
         },
     )
 
-    penalties: dict[str, Union[float, int, str]] = Field(
+    # --- Penalties (existing) -------------------------------------------------
+
+    penalties: Dict[str, Union[float, int, str]] = Field(
         default_factory=lambda: {
             "ev_soc_miss": 10,
             "ac_charge_break_even": 1.0,
         },
         json_schema_extra={
-            "description": "A dictionary of penalty function parameters consisting of a penalty function parameter name and the associated value.",
-            "examples": [
-                {"ev_soc_miss": 10},
-            ],
-            "x-scope": [
-                str(ConfigScope.GENETIC),
-            ],
+            "description": "Penalty parameters used in fitness evaluation.",
+            "examples": [{"ev_soc_miss": 10}],
+            "x-scope": [str(ConfigScope.GENETIC)],
         },
     )
+
+    # --- Core GA behavior -----------------------------------------------------
+
+    crossover_rate: float = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        json_schema_extra={
+            "description": "Probability of applying crossover between two parents [0–1]. Higher values increase exploitation. Defaults to 0.9.",
+            "examples": [0.8, 0.9],
+            "x-scope": [str(ConfigScope.GENETIC2)],
+        },
+    )
+
+    mutation_rate: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=1.0,
+        json_schema_extra={
+            "description": "Probability of mutating each gene [0–1]. Controls exploration. Defaults to 0.05.",
+            "examples": [0.01, 0.05, 0.1],
+            "x-scope": [str(ConfigScope.GENETIC2)],
+        },
+    )
+
+    mutation_sigma: float = Field(
+        default=0.03,
+        ge=0.0,
+        json_schema_extra={
+            "description": "Standard deviation of mutation noise. Controls mutation strength. Defaults to 0.03.",
+            "examples": [0.05, 0.1, 0.2],
+            "x-scope": [str(ConfigScope.GENETIC2)],
+        },
+    )
+
+    tournament_size: int = Field(
+        default=3,
+        ge=2,
+        json_schema_extra={
+            "description": "Number of individuals competing in tournament selection. Higher values increase selection pressure. Defaults to 3.",
+            "examples": [2, 3, 5],
+            "x-scope": [str(ConfigScope.GENETIC2)],
+        },
+    )
+
+    elitism_count: int = Field(
+        default=2,
+        ge=0,
+        json_schema_extra={
+            "description": "Number of top individuals copied unchanged to the next generation. Prevents loss of best solutions. Defaults to 2.",
+            "examples": [0, 1, 2, 5],
+            "x-scope": [str(ConfigScope.GENETIC2)],
+        },
+    )
+
+    # --- Adaptive mutation / stagnation ---------------------------------------
+
+    stagnation_window: int = Field(
+        default=20,
+        ge=1,
+        json_schema_extra={
+            "description": "Number of generations without improvement before triggering mutation boost. Defaults to 20.",
+            "examples": [10, 20, 50],
+            "x-scope": [str(ConfigScope.GENETIC2)],
+        },
+    )
+
+    stagnation_boost: float = Field(
+        default=3.0,
+        ge=1.0,
+        json_schema_extra={
+            "description": "Multiplier applied to mutation_rate and mutation_sigma when stagnation is detected. Defaults to 3.0.",
+            "examples": [2.0, 3.0, 5.0],
+            "x-scope": [str(ConfigScope.GENETIC2)],
+        },
+    )
+
+    # --- Optimization process logging ----------------------------------------
 
     log_progress_interval: int = Field(
         default=0,
@@ -80,7 +156,7 @@ class GeneticCommonSettings(SettingsBaseModel):
 class OptimizationCommonSettings(SettingsBaseModel):
     """General Optimization Configuration."""
 
-    horizon_hours: Optional[int] = Field(
+    horizon_hours: int = Field(
         default=24,
         ge=0,
         json_schema_extra={
@@ -89,23 +165,26 @@ class OptimizationCommonSettings(SettingsBaseModel):
         },
     )
 
-    interval: Optional[int] = Field(
+    interval: int = Field(
         default=3600,
         ge=15 * 60,
         le=60 * 60,
         json_schema_extra={
-            "description": "The optimization interval [sec].",
+            "description": "The optimization interval [sec]. Defaults to 3600 seconds (1 hour)",
             "examples": [60 * 60, 15 * 60],
         },
     )
 
-    algorithm: Optional[str] = Field(
+    algorithm: str = Field(
         default="GENETIC",
-        json_schema_extra={"description": "The optimization algorithm.", "examples": ["GENETIC"]},
+        json_schema_extra={
+            "description": "The optimization algorithm. Defaults to GENETIC",
+            "examples": ["GENETIC"],
+        },
     )
 
-    genetic: Optional[GeneticCommonSettings] = Field(
-        default=None,
+    genetic: GeneticCommonSettings = Field(
+        default_factory=GeneticCommonSettings,
         json_schema_extra={
             "description": "Genetic optimization algorithm configuration.",
             "examples": [{"individuals": 400, "seed": None, "penalties": {"ev_soc_miss": 10}}],

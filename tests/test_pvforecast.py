@@ -10,6 +10,7 @@ from akkudoktoreos.prediction.pvforecast import (
 def settings():
     """Fixture that creates an empty PVForecastSettings."""
     settings = PVForecastCommonSettings()
+    settings.planes = None
     assert settings.planes is None
     return settings
 
@@ -34,7 +35,7 @@ def test_planes_peakpower_computation(settings):
         ),
     ]
 
-    expected_peakpower = [5.0, 3.5, 5000.0]
+    expected_peakpower = [5.0, 3.5, 5.0]
     assert settings.planes_peakpower == expected_peakpower
 
 
@@ -135,7 +136,7 @@ def test_mixed_plane_configuration(settings):
     ]
 
     # First plane uses specified peak power, second uses default, third uses specified
-    assert settings.planes_peakpower == [5.0, 5000.0, 3.0]
+    assert settings.planes_peakpower == [5.0, 5.0, 3.0]
 
 
 def test_none_plane_settings():

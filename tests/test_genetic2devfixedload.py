@@ -292,28 +292,33 @@ class TestSetupRun:
     def test_forecast_resolved_and_stored(self) -> None:
         load = np.arange(HORIZON, dtype=float) * 100.0
         device = make_device(load_w=load)
+        assert device._load_power_w is not None
         np.testing.assert_allclose(device._load_power_w, load)
 
     def test_negative_forecast_clamped_to_zero(self) -> None:
         load = np.array([-200.0, 300.0, -100.0, 400.0, 0.0, 150.0])
         device = make_device(load_w=load)
         expected = np.maximum(0.0, load)
+        assert device._load_power_w is not None
         np.testing.assert_allclose(device._load_power_w, expected)
 
     def test_all_negative_forecast_gives_all_zero(self) -> None:
         load = np.full(HORIZON, -500.0)
         device = make_device(load_w=load)
+        assert device._load_power_w is not None
         np.testing.assert_allclose(device._load_power_w, 0.0, atol=1e-9)
 
     def test_zero_forecast_stored_as_zero(self) -> None:
         load = np.zeros(HORIZON)
         device = make_device(load_w=load)
+        assert device._load_power_w is not None
         np.testing.assert_allclose(device._load_power_w, 0.0, atol=1e-9)
 
     def test_custom_key_resolved(self) -> None:
         load = np.full(HORIZON, 999.0)
         param = make_param(load_power_w_key=ALT_KEY)
         device = make_device(param=param, load_w=load, key=ALT_KEY)
+        assert device._load_power_w is not None
         np.testing.assert_allclose(device._load_power_w, 999.0)
 
     def test_wrong_shape_raises(self) -> None:

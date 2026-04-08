@@ -204,6 +204,7 @@ class EnergyManagement(
         if not mode in EnergyManagementMode._value2member_map_:
             raise ValueError(f"Unknown energy management mode {mode}.")
         if mode == EnergyManagementMode.DISABLED:
+            logger.info("Energy management run disabled.")
             return
 
         logger.info("Starting energy management run.")

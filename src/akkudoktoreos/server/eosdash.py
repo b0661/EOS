@@ -416,7 +416,7 @@ def post_eosdash_optlog(request: Request, data: dict):  # type: ignore
     Returns:
         OptLog: The Optimization Log page component.
     """
-    return OptLog(*eos_server(), data)@app.get("/eosdash/optlog")
+    return OptLog(*eos_server(), data) @ app.get("/eosdash/optlog")
 
 
 @app.get("/eosdash/prediction")
