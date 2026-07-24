@@ -187,6 +187,14 @@
                "penalties": {
                    "ev_soc_miss": 10
                }
+           },
+           "genetic0": {
+               "individuals": 400,
+               "generations": 400,
+               "seed": null,
+               "penalties": {
+                   "ev_soc_miss": 10
+               }
            }
        },
        "prediction": {

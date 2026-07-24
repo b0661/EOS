@@ -8,7 +8,9 @@
 | Name | Environment Variable | Type | Read-Only | Default | Description |
 | ---- | -------------------- | ---- | --------- | ------- | ----------- |
 | algorithm | `EOS_OPTIMIZATION__ALGORITHM` | `str` | `rw` | `GENETIC` | The optimization algorithm. Defaults to GENETIC |
-| genetic | `EOS_OPTIMIZATION__GENETIC` | `GeneticCommonSettings` | `rw` | `required` | Genetic optimization algorithm configuration. |
+| algorithms | | `list[str]` | `ro` | `N/A` | Available optimization algorithms. |
+| genetic | `EOS_OPTIMIZATION__GENETIC` | `GeneticCommonSettings` | `rw` | `required` | GENETIC optimization algorithm configuration. |
+| genetic0 | `EOS_OPTIMIZATION__GENETIC0` | `Genetic0CommonSettings` | `rw` | `required` | GENETIC0 optimization algorithm configuration. |
 | horizon | | `int` | `ro` | `N/A` | Number of optimization steps. |
 | horizon_hours | `EOS_OPTIMIZATION__HORIZON_HOURS` | `int` | `rw` | `24` | The general time window within which the energy optimization goal shall be achieved [h]. Defaults to 24 hours. |
 | interval | `EOS_OPTIMIZATION__INTERVAL` | `int` | `rw` | `3600` | The optimization interval [sec]. Defaults to 3600 seconds (1 hour) |
@@ -28,6 +30,14 @@
            "interval": 3600,
            "algorithm": "GENETIC",
            "genetic": {
+               "individuals": 400,
+               "generations": 400,
+               "seed": null,
+               "penalties": {
+                   "ev_soc_miss": 10
+               }
+           },
+           "genetic0": {
                "individuals": 400,
                "generations": 400,
                "seed": null,
@@ -59,6 +69,18 @@
                    "ev_soc_miss": 10
                }
            },
+           "genetic0": {
+               "individuals": 400,
+               "generations": 400,
+               "seed": null,
+               "penalties": {
+                   "ev_soc_miss": 10
+               }
+           },
+           "algorithms": [
+               "GENETIC",
+               "GENETIC0"
+           ],
            "keys": [],
            "horizon": 24
        }
@@ -66,7 +88,44 @@
 ```
 <!-- pyml enable line-length -->
 
-### General Genetic Optimization Algorithm Configuration
+### GENETIC0 Optimization Algorithm Configuration
+
+<!-- pyml disable line-length -->
+:::{table} optimization::genetic0
+:widths: 10 10 5 5 30
+:align: left
+
+| Name | Type | Read-Only | Default | Description |
+| ---- | ---- | --------- | ------- | ----------- |
+| generations | `int | None` | `rw` | `400` | Number of generations to evolve [>= 10]. Defaults to 400. |
+| individuals | `int | None` | `rw` | `300` | Number of individuals (solutions) in the population [>= 10]. Defaults to 300. |
+| penalties | `dict[str, float | int | str]` | `rw` | `required` | Penalty parameters used in fitness evaluation. |
+| seed | `int | None` | `rw` | `None` | Random seed for reproducibility. None = random. |
+:::
+<!-- pyml enable line-length -->
+
+<!-- pyml disable no-emphasis-as-heading -->
+**Example Input/Output**
+<!-- pyml enable no-emphasis-as-heading -->
+
+<!-- pyml disable line-length -->
+```json
+   {
+       "optimization": {
+           "genetic0": {
+               "individuals": 300,
+               "generations": 400,
+               "seed": null,
+               "penalties": {
+                   "ev_soc_miss": 10
+               }
+           }
+       }
+   }
+```
+<!-- pyml enable line-length -->
+
+### GENETIC Optimization Algorithm Configuration
 
 <!-- pyml disable line-length -->
 :::{table} optimization::genetic
