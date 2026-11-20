@@ -444,3 +444,47 @@ async def test_raising_preparation_cancels_the_run(monkeypatch, offline_ems, pre
         previous_plan,
         ems_module.EnergyManagementStage.IDLE,
     )
+
+
+@pytest.mark.asyncio
+async def test_previous_genetic0_result_is_the_warm_start_of_the_next_run(
+    monkeypatch, offline_ems
+):
+    """The EMS passes the result of the last successful GENETIC0 run into the next preparation.
+
+    The optimizer holds no state: the warm start comes from the EMS slot, and a failed run keeps
+    the previous one.
+    """
+    cls = ems_module.EnergyManagement
+    first = SimpleNamespace(
+        start_solution=[1.0, 2.0],
+        optimization_solution=AsyncMock(return_value=object()),
+        energy_management_plan=Mock(return_value=object()),
+    )
+    second = SimpleNamespace(
+        start_solution=[3.0, 4.0],
+        optimization_solution=AsyncMock(return_value=object()),
+        energy_management_plan=Mock(return_value=object()),
+    )
+    constructor = Mock()
+    constructor.return_value.optimize_ems.side_effect = [
+        first,
+        RuntimeError("synthetic optimizer failure"),
+        second,
+        second,
+    ]
+    _patch_optimizer(monkeypatch, "Genetic0", constructor)
+    prepare = AsyncMock(return_value=object())
+    _patch_prepare(monkeypatch, "Genetic0", prepare)
+    for _ in range(3):
+        await cls.run(offline_ems, algorithm=OptimizationAlgorithm.GENETIC0)
+    assert cls.optimizer_result("GENETIC0") is second
+    # Without a stored run there is no warm start.
+    monkeypatch.setattr(cls, "_optimizer_runs", {})
+    await cls.run(offline_ems, algorithm=OptimizationAlgorithm.GENETIC0)
+    assert [call.kwargs for call in prepare.await_args_list] == [
+        {"start_solution": None},
+        {"start_solution": [1.0, 2.0]},
+        {"start_solution": [1.0, 2.0]},  # the failed second run kept the first as warm start
+        {"start_solution": None},
+    ]

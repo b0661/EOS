@@ -1,5 +1,6 @@
 """GENETIC0 parameter preparation: time alignment, tariff coverage, and measured SoC."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import numpy as np
@@ -536,3 +537,29 @@ class TestGenetic0PrepareOverrides:
         )
         assert (parameters.generations, parameters.seed) == (12, 5)
         assert errors == ["GENETIC0: Unknown override '{}' ignored."]
+
+
+class TestGenetic0PrepareWarmStart:
+    """The start solution of the previous run seeds the next one."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "warm_start, start_solution",
+        [
+            (None, None),
+            (SimpleNamespace(start_solution=None), None),
+            (SimpleNamespace(start_solution=[]), None),
+            (SimpleNamespace(start_solution=[1.0, 0.0, 2.0]), [1.0, 0.0, 2.0]),
+        ],
+        ids=["no-previous-run", "no-start-solution", "empty-start-solution", "start-solution"],
+    )
+    async def test_previous_start_solution_reaches_the_preparation(
+        self, config_eos, monkeypatch, warm_start, start_solution
+    ):
+        request = Mock()
+        legacy_prepare = AsyncMock(return_value=request)
+        monkeypatch.setattr(Genetic0OptimizationParameters, "prepare", legacy_prepare)
+        start = to_datetime("2026-01-14T10:00:00", in_timezone="Europe/Berlin")
+        parameters = await genetic0prepare.prepare(start, warm_start)
+        legacy_prepare.assert_awaited_once_with(start_solution=start_solution)
+        assert parameters.request is request
