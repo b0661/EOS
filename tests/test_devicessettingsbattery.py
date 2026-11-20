@@ -76,6 +76,24 @@ PARAMETER_METHODS = [
     "to_genetic0_ev_bat_param",
 ]
 
+
+# GENETIC0's conversions live in its parameter preparation (ADR 0004), not in the settings.
+GENETIC0_CONVERSIONS = {
+    "to_genetic0_pv_bat_param": "battery_request",
+    "to_genetic0_ev_bat_param": "electric_vehicle_request",
+}
+
+
+def converter(settings, method):
+    """The conversion ``method`` of the settings, or GENETIC0's function for them."""
+    if method in GENETIC0_CONVERSIONS:
+        from akkudoktoreos.optimization.genetic0 import genetic0prepare
+
+        function = getattr(genetic0prepare, GENETIC0_CONVERSIONS[method])
+        return lambda *args, **kwargs: function(settings, *args, **kwargs)
+    return getattr(settings, method)
+
+
 COMPUTED_FIELDS = [
     "effective_nominal_capacity_wh",
     "effective_max_charge_power_w",
@@ -870,7 +888,7 @@ class TestGetBatteryProfile:
     ):
         settings = make_settings(battery_profile="does-not-exist")
         with pytest.raises(BatteryResolutionError, match="does-not-exist"):
-            getattr(settings, method)()
+            converter(settings, method)()
 
 
 # --- Maximum charge power -------------------------------------------------------
@@ -945,7 +963,7 @@ class TestMaxChargePower:
         parameters = await current(settings)
         assert parameters.max_charge_power_w == 0.0
         assert settings.to_genetic_pv_bat_param(parameters).max_charge_power_w == 0.0
-        assert settings.to_genetic0_pv_bat_param(parameters).max_charge_power_w == 0.0
+        assert converter(settings, "to_genetic0_pv_bat_param")(parameters).max_charge_power_w == 0.0
 
     def test_zero_charge_power_yields_zero(self, make_profiled_settings):
         settings = make_profiled_settings(make_profile(charge=0.0), capacity_wh=10000)
@@ -1305,7 +1323,7 @@ class TestOptimizationParameters:
     @pytest.mark.parametrize("method", PARAMETER_METHODS)
     def test_values_come_from_profile(self, make_profiled_settings, full_profile, method):
         settings = make_profiled_settings(full_profile, capacity_wh=10000)
-        params = getattr(settings, method)()
+        params = converter(settings, method)()
         assert params.device_id == "battery1"
         assert params.capacity_wh == 10000
         assert params.max_charge_power_w == pytest.approx(5000.0)
@@ -1317,7 +1335,7 @@ class TestOptimizationParameters:
     @pytest.mark.parametrize("method", PARAMETER_METHODS)
     def test_parameters_match_computed_fields(self, make_profiled_settings, full_profile, method):
         settings = make_profiled_settings(full_profile, capacity_wh=10000)
-        params = getattr(settings, method)()
+        params = converter(settings, method)()
         assert params.capacity_wh == settings.effective_nominal_capacity_wh
         assert params.charging_efficiency == pytest.approx(settings.effective_charging_efficiency)
         assert params.discharging_efficiency == pytest.approx(settings.effective_discharging_efficiency)
@@ -1334,7 +1352,7 @@ class TestOptimizationParameters:
         grid[ROW_0_DEGC] = [0.1] * 10
         settings = make_profiled_settings(make_profile(charge=grid), capacity_wh=10000)
         measurements["battery1-temperature-degc"] = 0.0
-        params = getattr(settings, method)(await current(settings))
+        params = converter(settings, method)(await current(settings))
         assert params.max_charge_power_w == pytest.approx(1000.0)
 
     @pytest.mark.parametrize("method", PARAMETER_METHODS)
@@ -1345,7 +1363,7 @@ class TestOptimizationParameters:
         measurements["battery1-charge-power-w"] = 2500.0
         measurements["battery1-discharge-power-w"] = 2000.0
         settings = make_profiled_settings(full_profile, capacity_wh=10000)
-        params = getattr(settings, method)(await current(settings))
+        params = converter(settings, method)(await current(settings))
         assert params.charging_efficiency == pytest.approx(0.9225)
         assert params.discharging_efficiency == pytest.approx(0.9125)
 
@@ -1356,7 +1374,7 @@ class TestOptimizationParameters:
         grid = make_grid(0.5)
         grid[ROW_0_DEGC] = [0.1] * 10
         settings = make_profiled_settings(make_profile(charge=grid), capacity_wh=10000)
-        assert getattr(settings, method)().max_charge_power_w == pytest.approx(5000.0)
+        assert converter(settings, method)().max_charge_power_w == pytest.approx(5000.0)
         assert measurement_calls == []
 
     @pytest.mark.parametrize("method", PARAMETER_METHODS)
@@ -1365,7 +1383,7 @@ class TestOptimizationParameters:
         snapshot = settings.resolve_operating_parameters(
             BatteryOperatingPoint(charge_power_w=2500.0)
         )
-        params = getattr(settings, method)(snapshot)
+        params = converter(settings, method)(snapshot)
         assert params.capacity_wh == snapshot.capacity_wh
         assert params.charging_efficiency == pytest.approx(snapshot.charging_efficiency)
         assert params.max_charge_power_w == pytest.approx(snapshot.max_charge_power_w)
@@ -1375,7 +1393,7 @@ class TestOptimizationParameters:
         self, make_profiled_settings, method
     ):
         profile = make_profile(charge=0.5, nominal_capacity_wh=8000.0)
-        params = getattr(make_profiled_settings(profile), method)()
+        params = converter(make_profiled_settings(profile), method)()
         assert params.capacity_wh == 8000
         assert params.max_charge_power_w == pytest.approx(4000.0)
 
@@ -1384,7 +1402,7 @@ class TestOptimizationParameters:
         settings = make_profiled_settings(
             full_profile, capacity_wh=10000, charge_limit_w=2000.0
         )
-        assert getattr(settings, method)().max_charge_power_w == pytest.approx(2000.0)
+        assert converter(settings, method)().max_charge_power_w == pytest.approx(2000.0)
 
     @pytest.mark.parametrize("method", PARAMETER_METHODS)
     def test_user_soc_range_is_clamped_into_technical_bounds(
@@ -1393,7 +1411,7 @@ class TestOptimizationParameters:
         settings = make_profiled_settings(
             full_profile, capacity_wh=10000, min_soc_percentage=10, max_soc_percentage=90
         )
-        params = getattr(settings, method)()
+        params = converter(settings, method)()
         assert params.min_soc_percentage == 10
         assert params.max_soc_percentage == 90
 
@@ -1402,7 +1420,7 @@ class TestOptimizationParameters:
         """The optimization gets valid parameters that do not allow charging."""
         profile = make_profile(hard_cutoffs=charge_inhibited_below_30())
         settings = make_profiled_settings(profile, capacity_wh=10000)
-        assert getattr(settings, method)().max_charge_power_w == 0.0
+        assert converter(settings, method)().max_charge_power_w == 0.0
 
     def test_genetic_pv_receives_storage_cost(self):
         params = make_settings(levelized_cost_of_storage_amt_kwh=0.12).to_genetic_pv_bat_param()
@@ -1803,13 +1821,13 @@ class TestOptimizationDefaults:
         settings = make_settings(capacity_wh=10000)
         parameters, use_tables = settings.resolve_operating_parameters_or_defaults()
         assert use_tables is True
-        expected = getattr(settings, method)(parameters, use_tables)
+        expected = converter(settings, method)(parameters, use_tables)
 
         def missing(document_type, name, **options):
             raise FileNotFoundError(f"No battery profile for '{name}'")
 
         monkeypatch.setattr(get_profile_store(), "get", missing)
-        converted = getattr(settings, method)(parameters, use_tables)
+        converted = converter(settings, method)(parameters, use_tables)
         assert converted.model_dump() == expected.model_dump()
 
     def test_inhibited_charging_is_no_configuration_error(
@@ -1844,7 +1862,7 @@ class TestOptimizationDefaults:
     def test_conversion_without_profile_tables(self, broken_profile_loader, method):
         settings = make_settings(battery_profile="does-not-exist")
         parameters, use_tables = settings.resolve_operating_parameters_or_defaults(report=False)
-        converted = getattr(settings, method)(parameters, use_tables)
+        converted = converter(settings, method)(parameters, use_tables)
         assert converted.capacity_wh == 8000
         assert converted.max_charge_power_w == pytest.approx(5000.0)
         assert converted.charge_power_limit_w_by_soc is None
