@@ -1,0 +1,5 @@
+[
+ {
+  "error": "ValueError: Configure an inverter to model PV and grid energy flows."
+ }
+]
